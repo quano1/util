@@ -35,39 +35,17 @@ struct Log /*: public llt_L*/
     virtual std::string prepare_pre(int log_type) const;
 
     template<typename ... Args>
-    std::string string_format( const std::string& format, Args ... args ) const;
+    std::string string_format(const std::string &format, Args ... args) const;
 
-    template<typename ... Args>
-    void log(int log_type, const std::string& format, Args ... args) const;
-    // void log(int log_type, const std::string& format, va_list args) const;
+    std::string string_format( const std::string& format, va_list &args ) const;
+
+    // template<typename ... Args>
+    // void log(int log_type, const std::string& format, Args ... args) const;
+    void log(int log_type, const std::string& format, ... ) const;
 
     void log_info();
 
     bool logable(size_t lvl_msk);
-
-    // template<typename ... Args>
-    // inline void logi(const std::string& format, Args ... args)
-    // {
-    //     Log::log((int)LogType::Info, format, std::forward<Args>(args)...);
-    // }
-
-    // template<typename ... Args>
-    // inline void logd(const std::string& format, Args ... args)
-    // {
-    //     Log::log((int)LogType::Debug, format, std::forward<Args>(args)...);
-    // }
-
-    // template<typename ... Args>
-    // inline void logw(const std::string& format, Args ... args)
-    // {
-    //     Log::log((int)LogType::Warn, format, std::forward<Args>(args)...);
-    // }
-
-    // template<typename ... Args>
-    // inline void logf(const std::string& format, Args ... args)
-    // {
-    //     Log::log((int)LogType::Fatal, format, std::forward<Args>(args)...);
-    // }
 
     static inline Log *ins()
     {
@@ -127,25 +105,52 @@ bool Log::logable(size_t lvl_msk)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-security"
 template<typename ... Args>
-std::string Log::string_format( const std::string& format, Args ... args ) const
+std::string Log::string_format(const std::string &format, Args ... args) const
 {
-    size_t size = snprintf( nullptr, 0, format.data(), args ... ) + 1; // Extra space for '\0'
+    size_t size = vsnprintf( nullptr, 0, format.data(), args ) + 1; // Extra space for '\0'
     std::unique_ptr<char[]> buf( new char[ size ] ); 
-    snprintf( buf.get(), size, format.data(), args ... );
+    vsnprintf( buf.get(), size, format.data(), args );
     return std::string( buf.get(), buf.get() + size - 1 ); // We don't want the '\0' inside
+}
+
+std::string Log::string_format( const std::string& format, va_list &args ) const
+{
+    std::string buf;
+    int bufferSize = MAX_LOG_LENGTH;
+
+    for (;;)
+    {
+        buf.resize(bufferSize);
+
+        if (buf.empty())
+        {
+            return "";    // not enough memory
+        }
+        int ret = vsnprintf(&buf[0], bufferSize - 3, format.data(), args);
+
+        if (ret < 0)
+        {
+            bufferSize *= 2;
+        }
+        else
+        {
+            break;
+        }
+    }
+    return buf;
 }
 #pragma GCC diagnostic pop
 
-template<typename ... Args>
-void Log::log(int log_type, const std::string& format, Args ... args) const
+void Log::log(int log_type, const std::string& format, ... ) const
 {
     if( !(this->lvl_msk & (1 << log_type)) ) return;
 
     std::string pre = prepare_pre(log_type);
-
-    std::string buf = string_format(pre + format, std::forward<Args>(args)...);
-    // buf += "\n";
-    // size = strlen(buf);
+    printf("\nformat: %s", format.data());
+    va_list args;
+    va_start(args, format);
+    std::string buf = string_format(pre + format, args);
+    va_end(args);
 
     if(!buf.empty())
     {
@@ -155,23 +160,6 @@ void Log::log(int log_type, const std::string& format, Args ... args) const
         }
     }
 }
-
-// void Log::log(int log_type, const std::string& format, va_list args) const
-// {
-//     if( !(this->lvl_msk & (1 << log_type)) ) return;
-
-//     std::string pre = prepare_pre(log_type);
-
-//     std::string buf = string_format(pre + format, std::forward<va_list>(args)...);
-
-//     if(!buf.empty())
-//     {
-//         for(int const &fd : fds)
-//         {
-//             write(fd, buf.data(), buf.size());
-//         }
-//     }
-// }
 
 #define LOGI(format, ...) Log::ins()->log(static_cast<int>(LogType::Info), "%s %s %d " format "\n", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 #define LOGD(format, ...) Log::ins()->log(static_cast<int>(LogType::Debug), "%s %s %d " format "\n", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
