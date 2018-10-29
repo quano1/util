@@ -6,7 +6,11 @@
 #include <string>
 #include <cstdio>
 #include <vector>
-
+#include <sstream>
+#include <thread>
+#include <iomanip>
+#include <ctime>
+#include <chrono>
 #include <stdarg.h>
 #include <unistd.h>
 
@@ -14,12 +18,23 @@ static const uint32_t MAX_LOG_LENGTH = 0x1000;
 static const int DEFAULT_FD = 1;
 // static llt_L s_L;
 
+/* support
+{"type":"debug","time_stamp":12345678,"body":{"file":"test.c","function":"ABC","line":100,"content":"this is a log"}}
+{"type":"info","time_stamp":12345678,"body":{"context":"isp main","content":"this is a log"}}
+{"type":"prof","time_stamp":12345678,"body":{"context":"isp main","duration":987654321}}
+
+"UTC 10:10:10:10:10:2018" 0x123 0x456 DEBUG main.c ABC 100 'this is a log'
+"UTC 10:10:10:10:10:2018" 0x123 0x789 INFO main.c ABC 100 'this is a log'
+"UTC 10:10:10:10:10:2018" 0x123 0x789 PROF isp main 987654321
+*/
+
 enum class LogType : size_t
 {
     Info=0,
     Debug,
     Warn,
     Fatal,
+    Prof,
     Max,
 };
 
@@ -58,15 +73,36 @@ struct Log /*: public llt_L*/
 
 std::string Log::prepare_pre(int log_type) const
 {
+    using std::chrono::system_clock;
+    std::stringstream buffer;
+    // std::string buf = "UNKNOWN ";
+    // std::stringstream buffer;
+    // std::time_t now = std::time(NULL);
+    std::time_t now = system_clock::to_time_t (system_clock::now());
+    std::tm *ptm = std::localtime(&now);
+    // time_t t;
+    // struct tm *tmp;
+    // time( &t );
+    // tmp = localtime( &t );
+    buffer << std::put_time(ptm, "%a %b %d %H:%M:%S %Y ");
+    // std::string time = "";
+    // std::string prog_id = "";
+    buffer << getpid() << " ";
+    // std::string thred_id = "";
+    buffer << std::this_thread::get_id() << " ";
+
+    // buf = time + prog_id + thred_id + buf;
+
     switch(log_type)
     {
-        case (size_t)LogType::Info: return "INFO ";
-        case (size_t)LogType::Debug: return "DEBUG ";
-        case (size_t)LogType::Warn: return "WARN ";
-        case (size_t)LogType::Fatal: return "FATAL ";
+        case (int)LogType::Info: { buffer << "INFO "; break; }
+        case (int)LogType::Debug: { buffer << "DEBUG "; break; }
+        case (int)LogType::Warn: { buffer << "WARN "; break; }
+        case (int)LogType::Fatal: { buffer << "FATAL "; break; }
+        default: buffer << "UNKNOWN "; break;
     }
 
-    return "UNKNOWN ";
+    return buffer.str();
 }
 
 Log::Log()
@@ -152,11 +188,13 @@ void Log::log(int log_type, const std::string& format, ... ) const
 #define LOGD(format, ...) Log::ins()->log(static_cast<int>(LogType::Debug), "%s %s %d " format "\n", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 #define LOGW(format, ...) Log::ins()->log(static_cast<int>(LogType::Warn), "%s %s %d " format "\n", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 #define LOGF(format, ...) Log::ins()->log(static_cast<int>(LogType::Fatal), "%s %s %d " format "\n", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGP(format, ...) Log::ins()->log(static_cast<int>(LogType::Prof), "%s %s %d " format "\n", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
 #define CLOGI(format, ...) llt_clog(static_cast<int>(LogType::Info), "%s %s %d " format "\n", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 #define CLOGD(format, ...) llt_clog(static_cast<int>(LogType::Debug), "%s %s %d " format "\n", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 #define CLOGW(format, ...) llt_clog(static_cast<int>(LogType::Warn), "%s %s %d " format "\n", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 #define CLOGF(format, ...) llt_clog(static_cast<int>(LogType::Fatal), "%s %s %d " format "\n", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define CLOGP(format, ...) llt_clog(static_cast<int>(LogType::Prof), "%s %s %d " format "\n", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
 extern "C" void llt_clog(int log_type, const char * format, ...)
 {
