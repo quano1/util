@@ -1,7 +1,10 @@
 #include "../log.hpp"
+#include "../Counter.hpp"
 
 int main()
 {
+	LOGP(MAIN);
+
 	// Log l;
 	// l.log(1, "hello world oi troi oi\n");
 	// llt_log(l, 1, "hello world oi troi oi\n");
@@ -14,8 +17,6 @@ int main()
 
 	LOGI("hello");
 	CLOGI("hello");
-	// llt_log_global(static_cast<int>(LogType::Info), "%d %d %d hello\n", 1, 2, 3);
-
 	LOGD("hello");
 	LOGW("hello");
 	LOGF("hello");
