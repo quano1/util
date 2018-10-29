@@ -1,5 +1,5 @@
-#include "../log.hpp"
-#include "../Counter.hpp"
+#include <libs/log.hpp>
+#include <libs/Counter.hpp>
 
 int main()
 {
