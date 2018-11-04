@@ -3,24 +3,20 @@
 
 int main()
 {
-	LOGP(MAIN);
+    Log _l;
+    // _l.init("abc.txt", "bcd.txt", {"10.207.215.174",1002});
+    // _l.deinit();
 
-	// Log l;
-	// l.log(1, "hello world oi troi oi\n");
-	// llt_log(l, 1, "hello world oi troi oi\n");
+    LOGP(MAIN);
 
-	// LogImpl::instance().add_fd(1);
-	// Log::ins().logi("hello\n");
+    LOGI("hello");
+    CLOGI("hello");
+    LOGD("hello");
+    LOGW("hello");
+    LOGF("hello");
 
-	// Log *l = Log::ins();
-	// llt_log(Log::ins(), 0, "%d hello\n", __LINE__);
+    
 
-	LOGI("hello");
-	CLOGI("hello");
-	LOGD("hello");
-	LOGW("hello");
-	LOGF("hello");
-
-	return 0;
+    return 0;
 }
 

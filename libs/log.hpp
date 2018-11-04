@@ -37,8 +37,8 @@ Mon Oct 29 22:08:18 2018 906 1 PROF MAIN 69.648600 ms
 
 enum class LogType : size_t
 {
-    Info=0,
-    Debug,
+    Debug=0,
+    Info,
     Warn,
     Fatal,
     Prof,
@@ -49,7 +49,7 @@ struct Log /*: public llt_L*/
 {
     Log();
     virtual ~Log() = default;
-    // void init();
+    // void init(...);
     // void setfd(int fd);
     void set_default_fd(int fd);
     void add_fd(int fd);
@@ -59,9 +59,9 @@ struct Log /*: public llt_L*/
     // template<typename ... Args>
     // std::string string_format(const std::string &format, Args ... args) const;
 
-    std::string string_format( const std::string& format, va_list args ) const;
+    std::string string_format( const std::string& format, va_list &args ) const;
 
-    void __log(int log_type, bool pre, const std::string& format, va_list args ) const;
+    void __log(int log_type, bool pre, const std::string& format, va_list &args ) const;
     void log(int log_type, bool pre, const std::string& format, ... ) const;
 
     static inline Log *ins()

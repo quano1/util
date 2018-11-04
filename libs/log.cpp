@@ -21,7 +21,7 @@ std::string Log::prepare_pre() const
     std::stringstream buffer;
     std::time_t now = system_clock::to_time_t (system_clock::now());
     std::tm *ptm = std::localtime(&now);
-    buffer << std::put_time(ptm, "%a %b %d %H:%M:%S %Y ");
+    buffer << std::put_time(ptm, "%D %H:%M:%S ");
     buffer << getpid() << " ";
     buffer << std::this_thread::get_id();
 
@@ -44,7 +44,7 @@ void Log::add_fd(int fd)
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-security"
-std::string Log::string_format( const std::string& format, va_list args ) const
+std::string Log::string_format( const std::string& format, va_list &args ) const
 {
     std::string buf;
     int bufferSize = MAX_LOG_LENGTH;
@@ -72,7 +72,7 @@ std::string Log::string_format( const std::string& format, va_list args ) const
 }
 #pragma GCC diagnostic pop
 
-void Log::__log(int log_type, bool pre, const std::string& format, va_list args ) const
+void Log::__log(int log_type, bool pre, const std::string& format, va_list &args ) const
 {
     if( !(this->lvl_msk & (1 << log_type)) ) return;
     std::string buf = string_format(format, args);
@@ -116,6 +116,8 @@ extern "C"
 #endif
 void llt_clog(int log_type, bool pre, const char * format, ...)
 {
+    if( !(Log::ins()->lvl_msk & (1 << log_type)) ) return;
+
     va_list args;
     va_start(args, format);
     Log::ins()->__log(log_type, pre, format, args);
