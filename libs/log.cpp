@@ -22,6 +22,7 @@
 
 static const uint32_t MAX_LOG_LENGTH = 0x1000;
 // static const int DEFAULT_FD = 2;
+static const uint16_t DEFAULT_PORT = 65500;
 
 std::string Log::preInit() const
 {
@@ -38,26 +39,37 @@ std::string Log::preInit() const
 
 Log::Log()
 {
-    char *lMask = std::getenv("LLT_LOG_MASK");
-    char *lFile = std::getenv("LLT_LOG_FILE");
-    // char *lHost = std::getenv("LLT_LOG_HOST");
-    // char *lPort = std::getenv("LLT_LOG_PORT");
+    char *lpMask = std::getenv("LLT_LOG_MASK");
+    char *lpFile = std::getenv("LLT_LOG_FILE");
+    char *lpHost = std::getenv("LLT_LOG_HOST");
+    char *lpPort = std::getenv("LLT_LOG_PORT");
     // fds.push_back(DEFAULT_FD);
     // _fd = 1;
     _async = false;
     _lvlMask = 0;
 
-    if(lMask) this->_lvlMask = std::stoi(lMask);
-    if(lFile && (this->_lvlMask & 0xF0)) this->_fds.push_back( open(lFile, O_RDWR | O_APPEND | O_CREAT) );
-    // if(lHost) this->_hostName = std::string(lHost);
-    // if(lPort) this->_port = std::stoi(lPort);
+    if(lpMask) this->_lvlMask = std::stoi(lpMask);
+    if(lpFile && (this->_lvlMask & 0xF0)) this->_fds.push_back( open(lpFile, O_RDWR | O_APPEND | O_CREAT) );
+    if(lpHost)
+    {
+        uint16_t lPort = DEFAULT_PORT;
+        if(lpPort) lPort = std::stoi(lpPort);
+
+        
+
+    }
 
     // else this->_lvlMask = 0;
 }
 
+Log::~Log()
+{
+    for(auto lFd : _fds) close(lFd);
+}
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-security"
-std::string Log::formatStr( const std::string& aFormat, va_list &aVars ) const
+std::string Log::formatStr( const std::string &aFormat, va_list &aVars ) const
 {
     std::string lStr;
     int lBufSize = MAX_LOG_LENGTH;
@@ -85,7 +97,7 @@ std::string Log::formatStr( const std::string& aFormat, va_list &aVars ) const
 }
 #pragma GCC diagnostic pop
 
-std::string Log::__log(int aLogType, bool aPre, const std::string& aFormat, va_list &aVars ) const
+std::string Log::__log(int aLogType, bool aPre, const std::string &aFormat, va_list &aVars ) const
 {
     // if( !(this->_lvlMask & (1 << aLogType)) ) return "";
     std::string lBuf = formatStr(aFormat, aVars);
@@ -96,7 +108,7 @@ std::string Log::__log(int aLogType, bool aPre, const std::string& aFormat, va_l
 
 	    switch(aLogType)
 	    {
-            case (int)LogType::Debug: { lPreStr += " DEBUG "; break; }
+            case (int)LogType::Trace: { lPreStr += " TRACE "; break; }
 	        case (int)LogType::Info: { lPreStr += " INFO "; break; }
             // case (int)LogType::Warn: { lPreStr += " WARN "; break; }
 	        case (int)LogType::Fatal: { lPreStr += " FATAL "; break; }
@@ -124,7 +136,26 @@ void Log::log(int aLogType, bool aPre, const std::string& aFormat, ... ) const
 
     va_list lVars;
     va_start(lVars, aFormat);
-    std::string lBuf = __log(aLogType, aPre, aFormat, lVars);
+    std::string lBuf = formatStr(aFormat, lVars);
+    va_end(lVars);
+
+    std::string lPreStr = "";
+
+    if(aPre)
+    {
+        lPreStr = preInit() + " ";
+    }
+
+    switch(aLogType)
+    {
+        case (int)LogType::Info: { lPreStr += "INFO  "; break; }
+        case (int)LogType::Trace: { lPreStr += "TRACE "; break; }
+        case (int)LogType::Fatal: { lPreStr += "FATAL "; break; }
+        case (int)LogType::Prof: { lPreStr += "PROF  "; break; }
+        default: { lPreStr += "UNKNOWN "; break; }
+    }
+    lBuf = lPreStr + lBuf;
+
     if (this->_lvlMask & (1 << aLogType)) printf("%s\n", lBuf.data());
 
     for ( int i=0; i<_fds.size(); i++)
@@ -134,7 +165,7 @@ void Log::log(int aLogType, bool aPre, const std::string& aFormat, ... ) const
             write(_fds[i], lBuf.data(), lBuf.size());
         }
     }
-    va_end(lVars);
+    
 }
 
 #ifdef __cplusplus

@@ -37,11 +37,11 @@ Mon Oct 29 22:08:18 2018 906 1 PROF MAIN 69.648600 ms
 
 enum class LogType : size_t
 {
-    Debug=0,
-    Info,
-    // Warn,
-    Fatal,
+    // Debug=0,
+    Info = 0,
+    Trace,
     Prof,
+    Fatal,
     Max,
 };
 
@@ -50,7 +50,8 @@ struct Counter;
 struct Log /*: public llt_L*/
 {
     Log();
-    virtual ~Log() = default;
+    virtual ~Log();
+    // virtual ~Log() = default;
     // void init(...);
     // void setfd(int fd);
     // void set_default_fd(int fd);
@@ -101,14 +102,16 @@ inline bool canLog(int aLogType)
 
 #define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 
-#define _LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
+#define LOG_INIT() Log::ins()
 
-#define LOGD(format, ...) Log::ins()->log(static_cast<int>(LogType::Debug), true, "%s %s %d " format "", __FILENAME__, __func__, __LINE__, ##__VA_ARGS__)
+#define LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
+
+// #define LOGD(format, ...) Log::ins()->log(static_cast<int>(LogType::Debug), true, "%s %s %d " format "", __FILENAME__, __func__, __LINE__, ##__VA_ARGS__)
 #define LOGI(format, ...) Log::ins()->log(static_cast<int>(LogType::Info), true, "%s %s %d " format "", __FILENAME__, __func__, __LINE__, ##__VA_ARGS__)
 // #define LOGW(format, ...) Log::ins()->log(static_cast<int>(LogType::Warn), true, "%s %s %d " format "", __FILENAME__, __func__, __LINE__, ##__VA_ARGS__)
 #define LOGF(format, ...) Log::ins()->log(static_cast<int>(LogType::Fatal), true, "%s %s %d " format "", __FILENAME__, __func__, __LINE__, ##__VA_ARGS__)
 
-#define LOGP(context) Counter __PROF_ ## context( #context )
-#define LOGPF() Log::ins()->log(static_cast<int>(LogType::Prof), false, "%s PROF %s", Log::ins()->preInit().data(), __func__); Counter __PROF__FUNC__(__func__)
+#define LOGP(context) Counter __PROF_ ## context( #context , LogType::Prof)
+#define LOGT() Counter __PROF__FUNC__(__func__, LogType::Trace)
 
 #endif
