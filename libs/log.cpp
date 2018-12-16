@@ -15,111 +15,138 @@
 #include <stdarg.h>
 #include <unistd.h>
 
-std::string Log::prepare_pre() const
+#include <sys/stat.h> 
+#include <fcntl.h>
+
+struct Counter;
+
+static const uint32_t MAX_LOG_LENGTH = 0x1000;
+// static const int DEFAULT_FD = 2;
+
+std::string Log::preInit() const
 {
     using std::chrono::system_clock;
-    std::stringstream buffer;
-    std::time_t now = system_clock::to_time_t (system_clock::now());
-    std::tm *ptm = std::localtime(&now);
-    buffer << std::put_time(ptm, "%D %H:%M:%S ");
-    buffer << getpid() << " ";
-    buffer << std::this_thread::get_id();
+    std::stringstream lBuf;
+    std::time_t lNow = system_clock::to_time_t (system_clock::now());
+    std::tm *lpTm = std::localtime(&lNow);
+    lBuf << std::put_time(lpTm, "%D %H:%M:%S ");
+    lBuf << getpid() << " ";
+    lBuf << std::this_thread::get_id();
 
-    return buffer.str();
+    return lBuf.str();
 }
 
 Log::Log()
 {
-    char *lvl_msk = std::getenv("LLT_LOG_MASK");
-    fds.push_back(DEFAULT_FD);
+    char *lMask = std::getenv("LLT_LOG_MASK");
+    char *lFile = std::getenv("LLT_LOG_FILE");
+    // char *lHost = std::getenv("LLT_LOG_HOST");
+    // char *lPort = std::getenv("LLT_LOG_PORT");
+    // fds.push_back(DEFAULT_FD);
+    // _fd = 1;
+    _async = false;
+    _lvlMask = 0;
 
-    if(lvl_msk) this->lvl_msk = std::stoi(lvl_msk);
-    else this->lvl_msk = 0;
-}
+    if(lMask) this->_lvlMask = std::stoi(lMask);
+    if(lFile && (this->_lvlMask & 0xF0)) this->_fds.push_back( open(lFile, O_RDWR | O_APPEND | O_CREAT) );
+    // if(lHost) this->_hostName = std::string(lHost);
+    // if(lPort) this->_port = std::stoi(lPort);
 
-void Log::add_fd(int fd)
-{
-    fds.push_back(fd);
+    // else this->_lvlMask = 0;
 }
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-security"
-std::string Log::string_format( const std::string& format, va_list &args ) const
+std::string Log::formatStr( const std::string& aFormat, va_list &aVars ) const
 {
-    std::string buf;
-    int bufferSize = MAX_LOG_LENGTH;
+    std::string lStr;
+    int lBufSize = MAX_LOG_LENGTH;
 
     for (;;)
     {
-        buf.resize(bufferSize);
+        lStr.resize(lBufSize);
 
-        if (buf.empty())
+        if (lStr.empty())
         {
             return "";    // not enough memory
         }
-        int ret = vsnprintf(&buf[0], bufferSize - 3, format.data(), args);
+        int ret = vsnprintf(&lStr[0], lBufSize - 3, aFormat.data(), aVars);
 
         if (ret < 0)
         {
-            bufferSize *= 2;
+            lBufSize *= 2;
         }
         else
         {
             break;
         }
     }
-    return buf;
+    return lStr;
 }
 #pragma GCC diagnostic pop
 
-void Log::__log(int log_type, bool pre, const std::string& format, va_list &args ) const
+std::string Log::__log(int aLogType, bool aPre, const std::string& aFormat, va_list &aVars ) const
 {
-    if( !(this->lvl_msk & (1 << log_type)) ) return;
-    std::string buf = string_format(format, args);
+    // if( !(this->_lvlMask & (1 << aLogType)) ) return "";
+    std::string lBuf = formatStr(aFormat, aVars);
 
-    if(pre)
+    if(aPre)
     {
-	    std::string pre_str = prepare_pre();
+	    std::string lPreStr = preInit();
 
-	    switch(log_type)
+	    switch(aLogType)
 	    {
-	        case (int)LogType::Info: { pre_str += " INFO "; break; }
-	        case (int)LogType::Debug: { pre_str += " DEBUG "; break; }
-	        case (int)LogType::Warn: { pre_str += " WARN "; break; }
-	        case (int)LogType::Fatal: { pre_str += " FATAL "; break; }
-	        default: { pre_str += " UNKNOWN "; break; }
+	        case (int)LogType::Info: { lPreStr += " INFO "; break; }
+	        // case (int)LogType::Debug: { lPreStr += " DEBUG "; break; }
+	        case (int)LogType::Warn: { lPreStr += " WARN "; break; }
+	        case (int)LogType::Fatal: { lPreStr += " FATAL "; break; }
+	        default: { lPreStr += " UNKNOWN "; break; }
 	    }
-	    buf = pre_str + buf;
+	    lBuf = lPreStr + lBuf;
 	}
 
-    if(!buf.empty())
-    {
-        for(int const &fd : fds)
-        {
-            write(fd, buf.data(), buf.size());
-        }
-    }
+    return std::move(lBuf);
+
+    // if(!lBuf.empty())
+    // {
+    //     if(_fd) printf("%s", lBuf.data());
+        
+    //     for(int const &lFd : _fds)
+    //     {
+    //         write(lFd, lBuf.data(), lBuf.size());
+    //     }
+    // }
 }
 
-void Log::log(int log_type, bool pre, const std::string& format, ... ) const
+void Log::log(int aLogType, bool aPre, const std::string& aFormat, ... ) const
 {
-    if( !(this->lvl_msk & (1 << log_type)) ) return;
+    if( !(this->_lvlMask & (1 << aLogType)) ) return;
 
-    va_list args;
-    va_start(args, format);
-    __log(log_type, pre, format, args);
-    va_end(args);
+    va_list lVars;
+    va_start(lVars, aFormat);
+    std::string lBuf = __log(aLogType, aPre, aFormat, lVars);
+    printf("%s\n", lBuf.data());
+
+    for ( int i=0; i<_fds.size(); i++)
+    {
+        if( this->_lvlMask & (1 << (aLogType + (static_cast<int>(LogType::Max) * (i + 1))) ) )
+        {
+            write(_fds[i], lBuf.data(), lBuf.size());
+        }
+    }
+    va_end(lVars);
 }
 
 #ifdef __cplusplus
 extern "C" 
 #endif
-void llt_clog(int log_type, bool pre, const char * format, ...)
+void llt_clog(int aLogType, bool aPre, const char * aFormat, ...)
 {
-    if( !(Log::ins()->lvl_msk & (1 << log_type)) ) return;
+    if( !(Log::ins()->_lvlMask & (1 << aLogType)) ) return;
 
-    va_list args;
-    va_start(args, format);
-    Log::ins()->__log(log_type, pre, format, args);
-    va_end(args);
+    va_list lVars;
+    va_start(lVars, aFormat);
+    std::string lBuf = Log::ins()->__log(aLogType, aPre, aFormat, lVars);
+    printf("%s", lBuf.data());
+    va_end(lVars);
 }

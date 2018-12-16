@@ -4,9 +4,10 @@
 #include <string>
 #include <chrono>
 
-#include "log.hpp"
+// #include "log.hpp"
+bool canLog(int log_type);
 
-class Counter
+struct Counter
 {
 public:
     Counter();
