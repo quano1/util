@@ -3,6 +3,8 @@
 
 #include <string>
 #include <chrono>
+#include <thread>
+#include <unordered_map>
 
 // #include "log.hpp"
 bool canLog(int log_type);
@@ -16,8 +18,12 @@ public:
 
     virtual ~Counter();
 
+private:
+	
     std::string _context;
     std::chrono::high_resolution_clock::time_point _tbeg;
+
+    static std::unordered_map<std::thread::id, int> _indents;
 
 };
 

@@ -18,7 +18,7 @@
 #include <sys/stat.h> 
 #include <fcntl.h>
 
-struct Counter;
+// struct Counter;
 
 static const uint32_t MAX_LOG_LENGTH = 0x1000;
 // static const int DEFAULT_FD = 2;
@@ -96,9 +96,9 @@ std::string Log::__log(int aLogType, bool aPre, const std::string& aFormat, va_l
 
 	    switch(aLogType)
 	    {
+            case (int)LogType::Debug: { lPreStr += " DEBUG "; break; }
 	        case (int)LogType::Info: { lPreStr += " INFO "; break; }
-	        // case (int)LogType::Debug: { lPreStr += " DEBUG "; break; }
-	        case (int)LogType::Warn: { lPreStr += " WARN "; break; }
+            // case (int)LogType::Warn: { lPreStr += " WARN "; break; }
 	        case (int)LogType::Fatal: { lPreStr += " FATAL "; break; }
 	        default: { lPreStr += " UNKNOWN "; break; }
 	    }
@@ -120,12 +120,12 @@ std::string Log::__log(int aLogType, bool aPre, const std::string& aFormat, va_l
 
 void Log::log(int aLogType, bool aPre, const std::string& aFormat, ... ) const
 {
-    if( !(this->_lvlMask & (1 << aLogType)) ) return;
+    if( !(this->_lvlMask & (1 << aLogType)) && !(1 << (aLogType + (static_cast<int>(LogType::Max) )) ) ) return;
 
     va_list lVars;
     va_start(lVars, aFormat);
     std::string lBuf = __log(aLogType, aPre, aFormat, lVars);
-    printf("%s\n", lBuf.data());
+    if (this->_lvlMask & (1 << aLogType)) printf("%s\n", lBuf.data());
 
     for ( int i=0; i<_fds.size(); i++)
     {

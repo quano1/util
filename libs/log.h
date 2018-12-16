@@ -20,7 +20,7 @@ void llt_log(int lvl_msk, char const * format, ...);
 
 #define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 
-#define LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
+// #define LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 
 #define CLOGI(format, ...) llt_clog(static_cast<int>(LogType::Info), true, "%s %s %d " format "\n", __FILENAME__, __func__, __LINE__, ##__VA_ARGS__)
 // #define CLOGD(format, ...) llt_clog(static_cast<int>(LogType::Debug), true, "%s %s %d " format "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
