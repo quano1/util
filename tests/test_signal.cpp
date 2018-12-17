@@ -17,7 +17,19 @@ private:
     std::string name_;
 };
 
-int main()
+class Button {
+ public:
+  Signal<> on_click;
+};
+
+class Message {
+ public:
+  void display() const {
+    std::cout << "Hello World!" << std::endl;
+  }
+};
+
+void test1()
 {
     Signal<std::string, int> signal;
     signal.connect([](std::string arg1, int arg2)
@@ -26,13 +38,36 @@ int main()
     });
 
     signal.emit("The answer:", 42);
+}
 
+void test2()
+{
+  Button  button;
+  Message message;
+
+  button.on_click.connect_member(&message, &Message::display);
+  button.on_click.emit();
+}
+
+void test3()
+{
+  Person alice("Alice"), bob("Bob");
+
+  alice.say.connect_member(&bob, &Person::listen);
+  bob.say.connect_member(&alice, &Person::listen);
+
+  alice.say.emit("Have a nice day!");
+  bob.say.emit("Thank you!");
+}
+
+void test4()
+{
     Property<float> InputValue;
     Property<float> OutputValue;
     Property<bool> CriticalSituation;
 
-    // OutputValue.connect_from(InputValue);
-    InputValue.connect(OutputValue);
+    OutputValue.connect_from(InputValue);
+    // InputValue.connect(OutputValue);
 
     OutputValue.on_change().connect([&](float val)
     {
@@ -59,5 +94,13 @@ int main()
     InputValue = 0.4;
     InputValue = 0.6;
 
+}
+
+int main()
+{
+    test1();
+    test2();
+    test3();
+    test4();
     return 0;
 }
