@@ -3,7 +3,7 @@
 
 #include <Counter.hpp>
 
-int main(int argc, char ** argv)
+int main(int argc, char **argv)
 {
     {
         std::ofstream lofs("log_ofstream.txt");

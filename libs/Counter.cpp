@@ -20,7 +20,10 @@ Counter::Counter(std::string const &a_str, LogType aLogType) : _context(a_str)
 {
     using namespace std::chrono;
     _logType = aLogType;
-    if(!canLog(static_cast<int>(_logType))) return;
+    if(!canLog(static_cast<int>(_logType)))
+    {
+        return;
+    }
     _tbeg = std::chrono::high_resolution_clock::now();
     Log::ins()->log(static_cast<int>(_logType), false, "%*s%s", _indents[std::this_thread::get_id()] * 4, "", _context.data());
     _indents[std::this_thread::get_id()]++;
@@ -29,7 +32,10 @@ Counter::Counter(std::string const &a_str, LogType aLogType) : _context(a_str)
 Counter::~Counter()
 {
     using namespace std::chrono;
-    if(!canLog(static_cast<int>(_logType))) return;
+    if(!canLog(static_cast<int>(_logType)))
+    {
+        return;
+    }
     _indents[std::this_thread::get_id()]--;
     // _LOGD("%d", _indents[std::this_thread::get_id()]);
 

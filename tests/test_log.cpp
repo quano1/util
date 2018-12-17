@@ -16,7 +16,7 @@ int main()
     // _l.deinit();
     LOG_INIT();
     LOGT();
-    
+
     {
         LOGP(LOGI);
         LOGI("hello");

@@ -15,7 +15,7 @@
 #include <stdarg.h>
 #include <unistd.h>
 
-#include <sys/stat.h> 
+#include <sys/stat.h>
 #include <fcntl.h>
 
 // struct Counter;
@@ -48,14 +48,23 @@ Log::Log()
     _async = false;
     _lvlMask = 0;
 
-    if(lpMask) this->_lvlMask = std::stoi(lpMask);
-    if(lpFile && (this->_lvlMask & 0xF0)) this->_fds.push_back( open(lpFile, O_RDWR | O_APPEND | O_CREAT) );
+    if(lpMask)
+    {
+        this->_lvlMask = std::stoi(lpMask);
+    }
+    if(lpFile && (this->_lvlMask & 0xF0))
+    {
+        this->_fds.push_back( open(lpFile, O_RDWR | O_APPEND | O_CREAT) );
+    }
     if(lpHost)
     {
         uint16_t lPort = DEFAULT_PORT;
-        if(lpPort) lPort = std::stoi(lpPort);
+        if(lpPort)
+        {
+            lPort = std::stoi(lpPort);
+        }
 
-        
+
 
     }
 
@@ -64,7 +73,10 @@ Log::Log()
 
 Log::~Log()
 {
-    for(auto lFd : _fds) close(lFd);
+    for(auto lFd : _fds)
+    {
+        close(lFd);
+    }
 }
 
 #pragma GCC diagnostic push
@@ -104,25 +116,41 @@ std::string Log::__log(int aLogType, bool aPre, const std::string &aFormat, va_l
 
     if(aPre)
     {
-	    std::string lPreStr = preInit();
+        std::string lPreStr = preInit();
 
-	    switch(aLogType)
-	    {
-            case (int)LogType::Trace: { lPreStr += " TRACE "; break; }
-	        case (int)LogType::Info: { lPreStr += " INFO "; break; }
+        switch(aLogType)
+        {
+            case (int)LogType::Trace:
+            {
+                lPreStr += " TRACE ";
+                break;
+            }
+            case (int)LogType::Info:
+            {
+                lPreStr += " INFO ";
+                break;
+            }
             // case (int)LogType::Warn: { lPreStr += " WARN "; break; }
-	        case (int)LogType::Fatal: { lPreStr += " FATAL "; break; }
-	        default: { lPreStr += " UNKNOWN "; break; }
-	    }
-	    lBuf = lPreStr + lBuf;
-	}
+            case (int)LogType::Fatal:
+            {
+                lPreStr += " FATAL ";
+                break;
+            }
+            default:
+            {
+                lPreStr += " UNKNOWN ";
+                break;
+            }
+        }
+        lBuf = lPreStr + lBuf;
+    }
 
     return std::move(lBuf);
 
     // if(!lBuf.empty())
     // {
     //     if(_fd) printf("%s", lBuf.data());
-        
+
     //     for(int const &lFd : _fds)
     //     {
     //         write(lFd, lBuf.data(), lBuf.size());
@@ -130,9 +158,12 @@ std::string Log::__log(int aLogType, bool aPre, const std::string &aFormat, va_l
     // }
 }
 
-void Log::log(int aLogType, bool aPre, const std::string& aFormat, ... ) const
+void Log::log(int aLogType, bool aPre, const std::string &aFormat, ... ) const
 {
-    if( !(this->_lvlMask & (1 << aLogType)) && !(1 << (aLogType + (static_cast<int>(LogType::Max) )) ) ) return;
+    if( !(this->_lvlMask & (1 << aLogType)) && !(1 << (aLogType + (static_cast<int>(LogType::Max) )) ) )
+    {
+        return;
+    }
 
     va_list lVars;
     va_start(lVars, aFormat);
@@ -148,32 +179,58 @@ void Log::log(int aLogType, bool aPre, const std::string& aFormat, ... ) const
 
     switch(aLogType)
     {
-        case (int)LogType::Info: { lPreStr += "INFO  "; break; }
-        case (int)LogType::Trace: { lPreStr += "TRACE "; break; }
-        case (int)LogType::Fatal: { lPreStr += "FATAL "; break; }
-        case (int)LogType::Prof: { lPreStr += "PROF  "; break; }
-        default: { lPreStr += "UNKNOWN "; break; }
+        case (int)LogType::Info:
+        {
+            lPreStr += "INFO  ";
+            break;
+        }
+        case (int)LogType::Trace:
+        {
+            lPreStr += "TRACE ";
+            break;
+        }
+        case (int)LogType::Fatal:
+        {
+            lPreStr += "FATAL ";
+            break;
+        }
+        case (int)LogType::Prof:
+        {
+            lPreStr += "PROF  ";
+            break;
+        }
+        default:
+        {
+            lPreStr += "UNKNOWN ";
+            break;
+        }
     }
     lBuf = lPreStr + lBuf;
 
-    if (this->_lvlMask & (1 << aLogType)) printf("%s\n", lBuf.data());
+    if (this->_lvlMask & (1 << aLogType))
+    {
+        printf("%s\n", lBuf.data());
+    }
 
-    for ( int i=0; i<_fds.size(); i++)
+    for ( int i = 0; i < _fds.size(); i++)
     {
         if( this->_lvlMask & (1 << (aLogType + (static_cast<int>(LogType::Max) * (i + 1))) ) )
         {
             write(_fds[i], lBuf.data(), lBuf.size());
         }
     }
-    
+
 }
 
 #ifdef __cplusplus
-extern "C" 
+extern "C"
 #endif
-void llt_clog(int aLogType, bool aPre, const char * aFormat, ...)
+void llt_clog(int aLogType, bool aPre, const char *aFormat, ...)
 {
-    if( !(Log::ins()->_lvlMask & (1 << aLogType)) ) return;
+    if( !(Log::ins()->_lvlMask & (1 << aLogType)) )
+    {
+        return;
+    }
 
     va_list lVars;
     va_start(lVars, aFormat);

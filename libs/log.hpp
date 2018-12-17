@@ -60,17 +60,20 @@ struct Log /*: public llt_L*/
         _fds.push_back(fd);
     }
 
-    inline void setAsyn(bool aAsync) { _async = aAsync; }
+    inline void setAsyn(bool aAsync)
+    {
+        _async = aAsync;
+    }
 
     virtual std::string preInit() const;
 
     // template<typename ... Args>
     // std::string string_format(const std::string &format, Args ... args) const;
 
-    std::string formatStr( const std::string& aFormat, va_list &aVars ) const;
+    std::string formatStr( const std::string &aFormat, va_list &aVars ) const;
 
-    std::string __log(int aLogType, bool aPre, const std::string& aFormat, va_list &aVars ) const;
-    void log(int aLogType, bool aPre, const std::string& aFormat, ... ) const;
+    std::string __log(int aLogType, bool aPre, const std::string &aFormat, va_list &aVars ) const;
+    void log(int aLogType, bool aPre, const std::string &aFormat, ... ) const;
 
     static inline Log *ins()
     {
@@ -78,7 +81,10 @@ struct Log /*: public llt_L*/
         return &__ins;
     }
 
-    inline size_t &lvlMask() { return _lvlMask; }
+    inline size_t &lvlMask()
+    {
+        return _lvlMask;
+    }
 
     // std::function<void *(void *)> fps;
     std::vector<int> _fds;
@@ -91,9 +97,9 @@ struct Log /*: public llt_L*/
 };
 
 #ifdef __cplusplus
-extern "C" 
+extern "C"
 #endif
-void llt_clog(int aLogType, bool aPre, const char * aFormat, ...);
+void llt_clog(int aLogType, bool aPre, const char *aFormat, ...);
 
 inline bool canLog(int aLogType)
 {
