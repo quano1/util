@@ -15,7 +15,8 @@ int main()
     // _l.init("abc.txt", "bcd.txt", {"10.207.215.174",1002});
     // _l.deinit();
     LOG_INIT();
-    LOGT();
+    // LOGP(XSTR(__func__));
+    XSTR(__FUNCTION__);
 
     {
         LOGP(LOGI);

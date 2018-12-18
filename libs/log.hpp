@@ -117,7 +117,13 @@ inline bool canLog(int aLogType)
 // #define LOGW(format, ...) Log::ins()->log(static_cast<int>(LogType::Warn), true, "%s %s %d " format "", __FILENAME__, __func__, __LINE__, ##__VA_ARGS__)
 #define LOGF(format, ...) Log::ins()->log(static_cast<int>(LogType::Fatal), true, "%s %s %d " format "", __FILENAME__, __func__, __LINE__, ##__VA_ARGS__)
 
+#define XSTR(s) _STR(s)
+#define _STR(s) (s)
+
+#define CTX(s) _CTX(s)
+#define _CTX(s) s
+
 #define LOGP(context) Counter __PROF_ ## context( #context , LogType::Prof)
-#define LOGT() Counter __PROF__FUNC__(__func__, LogType::Trace)
+#define LOGT() Counter __TRACE__(__func__, LogType::Trace)
 
 #endif
