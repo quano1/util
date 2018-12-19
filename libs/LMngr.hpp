@@ -71,7 +71,6 @@ public:
     void log(int aLvl, const char *fmt, ...);
 
 private:
-    // Simple::Signal<std::string (char const *, ...)> _onFormat;
     Simple::Signal<int (std::string const &)> _onExport;
     Simple::Signal<int (void *)> _onInit;
     Simple::Signal<void (void *)> _onDeinit;
