@@ -253,6 +253,7 @@ public:
         return std::move(lBuff);
     }
 
+private:
     ThreadPool _pool;
     Simple::Signal<void (int, std::string const &)> _onExport;
     Simple::Signal<int (void *)> _onInit;

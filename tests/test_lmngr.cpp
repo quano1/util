@@ -15,7 +15,7 @@ int main()
         log.init(nullptr);
 
         std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
-        for(int i=0; i<10000; i++)
+        for(int i=0; i<100000; i++)
         {
             log.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
         }
@@ -34,7 +34,7 @@ int main()
         log.init(nullptr);
 
         std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
-        for(int i=0; i<10000; i++)
+        for(int i=0; i<100000; i++)
         {
             log.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
         }
@@ -53,7 +53,7 @@ int main()
         log.init(nullptr);
 
         std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
-        for(int i=0; i<10000; i++)
+        for(int i=0; i<100000; i++)
         {
             log.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
         }
@@ -72,7 +72,7 @@ int main()
         log.init(nullptr);
 
         std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
-        for(int i=0; i<10000; i++)
+        for(int i=0; i<100000; i++)
         {
             log.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
         }
@@ -91,32 +91,13 @@ int main()
         log.init(nullptr);
 
         std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
-        for(int i=0; i<10000; i++)
+        for(int i=0; i<100000; i++)
         {
             log.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
         }
         std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
         double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
         ofs << "Sync EConsole: " << diff << std::endl;
-
-        LOGD("");
-        log.deInit();
-    }
-
-    {
-        LogAsync log;
-        log.add(new EConsole());
-
-        log.init(nullptr);
-
-        std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
-        for(int i=0; i<10000; i++)
-        {
-            log.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-        }
-        std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
-        double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
-        ofs << "EConsole: " << diff << std::endl;
 
         LOGD("");
         log.deInit();
