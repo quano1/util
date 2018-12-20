@@ -54,7 +54,7 @@ Log::Log()
     }
     if(lpFile && (this->_lvlMask & 0xF0))
     {
-        this->_fds.push_back( open(lpFile, O_RDWR | O_APPEND | O_CREAT) );
+        this->_fds.push_back( open(lpFile, O_RDWR | O_APPEND ) );
     }
     if(lpHost)
     {
