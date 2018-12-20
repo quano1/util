@@ -1,6 +1,8 @@
 #ifndef THREAD_POOL_HPP_
 #define THREAD_POOL_HPP_
 
+#include <libs/log.hpp>
+
 #include <vector>
 #include <queue>
 #include <memory>
@@ -13,11 +15,15 @@
 
 class ThreadPool {
 public:
+    ThreadPool() : stop(false) {}
     ThreadPool(size_t);
     template<class F, class... Args>
     auto enqueue(F&& f, Args&&... args) 
         -> std::future<typename std::result_of<F(Args...)>::type>;
-    ~ThreadPool();
+    virtual ~ThreadPool();
+
+    void add_workers(size_t);
+    void wait_for_complete();
 private:
     // need to keep track of threads so we can join them
     std::vector< std::thread > workers;
@@ -29,12 +35,26 @@ private:
     std::condition_variable condition;
     bool stop;
 };
- 
-// the constructor just launches some amount of workers
-inline ThreadPool::ThreadPool(size_t threads)
-    :   stop(false)
+
+void ThreadPool::wait_for_complete()
+{
+    if(stop) return;
+    
+    {
+        std::unique_lock<std::mutex> lock(queue_mutex);
+        stop = true;
+    }
+    condition.notify_all();
+    for(std::thread &worker: workers)
+    {
+        worker.join();
+    }
+}
+
+void ThreadPool::add_workers(size_t threads)
 {
     for(size_t i = 0;i<threads;++i)
+    {
         workers.emplace_back(
             [this]
             {
@@ -56,6 +76,14 @@ inline ThreadPool::ThreadPool(size_t threads)
                 }
             }
         );
+    }
+}
+
+// the constructor just launches some amount of workers
+ThreadPool::ThreadPool(size_t threads)
+    :   stop(false)
+{
+    add_workers(threads);
 }
 
 // add new work item to the pool
@@ -80,19 +108,14 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
         tasks.emplace([task](){ (*task)(); });
     }
     condition.notify_one();
+    
     return res;
 }
 
 // the destructor joins all threads
-inline ThreadPool::~ThreadPool()
+ThreadPool::~ThreadPool()
 {
-    {
-        std::unique_lock<std::mutex> lock(queue_mutex);
-        stop = true;
-    }
-    condition.notify_all();
-    for(std::thread &worker: workers)
-        worker.join();
+    wait_for_complete();
 }
 
 #endif
