@@ -34,19 +34,6 @@ static size_t const MAX_BUF_SIZE = 0x1000;
 class Export
 {
 public:
-
-    Export()
-    {
-    }
-
-    Export(Export const &aOther)
-    {
-    }
-
-    Export(Export &&aOther)
-    {
-    }
-
     virtual void onHandle(int aLvl, std::string const &)=0;
     virtual int onInit(void *)=0;
     virtual void onDeinit(void *)=0;
@@ -55,39 +42,22 @@ public:
 class EConsole : public Export
 {
 public:
-    int onInit(void *aPtr) { return 0; }
-    void onDeinit(void *aPtr) { }
-    void onHandle(int aLvl, std::string const &aBuff) { std::cout<<aBuff; }
+    virtual int onInit(void *aPtr);
+    virtual void onDeinit(void *aPtr);
+    virtual void onHandle(int aLvl, std::string const &aBuff);
 };
 
 class EFile : public Export
 {
 public:
-    EFile(std::string const &aFile) : _f (aFile) {}
-    EFile(std::string &&aFile) : _f (std::move(aFile)) {}
+    EFile(std::string const &aFile);
+    EFile(std::string &&aFile);
 
-    int onInit(void *aPtr)
-    {
-        ofs.open(_f, std::ios::out | std::ios::app );
-        if(!ofs.is_open()) return 1;
-        return 0;
-    }
+    virtual int onInit(void *aPtr);
+    virtual void onDeinit(void *aPtr);
+    virtual void onHandle(int aLvl, std::string const &aBuff);
 
-    void onDeinit(void *aPtr)
-    {
-        if(ofs.is_open())
-        {
-            ofs.flush();
-            ofs.close();
-        }
-    }
-
-    void onHandle(int aLvl, std::string const &aBuff)
-    {
-        ofs << aBuff;
-    }
-
-private:
+protected:
     std::ofstream ofs;
     std::string _f;
 };
@@ -95,52 +65,14 @@ private:
 class ENetUDP : public Export
 {
 public:
-    ENetUDP(std::string &&aHost, uint16_t aPort) : _host(std::move(aHost)), _port(aPort) {}
+    ENetUDP(std::string &&aHost, uint16_t aPort);
+    ENetUDP(std::string const &aHost, uint16_t aPort);
 
-    ENetUDP(std::string const &aHost, uint16_t aPort) : _host(aHost), _port(aPort) {}
+    virtual int onInit(void *aPtr);
+    virtual void onDeinit(void *aPtr);
+    virtual void onHandle(int aLvl, std::string const &aBuff);
 
-    int onInit(void *aPtr)
-    {
-        _fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-        
-        if ( _fd <= 0 )
-        {
-            return 1;
-        }
-
-        struct hostent *lpSvr;
-        lpSvr = gethostbyname(_host.data());
-
-        _svrAddr.sin_family = AF_INET;
-        _svrAddr.sin_port = htons( _port );
-        bcopy((char *)lpSvr->h_addr, (char *)&_svrAddr.sin_addr.s_addr, lpSvr->h_length);
-
-        // set non-blocking io
-        if ( fcntl( _fd, F_SETFL, O_NONBLOCK, 1 ) == -1 )
-        {
-            LOGD( "failed to make socket non-blocking" );
-            return 1;
-        }
-
-        return 0;
-    }
-
-    void onDeinit(void *aPtr)
-    {
-        if(_fd > 0) close(_fd);
-    }
-
-    void onHandle(int aLvl, std::string const &aBuff)
-    {
-        size_t sent_bytes = sendto( _fd, aBuff.data(), aBuff.size(), 0, (sockaddr*)&_svrAddr, sizeof(sockaddr_in) );
-
-        if(!sent_bytes) 
-        {
-        }
-
-    }
-
-private:
+protected:
     std::string _host;
     uint16_t _port;
     int _fd;
@@ -151,44 +83,16 @@ class LogSync
 {
 public:
 
-    LogSync() {}
+    LogSync() = default;
+    virtual ~LogSync();
 
-    virtual ~LogSync() 
-    {
-        for(auto lp : _exportContainer)
-        {
-            delete lp;
-        }
-    }
-
-    virtual void init(void *aPtr=nullptr)
-    {
-        _onInit.emit(aPtr);
-    }
-
-    virtual void deInit(void *aPtr=nullptr)
-    {
-        _onDeinit.emit(aPtr);
-    }
-
-    virtual void add(Export *aExport)
-    {
-        _exportContainer.push_back(aExport);
-        Export *lIns = _exportContainer.back();
-        size_t lId = _onExport.connect(Simple::slot(lIns, &Export::onHandle));
-        lId = _onInit.connect(Simple::slot(lIns, &Export::onInit));
-        lId = _onDeinit.connect(Simple::slot(lIns, &Export::onDeinit));
-    }
+    virtual void init(void *aPtr=nullptr);
+    virtual void deInit(void *aPtr=nullptr);
+    virtual void add(Export *aExport);
 
     virtual void log(int aLvl, const char *fmt, ...);
 
-    virtual std::string __format(char const *aFormat, va_list &aVars) const
-    {
-        std::string lBuff;
-        char str[MAX_BUF_SIZE];
-        if (vsnprintf (str, sizeof str, aFormat, aVars) >= 0) lBuff = str;
-        return std::move(lBuff);
-    }
+    virtual std::string __format(char const *aFormat, va_list &aVars) const;
 
 protected:
     Simple::Signal<void (int, std::string const &)> _onExport;
@@ -198,62 +102,20 @@ protected:
     std::vector<Export *> _exportContainer;
 };
 
-void LogSync::log(int aLvl, const char *fmt, ...)
-{
-    va_list args;
-    va_start (args, fmt);
-    std::string lBuff = __format(fmt, args);
-    va_end (args);
-
-    _onExport.emit(aLvl, lBuff);
-}
-
 class LogAsync : public LogSync
 {
 public:
 
-    LogAsync() {}
-    virtual ~LogAsync() 
-    {
-    }
+    LogAsync() = default;
+    virtual ~LogAsync() = default;
 
-    virtual void wait_for_complete()
-    {
-        _pool.wait_for_complete();
-    }
-
-    virtual void deInit(void *aPtr=nullptr)
-    {
-        _pool.wait_for_complete();
-        _onDeinit.emit(aPtr);
-    }
-
-    virtual void add(Export *aExport)
-    {
-        LogSync::add(aExport);
-        _pool.add_workers(1);
-    }
-
+    virtual void wait_for_complete();
+    virtual void deInit(void *aPtr=nullptr);
+    virtual void add(Export *aExport);
     virtual void log(int aLvl, const char *fmt, ...);
 
 private:
     ThreadPool _pool;
 };
-
-void LogAsync::log(int aLvl, const char *fmt, ...)
-{
-    va_list args;
-    va_start (args, fmt);
-    std::string lBuff = __format(fmt, args);
-    va_end (args);
-
-    // _onExport.emit(aLvl, lBuff);
-    _pool.enqueue([this, aLvl, lBuff] 
-    {
-        // apExp.onHandle(aLvl, lBuff);
-        _onExport.emit(aLvl, lBuff);
-        std::this_thread::yield();
-    });
-}
 
 #endif // LMNGR_HPP_
