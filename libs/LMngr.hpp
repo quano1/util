@@ -190,7 +190,7 @@ public:
         return std::move(lBuff);
     }
 
-private:
+protected:
     Simple::Signal<void (int, std::string const &)> _onExport;
     Simple::Signal<int (void *)> _onInit;
     Simple::Signal<void (void *)> _onDeinit;
@@ -208,7 +208,7 @@ void LogSync::log(int aLvl, const char *fmt, ...)
     _onExport.emit(aLvl, lBuff);
 }
 
-class LogAsync
+class LogAsync : public LogSync
 {
 public:
 
@@ -222,11 +222,6 @@ public:
         _pool.wait_for_complete();
     }
 
-    virtual void init(void *aPtr=nullptr)
-    {
-        _onInit.emit(aPtr);
-    }
-
     virtual void deInit(void *aPtr=nullptr)
     {
         _pool.wait_for_complete();
@@ -235,31 +230,14 @@ public:
 
     virtual void add(Export *aExport)
     {
-        _exportContainer.push_back(aExport);
-        Export *lIns = _exportContainer.back();
-        size_t lId = _onExport.connect(Simple::slot(lIns, &Export::onHandle));
-        lId = _onInit.connect(Simple::slot(lIns, &Export::onInit));
-        lId = _onDeinit.connect(Simple::slot(lIns, &Export::onDeinit));
+        LogSync::add(aExport);
         _pool.add_workers(1);
     }
 
     virtual void log(int aLvl, const char *fmt, ...);
 
-    virtual std::string __format(char const *aFormat, va_list &aVars) const
-    {
-        std::string lBuff;
-        char str[MAX_BUF_SIZE];
-        if (vsnprintf (str, sizeof str, aFormat, aVars) >= 0) lBuff = str;
-        return std::move(lBuff);
-    }
-
 private:
     ThreadPool _pool;
-    Simple::Signal<void (int, std::string const &)> _onExport;
-    Simple::Signal<int (void *)> _onInit;
-    Simple::Signal<void (void *)> _onDeinit;
-
-    std::vector<Export *> _exportContainer;
 };
 
 void LogAsync::log(int aLvl, const char *fmt, ...)
@@ -270,7 +248,8 @@ void LogAsync::log(int aLvl, const char *fmt, ...)
     va_end (args);
 
     // _onExport.emit(aLvl, lBuff);
-    _pool.enqueue([this, aLvl, lBuff] {
+    _pool.enqueue([this, aLvl, lBuff] 
+    {
         // apExp.onHandle(aLvl, lBuff);
         _onExport.emit(aLvl, lBuff);
         std::this_thread::yield();
