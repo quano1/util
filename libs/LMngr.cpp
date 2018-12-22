@@ -134,19 +134,19 @@ void LogSync::log(int aLvl, const char *fmt, ...)
 
 void LogAsync::wait_for_complete()
 {
-    _pool.wait_for_complete();
+    // _pool.wait_for_complete();
 }
 
 void LogAsync::deInit(void *aPtr)
 {
-    _pool.wait_for_complete();
+    _onExport.wait_for_complete();
     _onDeinit.emit(aPtr);
 }
 
 void LogAsync::add(Export *aExport)
 {
     LogSync::add(aExport);
-    _pool.add_workers(1);
+    _onExport.add_workers(1);
 }
 
 void LogAsync::log(int aLvl, const char *fmt, ...)
@@ -155,12 +155,12 @@ void LogAsync::log(int aLvl, const char *fmt, ...)
     va_start (args, fmt);
     std::string lBuff = __format(fmt, args);
     va_end (args);
-
+    _onExport.emit_async(aLvl, lBuff);
     // _onExport.emit(aLvl, lBuff);
-    _pool.enqueue([this, aLvl, lBuff] 
-    {
-        // apExp.onHandle(aLvl, lBuff);
-        _onExport.emit(aLvl, lBuff);
-        std::this_thread::yield();
-    });
+    // _pool.enqueue([this, aLvl, lBuff] 
+    // {
+    //     // apExp.onHandle(aLvl, lBuff);
+    //     _onExport.emit(aLvl, lBuff);
+    //     std::this_thread::yield();
+    // });
 }

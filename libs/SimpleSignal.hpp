@@ -7,6 +7,8 @@
 #include <vector>
 #include <algorithm>
 
+#include <libs/ThreadPool.hpp>
+
 namespace Simple {
 
 namespace Lib {
@@ -59,6 +61,12 @@ struct CollectorInvocation<Collector, void (Args...)> {
   {
     cbf (args...); return collector();
   }
+
+  inline bool
+  invoke_async (ThreadPool &pool, Collector &collector, const std::function<void (Args...)> &cbf, Args... args) const
+  {
+    pool.enqueue([cbf, args...]{ cbf (args...); }); return collector();
+  }
 };
 
 /// ProtoSignal template specialised for the callback signature and collector.
@@ -68,6 +76,8 @@ protected:
   using CbFunction = std::function<R (Args...)>;
   using Result = typename CbFunction::result_type;
   using CollectorResult = typename Collector::CollectorResult;
+
+  mutable ThreadPool pool;
 
 private:
   /*copy-ctor*/ ProtoSignal (const ProtoSignal&) = delete;
@@ -102,7 +112,12 @@ public:
   /// ProtoSignal destructor releases all resources associated with this signal.
   ~ProtoSignal ()
   {
+    pool.wait_for_complete();
   }
+
+  void wait_for_complete() {pool.wait_for_complete();}
+
+  void add_workers(size_t threads) {pool.add_workers(threads);}
 
   /// Operator to add a new function or lambda as signal handler, returns a handler connection ID.
   size_t connect (const CbFunction &cb)      { return add_cb(cb); }
@@ -117,6 +132,20 @@ public:
     for (auto &slot : callback_list_) {
         if (slot) {
             const bool continue_emission = this->invoke (collector, *slot, args...);
+            if (!continue_emission)
+              break;
+        }
+    }
+    return collector.result();
+  }
+
+  CollectorResult
+  emit_async (Args... args) const
+  {
+    Collector collector;
+    for (auto &slot : callback_list_) {
+        if (slot) {
+            const bool continue_emission = this->invoke_async (pool, collector, *slot, args...);
             if (!continue_emission)
               break;
         }

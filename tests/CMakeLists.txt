@@ -1,37 +1,54 @@
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 
-#TARGET-------------------------------------------------------------------------
-# set target
-SET(TARGET test_log)
+# #TARGET-------------------------------------------------------------------------
+# # set target
+# SET(TARGET test_log)
 
-SET(TARGET_SRC
-	${PRJ_ROOT}/tests/test_log.cpp
-)
+# SET(TARGET_SRC
+# 	${PRJ_ROOT}/tests/test_log.cpp
+# )
 
-ADD_EXECUTABLE(${TARGET} ${TARGET_SRC} )
+# ADD_EXECUTABLE(${TARGET} ${TARGET_SRC} )
 
-SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD 11)
-SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD_REQUIRED ON)
+# SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD 11)
+# SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD_REQUIRED ON)
 
-SET_TARGET_PROPERTIES(${TARGET} PROPERTIES LINK_FLAGS "-Wl,-rpath,./")
+# SET_TARGET_PROPERTIES(${TARGET} PROPERTIES LINK_FLAGS "-Wl,-rpath,./")
 
-TARGET_LINK_LIBRARIES(${TARGET}
-    lltlog
-)
+# TARGET_LINK_LIBRARIES(${TARGET}
+#     lltlog
+# )
 
+# #TARGET-------------------------------------------------------------------------
+# # set target
+# SET(TARGET test_signal)
 
-#TARGET-------------------------------------------------------------------------
-# set target
-SET(TARGET test_signal)
+# SET(TARGET_SRC
+# 	${PRJ_ROOT}/tests/test_signal.cpp
+# )
 
-SET(TARGET_SRC
-	${PRJ_ROOT}/tests/test_signal.cpp
-)
+# ADD_EXECUTABLE(${TARGET} ${TARGET_SRC} )
 
-ADD_EXECUTABLE(${TARGET} ${TARGET_SRC} )
+# SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD 11)
+# SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD_REQUIRED ON)
 
-SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD 11)
-SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD_REQUIRED ON)
+# #TARGET-------------------------------------------------------------------------
+# # set target
+# SET(TARGET test_ss)
+
+# SET(TARGET_SRC
+# 	${PRJ_ROOT}/tests/test_ss.cpp
+# )
+
+# ADD_EXECUTABLE(${TARGET} ${TARGET_SRC} )
+
+# TARGET_LINK_LIBRARIES(${TARGET}
+#     pthread
+# )
+
+# SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD 11)
+# SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD_REQUIRED ON)
+
 
 #TARGET-------------------------------------------------------------------------
 # set target
@@ -47,19 +64,6 @@ SET_TARGET_PROPERTIES(${TARGET} PROPERTIES LINK_FLAGS "-Wl,-rpath,./")
 TARGET_LINK_LIBRARIES(${TARGET}
     lltlog
 )
-
-SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD 11)
-SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD_REQUIRED ON)
-
-#TARGET-------------------------------------------------------------------------
-# set target
-SET(TARGET test_ss)
-
-SET(TARGET_SRC
-	${PRJ_ROOT}/tests/test_ss.cpp
-)
-
-ADD_EXECUTABLE(${TARGET} ${TARGET_SRC} )
 
 SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD 11)
 SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD_REQUIRED ON)

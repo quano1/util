@@ -39,7 +39,10 @@ private:
 void ThreadPool::wait_for_complete()
 {
     if(stop) return;
-    
+    for(; !tasks.empty(); )
+    {
+        std::this_thread::yield();
+    }
     {
         std::unique_lock<std::mutex> lock(queue_mutex);
         stop = true;
