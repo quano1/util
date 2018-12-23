@@ -18,21 +18,25 @@
 #include <unistd.h> // close
 #include <netdb.h>
 
-int EConsole::onInit(void *aPtr) { return 0; }
-void EConsole::onDeinit(void *aPtr) { }
-void EConsole::onHandle(int aLvl, std::string const &aBuff) { std::cout<<aBuff; }
+int EConsole::on_init() { return 0; }
+void EConsole::on_deinit() { }
+void EConsole::on_handle(int aLvl, std::string const &aBuff)
+{ 
+    std::lock_guard<std::mutex> lock(_mutex);
+    std::cout << aBuff; 
+}
 
 EFile::EFile(std::string const &aFile) : _f (aFile) {}
 EFile::EFile(std::string &&aFile) : _f (std::move(aFile)) {}
 
-int EFile::onInit(void *aPtr)
+int EFile::on_init()
 {
     ofs.open(_f, std::ios::out | std::ios::app );
     if(!ofs.is_open()) return 1;
     return 0;
 }
 
-void EFile::onDeinit(void *aPtr)
+void EFile::on_deinit()
 {
     if(ofs.is_open())
     {
@@ -41,8 +45,9 @@ void EFile::onDeinit(void *aPtr)
     }
 }
 
-void EFile::onHandle(int aLvl, std::string const &aBuff)
+void EFile::on_handle(int aLvl, std::string const &aBuff)
 {
+    std::lock_guard<std::mutex> lock(_mutex);
     ofs << aBuff;
 }
 
@@ -51,7 +56,7 @@ void EFile::onHandle(int aLvl, std::string const &aBuff)
 ENetUDP::ENetUDP(std::string &&aHost, uint16_t aPort) : _host(std::move(aHost)), _port(aPort) {}
 ENetUDP::ENetUDP(std::string const &aHost, uint16_t aPort) : _host(aHost), _port(aPort) {}
 
-int ENetUDP::onInit(void *aPtr)
+int ENetUDP::on_init()
 {
     _fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     
@@ -77,12 +82,12 @@ int ENetUDP::onInit(void *aPtr)
     return 0;
 }
 
-void ENetUDP::onDeinit(void *aPtr)
+void ENetUDP::on_deinit()
 {
     if(_fd > 0) close(_fd);
 }
 
-void ENetUDP::onHandle(int aLvl, std::string const &aBuff)
+void ENetUDP::on_handle(int aLvl, std::string const &aBuff)
 {
     size_t sent_bytes = sendto( _fd, aBuff.data(), aBuff.size(), 0, (sockaddr*)&_svrAddr, sizeof(sockaddr_in) );
 }
@@ -95,23 +100,28 @@ LogSync::~LogSync()
     }
 }
 
-void LogSync::init(void *aPtr)
+void LogSync::init(size_t aThreads)
 {
-    _onInit.emit(aPtr);
+    if(aThreads)
+    {
+        _pool.add_workers(aThreads);
+    }
+    _onInit.emit();
 }
 
-void LogSync::deInit(void *aPtr)
+void LogSync::deinit()
 {
-    _onDeinit.emit(aPtr);
+    _pool.force_stop();
+    _onDeinit.emit();
 }
 
 void LogSync::add(Export *aExport)
 {
     _exportContainer.push_back(aExport);
     Export *lIns = _exportContainer.back();
-    size_t lId = _onExport.connect(Simple::slot(lIns, &Export::onHandle));
-    lId = _onInit.connect(Simple::slot(lIns, &Export::onInit));
-    lId = _onDeinit.connect(Simple::slot(lIns, &Export::onDeinit));
+    size_t lId = _onExport.connect(Simple::slot(lIns, &Export::on_handle));
+    lId = _onInit.connect(Simple::slot(lIns, &Export::on_init));
+    lId = _onDeinit.connect(Simple::slot(lIns, &Export::on_deinit));
 }
 
 std::string LogSync::__format(char const *aFormat, va_list &aVars) const
@@ -132,34 +142,35 @@ void LogSync::log(int aLvl, const char *fmt, ...)
     _onExport.emit(aLvl, lBuff);
 }
 
-void LogAsync::wait_for_complete()
+void LogSync::async_wait()
 {
-    // _pool.wait_for_complete();
+    _pool.wait_for_complete();
 }
 
-void LogAsync::deInit(void *aPtr)
-{
-    _onExport.wait_for_complete();
-    _onDeinit.emit(aPtr);
-}
+// void LogAsync::deInit()
+// {
+//     _onExport.wait_for_complete();
+//     _onDeinit.emit();
+// }
 
-void LogAsync::add(Export *aExport)
-{
-    LogSync::add(aExport);
-    _onExport.add_workers(1);
-}
+// void LogAsync::add(Export *aExport)
+// {
+//     LogSync::add(aExport);
+//     _pool.add_workers(1);
+//     // _onExport.add_workers(1);
+// }
 
-void LogAsync::log(int aLvl, const char *fmt, ...)
+void LogSync::log_async(int aLvl, const char *fmt, ...)
 {
     va_list args;
     va_start (args, fmt);
     std::string lBuff = __format(fmt, args);
     va_end (args);
-    _onExport.emit_async(aLvl, lBuff);
+    _onExport.emit_async(_pool, aLvl, lBuff);
     // _onExport.emit(aLvl, lBuff);
     // _pool.enqueue([this, aLvl, lBuff] 
     // {
-    //     // apExp.onHandle(aLvl, lBuff);
+    //     // apExp.on_handle(aLvl, lBuff);
     //     _onExport.emit(aLvl, lBuff);
     //     std::this_thread::yield();
     // });

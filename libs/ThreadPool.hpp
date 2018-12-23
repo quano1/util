@@ -24,6 +24,7 @@ public:
 
     void add_workers(size_t);
     void wait_for_complete();
+    void force_stop();
 private:
     // need to keep track of threads so we can join them
     std::vector< std::thread > workers;
@@ -35,6 +36,20 @@ private:
     std::condition_variable condition;
     bool stop;
 };
+
+void ThreadPool::force_stop()
+{
+    if(stop) return;
+    {
+        std::unique_lock<std::mutex> lock(queue_mutex);
+        stop = true;
+    }
+    condition.notify_all();
+    for(std::thread &worker: workers)
+    {
+        worker.join();
+    }
+}
 
 void ThreadPool::wait_for_complete()
 {
@@ -118,7 +133,8 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
 // the destructor joins all threads
 ThreadPool::~ThreadPool()
 {
-    wait_for_complete();
+    // wait_for_complete();
+    force_stop();
 }
 
 #endif

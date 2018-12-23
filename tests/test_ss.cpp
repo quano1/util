@@ -9,6 +9,8 @@
 #include <ctime>
 #include <cstdlib>
 #include <cassert>
+#include <chrono>
+#include <thread>
 
 #ifndef _MSC_VER
 #include <sys/time.h>
@@ -220,33 +222,60 @@ TestCounter::add2 (void*, uint64_t v)
   test_counter_var += v;
 }
 
+void testAsyncPrintf(int loop)
+{
+  // Simple::Signal <void (int)> sprintf;
+  // sprintf.connect([](int idx) {
+  //   printf("ss async: %d \n", idx);
+  // });
+  // sprintf.connect([](int idx) {
+  //   printf("sleeping...\n");
+  //   // LOGD("");
+  //   // std::this_thread::yield();
+
+  //   // std::this_thread::sleep_for(std::chrono::microseconds(5));
+  // });
+
+  // sprintf.add_workers(2);
+
+  // for(int i=0; i<loop; i++)
+  // {
+  //   sprintf.emit_async(i);
+  // }
+
+  // sprintf.wait_for_complete();
+}
+
 int
 main (int   argc,
       char *argv[])
 {
-  printf ("Signal/Basic Tests: ");
-  BasicSignalTests::run();
-  printf ("OK\n");
+  testAsyncPrintf(100);
+  // printf ("Signal/Basic Tests: ");
+  // BasicSignalTests::run();
+  // printf ("OK\n");
 
-  printf ("Signal/CollectorVector: ");
-  TestCollectorVector::run();
-  printf ("OK\n");
+  // printf ("Signal/CollectorVector: ");
+  // TestCollectorVector::run();
+  // printf ("OK\n");
 
-  printf ("Signal/CollectorUntil0: ");
-  TestCollectorUntil0::run();
-  printf ("OK\n");
+  // printf ("Signal/CollectorUntil0: ");
+  // TestCollectorUntil0::run();
+  // printf ("OK\n");
 
-  printf ("Signal/CollectorWhile0: ");
-  TestCollectorWhile0::run();
-  printf ("OK\n");
+  // printf ("Signal/CollectorWhile0: ");
+  // TestCollectorWhile0::run();
+  // printf ("OK\n");
 
-  printf ("Signal/Benchmark: Simple::Signal: ");
-  bench_simple_signal();
-  printf ("OK\n");
+  // printf ("Signal/Benchmark: Simple::Signal: ");
+  // bench_simple_signal();
+  // printf ("OK\n");
 
-  printf ("Signal/Benchmark: callback loop: ");
-  bench_callback_loop();
-  printf ("OK\n");
+  // printf ("Signal/Benchmark: callback loop: ");
+  // bench_callback_loop();
+  // printf ("OK\n");
+
+
 
   return 0;
 }

@@ -32,22 +32,22 @@ cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 # SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD 11)
 # SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD_REQUIRED ON)
 
-# #TARGET-------------------------------------------------------------------------
-# # set target
-# SET(TARGET test_ss)
+#TARGET-------------------------------------------------------------------------
+# set target
+SET(TARGET test_ss)
 
-# SET(TARGET_SRC
-# 	${PRJ_ROOT}/tests/test_ss.cpp
-# )
+SET(TARGET_SRC
+	${PRJ_ROOT}/tests/test_ss.cpp
+)
 
-# ADD_EXECUTABLE(${TARGET} ${TARGET_SRC} )
+ADD_EXECUTABLE(${TARGET} ${TARGET_SRC} )
 
-# TARGET_LINK_LIBRARIES(${TARGET}
-#     pthread
-# )
+TARGET_LINK_LIBRARIES(${TARGET}
+    pthread
+)
 
-# SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD 11)
-# SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD_REQUIRED ON)
+SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD 11)
+SET_PROPERTY(TARGET ${TARGET} PROPERTY CXX_STANDARD_REQUIRED ON)
 
 
 #TARGET-------------------------------------------------------------------------
