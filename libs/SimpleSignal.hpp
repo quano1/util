@@ -77,8 +77,6 @@ protected:
   using Result = typename CbFunction::result_type;
   using CollectorResult = typename Collector::CollectorResult;
 
-  // mutable ThreadPool pool;
-
 private:
   /*copy-ctor*/ ProtoSignal (const ProtoSignal&) = delete;
   ProtoSignal&  operator=   (const ProtoSignal&) = delete;
@@ -112,12 +110,7 @@ public:
   /// ProtoSignal destructor releases all resources associated with this signal.
   ~ProtoSignal ()
   {
-    // pool.wait_for_complete();
   }
-
-  // void wait_for_complete() {pool.wait_for_complete();}
-
-  // void add_workers(size_t threads) {pool.add_workers(threads);}
 
   /// Operator to add a new function or lambda as signal handler, returns a handler connection ID.
   size_t connect (const CbFunction &cb)      { return add_cb(cb); }

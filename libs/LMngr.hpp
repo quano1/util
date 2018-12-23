@@ -25,7 +25,7 @@
 #include <netdb.h>
 
 
-class LogSync;
+class LogMngr;
 
 static size_t const MAX_BUF_SIZE = 0x1000;
 
@@ -81,12 +81,12 @@ protected:
     sockaddr_in _svrAddr;
 };
 
-class LogSync
+class LogMngr
 {
 public:
 
-    LogSync() = default;
-    virtual ~LogSync();
+    LogMngr() = default;
+    virtual ~LogMngr();
 
     virtual void init(size_t=0);
     virtual void deinit();
@@ -106,21 +106,5 @@ protected:
     std::vector<Export *> _exportContainer;
     ThreadPool _pool;
 };
-
-// class LogAsync : public LogSync
-// {
-// public:
-
-//     LogAsync() = default;
-//     virtual ~LogAsync() = default;
-
-//     virtual void wait_for_complete();
-//     virtual void deInit();
-//     virtual void add(Export *aExport);
-//     virtual void log(int aLvl, const char *fmt, ...);
-
-// private:
-//     ThreadPool _pool;
-// };
 
 #endif // LMNGR_HPP_

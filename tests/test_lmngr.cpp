@@ -42,7 +42,7 @@ int main(int argc, char **argv)
     int lThreads = std::stoi(threads);
 
     {
-        LogSync log;
+        LogMngr log;
         log.add(new EConsole());
         log.add(new EFile("log_async.txt"));
         log.add(new ENetUDP(host, lPort));
@@ -72,7 +72,7 @@ int main(int argc, char **argv)
     }
 
     {
-        LogSync log;
+        LogMngr log;
         log.add(new EConsole());
         log.add(new EFile("log_sync.txt"));
         log.add(new ENetUDP("localhost", 65530));

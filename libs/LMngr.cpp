@@ -92,7 +92,7 @@ void ENetUDP::on_handle(int aLvl, std::string const &aBuff)
     size_t sent_bytes = sendto( _fd, aBuff.data(), aBuff.size(), 0, (sockaddr*)&_svrAddr, sizeof(sockaddr_in) );
 }
 
-LogSync::~LogSync() 
+LogMngr::~LogMngr() 
 {
     for(auto lp : _exportContainer)
     {
@@ -100,7 +100,7 @@ LogSync::~LogSync()
     }
 }
 
-void LogSync::init(size_t aThreads)
+void LogMngr::init(size_t aThreads)
 {
     if(aThreads)
     {
@@ -109,13 +109,13 @@ void LogSync::init(size_t aThreads)
     _onInit.emit();
 }
 
-void LogSync::deinit()
+void LogMngr::deinit()
 {
     _pool.force_stop();
     _onDeinit.emit();
 }
 
-void LogSync::add(Export *aExport)
+void LogMngr::add(Export *aExport)
 {
     _exportContainer.push_back(aExport);
     Export *lIns = _exportContainer.back();
@@ -124,7 +124,7 @@ void LogSync::add(Export *aExport)
     lId = _onDeinit.connect(Simple::slot(lIns, &Export::on_deinit));
 }
 
-std::string LogSync::__format(char const *aFormat, va_list &aVars) const
+std::string LogMngr::__format(char const *aFormat, va_list &aVars) const
 {
     std::string lBuff;
     char str[MAX_BUF_SIZE];
@@ -132,7 +132,7 @@ std::string LogSync::__format(char const *aFormat, va_list &aVars) const
     return std::move(lBuff);
 }
 
-void LogSync::log(int aLvl, const char *fmt, ...)
+void LogMngr::log(int aLvl, const char *fmt, ...)
 {
     va_list args;
     va_start (args, fmt);
@@ -142,36 +142,16 @@ void LogSync::log(int aLvl, const char *fmt, ...)
     _onExport.emit(aLvl, lBuff);
 }
 
-void LogSync::async_wait()
+void LogMngr::async_wait()
 {
     _pool.wait_for_complete();
 }
 
-// void LogAsync::deInit()
-// {
-//     _onExport.wait_for_complete();
-//     _onDeinit.emit();
-// }
-
-// void LogAsync::add(Export *aExport)
-// {
-//     LogSync::add(aExport);
-//     _pool.add_workers(1);
-//     // _onExport.add_workers(1);
-// }
-
-void LogSync::log_async(int aLvl, const char *fmt, ...)
+void LogMngr::log_async(int aLvl, const char *fmt, ...)
 {
     va_list args;
     va_start (args, fmt);
     std::string lBuff = __format(fmt, args);
     va_end (args);
     _onExport.emit_async(_pool, aLvl, lBuff);
-    // _onExport.emit(aLvl, lBuff);
-    // _pool.enqueue([this, aLvl, lBuff] 
-    // {
-    //     // apExp.on_handle(aLvl, lBuff);
-    //     _onExport.emit(aLvl, lBuff);
-    //     std::this_thread::yield();
-    // });
 }
