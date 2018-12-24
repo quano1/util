@@ -30,7 +30,13 @@ void EConsole::on_deinit() { }
 void EConsole::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
 { 
     std::lock_guard<std::mutex> lock(_mutex);
-    std::cout << aBuff; 
+    std::stringstream lBuf;
+    std::time_t lNow = std::chrono::system_clock::to_time_t(aLogInfo._now);
+    std::tm *lpTm = std::localtime(&lNow);
+    lBuf << std::put_time(lpTm, "%D %H:%M:%S ");
+    lBuf << aLogInfo._pName << " " << aLogInfo._tName << " ";
+
+    std::cout << lBuf.str() + aBuff;
 }
 
 EFile::EFile(std::string const &aFile) : _f (aFile) {}
@@ -55,7 +61,13 @@ void EFile::on_deinit()
 void EFile::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
 {
     std::lock_guard<std::mutex> lock(_mutex);
-    ofs << aBuff;
+    std::stringstream lBuf;
+    std::time_t lNow = std::chrono::system_clock::to_time_t(aLogInfo._now);
+    std::tm *lpTm = std::localtime(&lNow);
+    lBuf << std::put_time(lpTm, "%D %H:%M:%S ");
+    lBuf << aLogInfo._pName << " " << aLogInfo._tName << " ";
+
+    ofs << lBuf.str() + aBuff;
 }
 
 
@@ -100,9 +112,9 @@ void ENetUDP::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
     // std::time_t lNow = std::chrono::system_clock::to_time_t(aLogInfo._now);
     // std::tm *lpTm = std::localtime(&lNow);
     // lBuf << std::put_time(lpTm, "%D %H:%M:%S ");
-    auto now_ms = std::chrono::time_point_cast<std::chrono::seconds>(aLogInfo._now).time_since_epoch().count();
+    auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(aLogInfo._now).time_since_epoch().count();
     lBuf << now_ms << " ";
-    lBuf << aLogInfo._pid << " " << aLogInfo._tid << " ";
+    lBuf << aLogInfo._pName << " " << aLogInfo._tName << " ";
     std::string lTmp = lBuf.str() + aBuff;
     size_t sent_bytes = sendto( _fd, lTmp.data(), lTmp.size(), 0, (sockaddr*)&_svrAddr, sizeof(sockaddr_in) );
 }
@@ -174,6 +186,20 @@ void LogMngr::log_async(int aLvl, const char *fmt, ...)
 
 void LogMngr::reg_ctx(std::string aProgName, std::string aThreadName)
 {
-    _processes[::getpid()] = aProgName;
-    _threads[std::this_thread::get_id()] = aThreadName;
+    pid_t lPid = ::getpid();
+    std::thread::id lTid = std::this_thread::get_id();
+
+    if(!aProgName.empty()) _processes[lPid] = aProgName;
+    else _processes[lPid] = std::to_string((size_t)lPid);
+    
+    if(!aThreadName.empty())
+    {
+        _threads[lTid] = aThreadName;
+    }
+    else
+    {
+        std::ostringstream ss;
+        ss << lTid;
+        _threads[lTid] = ss.str();
+    }
 }

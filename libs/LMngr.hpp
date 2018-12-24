@@ -33,11 +33,18 @@ struct __LogInfo
 {
     int _type;
     std::chrono::high_resolution_clock::time_point _now;
-    std::string _pid;
-    std::string _tid;
+    std::string _pName;
+    std::string _tName;
 };
 
-// enum class value_t : uint8_t
+enum class Level : uint8_t
+{
+    INFO=0,
+    WARN,
+    FATAL,
+    TRACE,
+};
+
 
 class Export
 {
@@ -116,8 +123,10 @@ protected:
     Simple::Signal<void ()> _onDeinit;
 
     std::vector<Export *> _exportContainer;
+
     std::unordered_map<pid_t, std::string> _processes;
     std::unordered_map<std::thread::id, std::string> _threads;
+    std::unordered_map<std::thread::id, int> _indents;
 };
 
 #endif // LMNGR_HPP_

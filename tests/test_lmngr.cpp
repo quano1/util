@@ -42,58 +42,98 @@ int main(int argc, char **argv)
     int lThreads = std::stoi(threads);
 
     {
-        LogMngr log;
-        log.add(new EConsole());
-        log.add(new EFile("log_async.txt"));
-        log.add(new ENetUDP(host, lPort));
+        LOGD("");
+        LogMngr logger;
+        logger.add(new EConsole());
+        logger.add(new EFile("log_async.txt"));
+        logger.add(new ENetUDP(host, lPort));
 
-        log.init(lThreads);
-
-        log.reg_ctx("log_async", "main");
+        logger.init(lThreads);
+        logger.reg_ctx("", "async");
 
         std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
         for(int i=0; i<lLoop; i++)
         {
-            log.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-            // log.log_async(0, "{\"file\":\"%s\",\"func\":\"%s\",\"line\":%d}", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
         }
         std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
         double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
         ofs << "Async: " << diff << std::endl;
 
-        LOGD("");
-        log.async_wait();
-        log.deinit();
+        logger.async_wait();
+        logger.deinit();
     }
 
     {
-        LogMngr log;
-        log.add(new EConsole());
-        log.add(new EFile("log_sync.txt"));
-        log.add(new ENetUDP("localhost", 65530));
+        LOGD("");
+        LogMngr logger;
+        logger.add(new EConsole());
+        logger.add(new EFile("log_sync1.txt"));
+        logger.add(new ENetUDP(host, lPort));
 
-        log.init();
+        logger.init(1);
+        logger.reg_ctx("", "sync1");
 
         std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
         for(int i=0; i<lLoop; i++)
         {
-            log.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-            log.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-            log.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-            log.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-            log.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-            log.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-            log.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-            log.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-            log.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-            log.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
         }
         std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
         double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
-        ofs << "Sync: " << diff << std::endl;
+        ofs << "Sync1: " << diff << std::endl;
+
+        logger.deinit();
+    }
+
+    {
+        LOGD("");
+        LogMngr logger;
+        logger.add(new EConsole());
+        logger.add(new EFile("log_sync2.txt"));
+        logger.add(new ENetUDP(host, lPort));
+
+        logger.init();
+        logger.reg_ctx("", "sync2");
+
+        std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
+        for(int i=0; i<lLoop; i++)
+        {
+            logger.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            logger.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+        }
+        std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
+        double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
+        ofs << "Sync2: " << diff << std::endl;
 
         LOGD("");
-        log.deinit();
+        logger.deinit();
     }
 
     LOGD("");
