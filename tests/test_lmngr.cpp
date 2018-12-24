@@ -49,11 +49,13 @@ int main(int argc, char **argv)
 
         log.init(lThreads);
 
+        log.reg_ctx("log_async", "main");
+
         std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
         for(int i=0; i<lLoop; i++)
         {
-            // log.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-            log.log_async(0, "{\"file\":\"%s\",\"func\":\"%s\",\"line\":%d}", __FILE__, __FUNCTION__, __LINE__);
+            log.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            // log.log_async(0, "{\"file\":\"%s\",\"func\":\"%s\",\"line\":%d}", __FILE__, __FUNCTION__, __LINE__);
         }
         std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
         double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();

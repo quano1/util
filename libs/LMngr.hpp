@@ -10,6 +10,9 @@
 #include <fstream>
 #include <vector>
 #include <mutex>
+#include <chrono>
+#include <thread>
+#include <unordered_map>
 
 #include <cstdarg>
 #include <cstdint>
@@ -26,15 +29,20 @@
 
 
 class LogMngr;
-
-static size_t const MAX_BUF_SIZE = 0x1000;
+struct __LogInfo
+{
+    int _type;
+    std::chrono::high_resolution_clock::time_point _now;
+    std::string _pid;
+    std::string _tid;
+};
 
 // enum class value_t : uint8_t
 
 class Export
 {
 public:
-    virtual void on_handle(int aLvl, std::string const &)=0;
+    virtual void on_handle(__LogInfo aLogInfo, std::string const &)=0;
     virtual int on_init()=0;
     virtual void on_deinit()=0;
 protected:
@@ -46,7 +54,7 @@ class EConsole : public Export
 public:
     virtual int on_init();
     virtual void on_deinit();
-    virtual void on_handle(int aLvl, std::string const &aBuff);
+    virtual void on_handle(__LogInfo aLogInfo, std::string const &aBuff);
 };
 
 class EFile : public Export
@@ -57,7 +65,7 @@ public:
 
     virtual int on_init();
     virtual void on_deinit();
-    virtual void on_handle(int aLvl, std::string const &aBuff);
+    virtual void on_handle(__LogInfo aLogInfo, std::string const &aBuff);
 
 protected:
     std::ofstream ofs;
@@ -72,7 +80,7 @@ public:
 
     virtual int on_init();
     virtual void on_deinit();
-    virtual void on_handle(int aLvl, std::string const &aBuff);
+    virtual void on_handle(__LogInfo aLogInfo, std::string const &aBuff);
 
 protected:
     std::string _host;
@@ -88,6 +96,8 @@ public:
     LogMngr() = default;
     virtual ~LogMngr();
 
+    virtual void reg_ctx(std::string aProgName, std::string aThreadName);
+
     virtual void init(size_t=0);
     virtual void deinit();
     virtual void add(Export *aExport);
@@ -99,12 +109,15 @@ public:
     virtual std::string __format(char const *aFormat, va_list &aVars) const;
 
 protected:
-    Simple::Signal<void (int, std::string const &)> _onExport;
+    ThreadPool _pool;
+
+    Simple::Signal<void (__LogInfo, std::string const &)> _onExport;
     Simple::Signal<int ()> _onInit;
     Simple::Signal<void ()> _onDeinit;
 
     std::vector<Export *> _exportContainer;
-    ThreadPool _pool;
+    std::unordered_map<pid_t, std::string> _processes;
+    std::unordered_map<std::thread::id, std::string> _threads;
 };
 
 #endif // LMNGR_HPP_

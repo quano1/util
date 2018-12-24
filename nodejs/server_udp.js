@@ -52,7 +52,7 @@ svrBC.on('message', (buff, remote) => {
         console.log(obj);
     }
     catch(err) {
-        console.error(err)
+        // console.error(err)
     }
 
     // buff = Buffer.allocUnsafe(1);
