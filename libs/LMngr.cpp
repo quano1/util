@@ -34,7 +34,7 @@ void EConsole::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
     std::time_t lNow = std::chrono::system_clock::to_time_t(aLogInfo._now);
     std::tm *lpTm = std::localtime(&lNow);
     lBuf << std::put_time(lpTm, "%D %H:%M:%S ");
-    lBuf << aLogInfo._pName << " " << aLogInfo._tName << " ";
+    lBuf << aLogInfo._ctx << " ";
 
     std::cout << lBuf.str() + aBuff;
 }
@@ -65,7 +65,7 @@ void EFile::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
     std::time_t lNow = std::chrono::system_clock::to_time_t(aLogInfo._now);
     std::tm *lpTm = std::localtime(&lNow);
     lBuf << std::put_time(lpTm, "%D %H:%M:%S ");
-    lBuf << aLogInfo._pName << " " << aLogInfo._tName << " ";
+    lBuf << aLogInfo._ctx << " ";
 
     ofs << lBuf.str() + aBuff;
 }
@@ -114,7 +114,7 @@ void ENetUDP::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
     // lBuf << std::put_time(lpTm, "%D %H:%M:%S ");
     auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(aLogInfo._now).time_since_epoch().count();
     lBuf << now_ms << " ";
-    lBuf << aLogInfo._pName << " " << aLogInfo._tName << " ";
+    lBuf << aLogInfo._ctx << " ";
     std::string lTmp = lBuf.str() + aBuff;
     size_t sent_bytes = sendto( _fd, lTmp.data(), lTmp.size(), 0, (sockaddr*)&_svrAddr, sizeof(sockaddr_in) );
 }
@@ -165,7 +165,7 @@ void LogMngr::log(int aLvl, const char *fmt, ...)
     va_start (args, fmt);
     std::string lBuff = __format(fmt, args);
     va_end (args);
-    __LogInfo lInfo = {aLvl, std::chrono::system_clock::now(), _processes[::getpid()], _threads[std::this_thread::get_id()]};
+    __LogInfo lInfo = {aLvl, std::chrono::system_clock::now(), _ctx[{::getpid(), std::this_thread::get_id()}] };
     _onExport.emit(lInfo, lBuff);
 }
 
@@ -180,26 +180,28 @@ void LogMngr::log_async(int aLvl, const char *fmt, ...)
     va_start (args, fmt);
     std::string lBuff = __format(fmt, args);
     va_end (args);
-    __LogInfo lInfo = {aLvl, std::chrono::system_clock::now(), _processes[::getpid()], _threads[std::this_thread::get_id()]};
+    __LogInfo lInfo = {aLvl, std::chrono::system_clock::now(), _ctx[{::getpid(), std::this_thread::get_id()}] };
     _onExport.emit_async(_pool, lInfo, lBuff);
 }
 
-void LogMngr::reg_ctx(std::string aProgName, std::string aThreadName)
+void LogMngr::reg_ctx(std::string aProg, std::string aThrd)
 {
     pid_t lPid = ::getpid();
     std::thread::id lTid = std::this_thread::get_id();
+    __key_t lKey = std::make_tuple(lPid, lTid);
 
-    if(!aProgName.empty()) _processes[lPid] = aProgName;
-    else _processes[lPid] = std::to_string((size_t)lPid);
-    
-    if(!aThreadName.empty())
+    std::string lProg = !aProg.empty() ? aProg : std::to_string((size_t)lPid);
+    std::string lThrd;
+    if(!aThrd.empty())
     {
-        _threads[lTid] = aThreadName;
-    }
+        lThrd = aThrd;
+    } 
     else
     {
         std::ostringstream ss;
         ss << lTid;
-        _threads[lTid] = ss.str();
+        lThrd = ss.str();
     }
+
+    _ctx[lKey] = lProg + " " + lThrd;
 }

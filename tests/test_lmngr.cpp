@@ -81,7 +81,7 @@ int main(int argc, char **argv)
         logger.add(new ENetUDP(host, lPort));
 
         logger.init(1);
-        logger.reg_ctx("", "sync1");
+        logger.reg_ctx("", "");
 
         std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
         for(int i=0; i<lLoop; i++)
@@ -112,7 +112,7 @@ int main(int argc, char **argv)
         logger.add(new ENetUDP(host, lPort));
 
         logger.init();
-        logger.reg_ctx("", "sync2");
+        logger.reg_ctx("", "");
 
         std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
         for(int i=0; i<lLoop; i++)

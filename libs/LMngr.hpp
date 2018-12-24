@@ -13,6 +13,7 @@
 #include <chrono>
 #include <thread>
 #include <unordered_map>
+#include <tuple>
 
 #include <cstdarg>
 #include <cstdint>
@@ -33,8 +34,7 @@ struct __LogInfo
 {
     int _type;
     std::chrono::high_resolution_clock::time_point _now;
-    std::string _pName;
-    std::string _tName;
+    std::string _ctx;
 };
 
 enum class Level : uint8_t
@@ -98,6 +98,17 @@ protected:
 
 class LogMngr
 {
+
+private:
+    typedef std::tuple<pid_t, std::thread::id> __key_t;
+
+    struct __key_hash : public std::unary_function<__key_t, std::size_t>
+    {
+        std::size_t operator()(const __key_t& k) const
+        {
+            return std::get<0>(k) ^ std::hash<std::thread::id>()(std::get<1>(k));
+        }
+    };
 public:
 
     LogMngr() = default;
@@ -124,9 +135,8 @@ protected:
 
     std::vector<Export *> _exportContainer;
 
-    std::unordered_map<pid_t, std::string> _processes;
-    std::unordered_map<std::thread::id, std::string> _threads;
-    std::unordered_map<std::thread::id, int> _indents;
+    std::unordered_map<__key_t, std::string, __key_hash> _ctx;
+    std::unordered_map<__key_t, int, __key_hash> _indents;
 };
 
 #endif // LMNGR_HPP_
