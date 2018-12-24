@@ -14,12 +14,15 @@
 #include <thread>
 #include <unordered_map>
 #include <tuple>
+#include <sstream>
 
 #include <cstdarg>
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
+#include <iomanip>
 
 #include <sys/types.h> 
 #include <sys/socket.h>
@@ -57,7 +60,7 @@ struct __LogInfo
     std::string _ctx;
 };
 
-enum class Level : uint8_t
+enum class _LogType : uint8_t
 {
     INFO=0,
     WARN,
@@ -131,6 +134,7 @@ private:
 public:
 
     LogMngr() = default;
+    LogMngr(std::vector<Export *> const &);
     virtual ~LogMngr();
 
     virtual void reg_ctx(std::string aProgName, std::string aThreadName);
@@ -141,13 +145,42 @@ public:
 
     virtual void async_wait();
 
-    virtual void log(int aLvl, const char *fmt, ...);
-    virtual void log_async(int aLvl, const char *fmt, ...);
+    virtual void log(uint8_t aLogType, const char *fmt, ...);
+    virtual void log_async(uint8_t aLogType, const char *fmt, ...);
     virtual std::string __format(char const *aFormat, va_list &aVars) const;
 
     inline __key_t get_key()
     {
         return {::getpid(), std::this_thread::get_id()};
+    }
+
+    static inline std::string log_type_to_string(uint8_t aLogType)
+    {
+        switch(aLogType)
+        {
+            case (uint8_t)_LogType::INFO: return "INFO";
+            case (uint8_t)_LogType::WARN: return "WARN";
+            case (uint8_t)_LogType::FATAL: return "FATAL";
+            case (uint8_t)_LogType::TRACE: return "TRACE";
+            default: return "UNKNOWN";
+        }
+    }
+
+    template <class Duration>
+    static inline std::string time_point_to_string(std::chrono::high_resolution_clock::time_point aTp)
+    {
+        std::stringstream lRet;
+        lRet << std::chrono::time_point_cast<Duration>(aTp).time_since_epoch().count();
+        return lRet.str();
+    }
+
+    static inline std::string time_point_to_string(std::string const &aFmt, std::chrono::high_resolution_clock::time_point aTp)
+    {
+        std::stringstream lRet;
+        std::time_t lNow = std::chrono::system_clock::to_time_t(aTp);
+        std::tm *lpTm = std::localtime(&lNow);
+        lRet << std::put_time(lpTm, aFmt.data());
+        return lRet.str();
     }
 
 protected:

@@ -30,13 +30,7 @@ void EConsole::on_deinit() { }
 void EConsole::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
 { 
     std::lock_guard<std::mutex> lock(_mutex);
-    std::stringstream lBuf;
-    std::time_t lNow = std::chrono::system_clock::to_time_t(aLogInfo._now);
-    std::tm *lpTm = std::localtime(&lNow);
-    lBuf << std::put_time(lpTm, "%D %H:%M:%S ");
-    lBuf << aLogInfo._ctx << " ";
-
-    std::cout << lBuf.str() + aBuff;
+    std::cout << LogMngr::time_point_to_string("%D %H:%M:%S ", aLogInfo._now) << aLogInfo._ctx << " " << aBuff;
 }
 
 EFile::EFile(std::string const &aFile) : _f (aFile) {}
@@ -61,13 +55,7 @@ void EFile::on_deinit()
 void EFile::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
 {
     std::lock_guard<std::mutex> lock(_mutex);
-    std::stringstream lBuf;
-    std::time_t lNow = std::chrono::system_clock::to_time_t(aLogInfo._now);
-    std::tm *lpTm = std::localtime(&lNow);
-    lBuf << std::put_time(lpTm, "%D %H:%M:%S ");
-    lBuf << aLogInfo._ctx << " ";
-
-    ofs << lBuf.str() + aBuff;
+    ofs << LogMngr::time_point_to_string("%D %H:%M:%S ", aLogInfo._now) << aLogInfo._ctx << " " << aBuff;
 }
 
 
@@ -108,15 +96,16 @@ void ENetUDP::on_deinit()
 
 void ENetUDP::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
 {
-    std::stringstream lBuf;
-    // std::time_t lNow = std::chrono::system_clock::to_time_t(aLogInfo._now);
-    // std::tm *lpTm = std::localtime(&lNow);
-    // lBuf << std::put_time(lpTm, "%D %H:%M:%S ");
-    auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(aLogInfo._now).time_since_epoch().count();
-    lBuf << now_ms << " ";
-    lBuf << aLogInfo._ctx << " ";
-    std::string lTmp = lBuf.str() + aBuff;
+    std::string lTmp = LogMngr::time_point_to_string<std::chrono::milliseconds>(aLogInfo._now) + " " + aLogInfo._ctx + " " + aBuff;
     size_t sent_bytes = sendto( _fd, lTmp.data(), lTmp.size(), 0, (sockaddr*)&_svrAddr, sizeof(sockaddr_in) );
+}
+
+LogMngr::LogMngr(std::vector<Export *> const &aExpList)
+{
+    for(auto _export : aExpList)
+    {
+        add(_export);
+    }
 }
 
 LogMngr::~LogMngr() 
@@ -159,13 +148,13 @@ std::string LogMngr::__format(char const *aFormat, va_list &aVars) const
     return std::move(lBuff);
 }
 
-void LogMngr::log(int aLvl, const char *fmt, ...)
+void LogMngr::log(uint8_t aLogType, const char *fmt, ...)
 {
     va_list args;
     va_start (args, fmt);
-    std::string lBuff = __format(fmt, args);
+    std::string lBuff = log_type_to_string(aLogType) + " " + __format(fmt, args);
     va_end (args);
-    __LogInfo lInfo = {aLvl, std::chrono::system_clock::now(), _ctx[this->get_key()] };
+    __LogInfo lInfo = {aLogType, std::chrono::system_clock::now(), _ctx[this->get_key()] };
     _onExport.emit(lInfo, lBuff);
 }
 
@@ -174,13 +163,13 @@ void LogMngr::async_wait()
     _pool.wait_for_complete();
 }
 
-void LogMngr::log_async(int aLvl, const char *fmt, ...)
+void LogMngr::log_async(uint8_t aLogType, const char *fmt, ...)
 {
     va_list args;
     va_start (args, fmt);
-    std::string lBuff = __format(fmt, args);
+    std::string lBuff = log_type_to_string(aLogType) + " " + __format(fmt, args);
     va_end (args);
-    __LogInfo lInfo = {aLvl, std::chrono::system_clock::now(), _ctx[this->get_key()] };
+    __LogInfo lInfo = {aLogType, std::chrono::system_clock::now(), _ctx[this->get_key()] };
     _onExport.emit_async(_pool, lInfo, lBuff);
 }
 
