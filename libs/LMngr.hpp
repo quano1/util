@@ -55,7 +55,6 @@ struct __LogInfo
     int _type;
     std::chrono::high_resolution_clock::time_point _now;
     std::string _ctx;
-    Tracer *_pTracer;
 };
 
 enum class Level : uint8_t
@@ -146,6 +145,11 @@ public:
     virtual void log_async(int aLvl, const char *fmt, ...);
     virtual std::string __format(char const *aFormat, va_list &aVars) const;
 
+    inline __key_t get_key()
+    {
+        return {::getpid(), std::this_thread::get_id()};
+    }
+
 protected:
     ThreadPool _pool;
 
@@ -156,7 +160,7 @@ protected:
     std::vector<Export *> _exportContainer;
 
     std::unordered_map<__key_t, std::string, __key_hash> _ctx;
-    // std::unordered_map<__key_t, int, __key_hash> _indents;
+    std::unordered_map<__key_t, int, __key_hash> _indents;
 };
 
 #endif // LMNGR_HPP_

@@ -165,7 +165,7 @@ void LogMngr::log(int aLvl, const char *fmt, ...)
     va_start (args, fmt);
     std::string lBuff = __format(fmt, args);
     va_end (args);
-    __LogInfo lInfo = {aLvl, std::chrono::system_clock::now(), _ctx[{::getpid(), std::this_thread::get_id()}] };
+    __LogInfo lInfo = {aLvl, std::chrono::system_clock::now(), _ctx[this->get_key()] };
     _onExport.emit(lInfo, lBuff);
 }
 
@@ -180,7 +180,7 @@ void LogMngr::log_async(int aLvl, const char *fmt, ...)
     va_start (args, fmt);
     std::string lBuff = __format(fmt, args);
     va_end (args);
-    __LogInfo lInfo = {aLvl, std::chrono::system_clock::now(), _ctx[{::getpid(), std::this_thread::get_id()}] };
+    __LogInfo lInfo = {aLvl, std::chrono::system_clock::now(), _ctx[this->get_key()] };
     _onExport.emit_async(_pool, lInfo, lBuff);
 }
 
