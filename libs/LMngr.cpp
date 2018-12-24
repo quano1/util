@@ -30,7 +30,7 @@ void EConsole::on_deinit() { }
 void EConsole::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
 { 
     std::lock_guard<std::mutex> lock(_mutex);
-    std::cout << LogMngr::time_point_to_string("%D %H:%M:%S ", aLogInfo._now) << aLogInfo._ctx << " " << aBuff;
+    std::cout << Util::time_point_to_string("%D %H:%M:%S ", aLogInfo._now) << aLogInfo._ctx << " " << aBuff;
 }
 
 EFile::EFile(std::string const &aFile) : _f (aFile) {}
@@ -55,7 +55,7 @@ void EFile::on_deinit()
 void EFile::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
 {
     std::lock_guard<std::mutex> lock(_mutex);
-    ofs << LogMngr::time_point_to_string("%D %H:%M:%S ", aLogInfo._now) << aLogInfo._ctx << " " << aBuff;
+    ofs << Util::time_point_to_string("%D %H:%M:%S ", aLogInfo._now) << aLogInfo._ctx << " " << aBuff;
 }
 
 
@@ -96,7 +96,7 @@ void ENetUDP::on_deinit()
 
 void ENetUDP::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
 {
-    std::string lTmp = LogMngr::time_point_to_string<std::chrono::milliseconds>(aLogInfo._now) + " " + aLogInfo._ctx + " " + aBuff;
+    std::string lTmp = Util::time_point_to_string<std::chrono::milliseconds>(aLogInfo._now) + " " + aLogInfo._ctx + " " + aBuff;
     size_t sent_bytes = sendto( _fd, lTmp.data(), lTmp.size(), 0, (sockaddr*)&_svrAddr, sizeof(sockaddr_in) );
 }
 
@@ -152,9 +152,9 @@ void LogMngr::log(uint8_t aLogType, const char *fmt, ...)
 {
     va_list args;
     va_start (args, fmt);
-    std::string lBuff = log_type_to_string(aLogType) + " " + __format(fmt, args);
+    std::string lBuff = Util::log_type_to_string(aLogType) + " " + __format(fmt, args);
     va_end (args);
-    __LogInfo lInfo = {aLogType, std::chrono::system_clock::now(), _ctx[this->get_key()] };
+    __LogInfo lInfo = {aLogType, std::chrono::system_clock::now(), _ctx[Util::get_key()] };
     _onExport.emit(lInfo, lBuff);
 }
 
@@ -167,9 +167,9 @@ void LogMngr::log_async(uint8_t aLogType, const char *fmt, ...)
 {
     va_list args;
     va_start (args, fmt);
-    std::string lBuff = log_type_to_string(aLogType) + " " + __format(fmt, args);
+    std::string lBuff = Util::log_type_to_string(aLogType) + " " + __format(fmt, args);
     va_end (args);
-    __LogInfo lInfo = {aLogType, std::chrono::system_clock::now(), _ctx[this->get_key()] };
+    __LogInfo lInfo = {aLogType, std::chrono::system_clock::now(), _ctx[Util::get_key()] };
     _onExport.emit_async(_pool, lInfo, lBuff);
 }
 
@@ -177,7 +177,7 @@ void LogMngr::reg_ctx(std::string aProg, std::string aThrd)
 {
     pid_t lPid = ::getpid();
     std::thread::id lTid = std::this_thread::get_id();
-    __key_t lKey = std::make_tuple(lPid, lTid);
+    ctx_key_t lKey = std::make_tuple(lPid, lTid);
 
     std::string lProg = !aProg.empty() ? aProg : std::to_string((size_t)lPid);
     std::string lThrd;

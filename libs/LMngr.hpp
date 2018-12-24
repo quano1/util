@@ -31,6 +31,7 @@
 #include <unistd.h> // close
 #include <netdb.h>
 
+typedef std::tuple<pid_t, std::thread::id> ctx_key_t;
 
 class LogMngr;
 
@@ -118,38 +119,9 @@ protected:
     sockaddr_in _svrAddr;
 };
 
-class LogMngr
+struct Util
 {
-
-private:
-    typedef std::tuple<pid_t, std::thread::id> __key_t;
-
-    struct __key_hash : public std::unary_function<__key_t, std::size_t>
-    {
-        std::size_t operator()(const __key_t& k) const
-        {
-            return std::get<0>(k) ^ std::hash<std::thread::id>()(std::get<1>(k));
-        }
-    };
-public:
-
-    LogMngr() = default;
-    LogMngr(std::vector<Export *> const &);
-    virtual ~LogMngr();
-
-    virtual void reg_ctx(std::string aProgName, std::string aThreadName);
-
-    virtual void init(size_t=0);
-    virtual void deinit();
-    virtual void add(Export *aExport);
-
-    virtual void async_wait();
-
-    virtual void log(uint8_t aLogType, const char *fmt, ...);
-    virtual void log_async(uint8_t aLogType, const char *fmt, ...);
-    virtual std::string __format(char const *aFormat, va_list &aVars) const;
-
-    inline __key_t get_key()
+    static inline ctx_key_t get_key()
     {
         return {::getpid(), std::this_thread::get_id()};
     }
@@ -182,6 +154,36 @@ public:
         lRet << std::put_time(lpTm, aFmt.data());
         return lRet.str();
     }
+};
+
+class LogMngr
+{
+
+private:
+    struct __key_hash : public std::unary_function<ctx_key_t, std::size_t>
+    {
+        std::size_t operator()(const ctx_key_t& k) const
+        {
+            return std::get<0>(k) ^ std::hash<std::thread::id>()(std::get<1>(k));
+        }
+    };
+public:
+
+    LogMngr() = default;
+    LogMngr(std::vector<Export *> const &);
+    virtual ~LogMngr();
+
+    virtual void reg_ctx(std::string aProgName, std::string aThreadName);
+
+    virtual void init(size_t=0);
+    virtual void deinit();
+    virtual void add(Export *aExport);
+
+    virtual void async_wait();
+
+    virtual void log(uint8_t aLogType, const char *fmt, ...);
+    virtual void log_async(uint8_t aLogType, const char *fmt, ...);
+    virtual std::string __format(char const *aFormat, va_list &aVars) const;
 
 protected:
     ThreadPool _pool;
@@ -192,8 +194,8 @@ protected:
 
     std::vector<Export *> _exportContainer;
 
-    std::unordered_map<__key_t, std::string, __key_hash> _ctx;
-    std::unordered_map<__key_t, int, __key_hash> _indents;
+    std::unordered_map<ctx_key_t, std::string, __key_hash> _ctx;
+    std::unordered_map<ctx_key_t, int, __key_hash> _indents;
 };
 
 #endif // LMNGR_HPP_
