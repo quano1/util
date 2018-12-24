@@ -30,7 +30,7 @@ void EConsole::on_deinit() { }
 void EConsole::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
 { 
     std::lock_guard<std::mutex> lock(_mutex);
-    std::cout << Util::time_point_to_string("%D %H:%M:%S ", aLogInfo._now) << aLogInfo._ctx << " " << aBuff;
+    std::cout << Util::time_point_to_string("%D %H:%M:%S", aLogInfo._now) << " " << aLogInfo._ctx << " " << aBuff;
 }
 
 EFile::EFile(std::string const &aFile) : _f (aFile) {}
@@ -55,9 +55,8 @@ void EFile::on_deinit()
 void EFile::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
 {
     std::lock_guard<std::mutex> lock(_mutex);
-    ofs << Util::time_point_to_string("%D %H:%M:%S ", aLogInfo._now) << aLogInfo._ctx << " " << aBuff;
+    ofs << Util::time_point_to_string<std::chrono::milliseconds>(aLogInfo._now) << " " << aLogInfo._ctx << " " << aBuff;
 }
-
 
 
 ENetUDP::ENetUDP(std::string &&aHost, uint16_t aPort) : _host(std::move(aHost)), _port(aPort) {}
