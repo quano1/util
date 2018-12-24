@@ -30,11 +30,32 @@
 
 
 class LogMngr;
+
+struct Tracer
+{
+public:
+    Tracer() : _indent(1) {}
+    Tracer(Tracer *aObj) : _obj(aObj) 
+    {
+        _indent = _obj->_indent + 1;
+    }
+
+    ~Tracer()
+    {
+        // _indent--;
+        // if(_obj)
+    }
+
+    Tracer *_obj;
+    int _indent;
+};
+
 struct __LogInfo
 {
     int _type;
     std::chrono::high_resolution_clock::time_point _now;
     std::string _ctx;
+    Tracer *_pTracer;
 };
 
 enum class Level : uint8_t
@@ -44,7 +65,6 @@ enum class Level : uint8_t
     FATAL,
     TRACE,
 };
-
 
 class Export
 {
@@ -136,7 +156,7 @@ protected:
     std::vector<Export *> _exportContainer;
 
     std::unordered_map<__key_t, std::string, __key_hash> _ctx;
-    std::unordered_map<__key_t, int, __key_hash> _indents;
+    // std::unordered_map<__key_t, int, __key_hash> _indents;
 };
 
 #endif // LMNGR_HPP_
