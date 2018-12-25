@@ -69,8 +69,9 @@ int main(int argc, char **argv)
                     std::this_thread::sleep_for(std::chrono::milliseconds(lDelay));
                 }
             });
-
+            logger.log_async(_LogType::INFO, "%s %s %d", __FILE__, __FUNCTION__, __LINE__);
             t.join();
+            logger.log_async(_LogType::INFO, "%s %s %d", __FILE__, __FUNCTION__, __LINE__);
         }
 
         logger.async_wait();

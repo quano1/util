@@ -249,14 +249,14 @@ public:
 
     ~Tracer()
     {
-        _l.log_async(_LogType::TRACE, "~%s", _name.data());
         _l.dec_indent();
+        _l.log_async(_LogType::TRACE, "~%s", _name.data());
     }
 
     std::string _name;
     LogMngr &_l;
 };
 
-#define TRACE(FUNC, logger) Tracer __##FUNC(#FUNC, logger); logger.log_async(_LogType::TRACE, #FUNC " %s %d", __FUNCTION__, __LINE__);
+#define TRACE(FUNC, logger) logger.log_async(_LogType::TRACE, #FUNC " %s %d", __FUNCTION__, __LINE__); Tracer __##FUNC(#FUNC, logger); 
 
 #endif // LMNGR_HPP_
