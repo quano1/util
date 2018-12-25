@@ -1,5 +1,4 @@
 #include <libs/LMngr.hpp>
-#include <libs/log.hpp>
 
 #include <string>
 #include <chrono>
@@ -65,14 +64,17 @@ int main(int argc, char **argv)
                 TRACE(LOG_THREADING, logger);
                 for(int i=0; i<lLoop; i++)
                 {
-                    logger.log_async(_LogType::INFO, "%s %s %d", __FILE__, __FUNCTION__, __LINE__);
+                    LOGI(logger, "");
                     std::this_thread::sleep_for(std::chrono::milliseconds(lDelay));
                 }
             });
-            logger.log_async(_LogType::INFO, "%s %s %d", __FILE__, __FUNCTION__, __LINE__);
+            LOGI(logger, "");
+            LOGW(logger, "");
             t.join();
-            logger.log_async(_LogType::INFO, "%s %s %d", __FILE__, __FUNCTION__, __LINE__);
+            LOGF(logger, "");
         }
+
+        LOGF(logger, "");
 
         logger.async_wait();
         logger.deinit();

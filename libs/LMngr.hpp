@@ -4,7 +4,6 @@
 // #include "Signal.hpp"
 #include <libs/SimpleSignal.hpp>
 #include <libs/ThreadPool.hpp>
-#include <libs/log.hpp>
 
 #include <iostream>
 #include <fstream>
@@ -125,11 +124,11 @@ struct Util
     {
         switch(aLogType)
         {
-            case _LogType::INFO: return "INFO";
-            case _LogType::WARN: return "WARN";
-            case _LogType::FATAL: return "FATAL";
-            case _LogType::TRACE: return "TRACE";
-            default: return "UNKNOWN";
+            case _LogType::INFO:    return "INFOR";
+            case _LogType::WARN:    return "WARNG";
+            case _LogType::FATAL:   return "FATAL";
+            case _LogType::TRACE:   return "TRACE";
+            default: return "_____";
         }
     }
 
@@ -257,6 +256,12 @@ public:
     LogMngr &_l;
 };
 
-#define TRACE(FUNC, logger) logger.log_async(_LogType::TRACE, #FUNC " %s %d", __FUNCTION__, __LINE__); Tracer __##FUNC(#FUNC, logger); 
+#define LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
+
+#define TRACE(FUNC, logger) logger.log_async(_LogType::TRACE, #FUNC " %s %d", __FUNCTION__, __LINE__); Tracer __##FUNC(#FUNC, logger)
+
+#define LOGI(logger, fmt, ...) logger.log_async(_LogType::INFO, "%s %s %d" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGW(logger, fmt, ...) logger.log_async(_LogType::WARN, "%s %s %d" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGF(logger, fmt, ...) logger.log_async(_LogType::FATAL, "%s %s %d" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
 #endif // LMNGR_HPP_

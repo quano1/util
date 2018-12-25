@@ -1,8 +1,6 @@
 #ifndef THREAD_POOL_HPP_
 #define THREAD_POOL_HPP_
 
-#include <libs/log.hpp>
-
 #include <vector>
 #include <queue>
 #include <memory>
