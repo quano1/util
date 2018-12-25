@@ -151,8 +151,9 @@ int EUDPSvr::on_init()
 
                 switch(buf)
                 {
-                    case 'C': { _cltAddrs.push_back(client); break; }
-                    case 'D': { _cltAddrs.erase(std::remove_if(_cltAddrs.begin(), _cltAddrs.end(), 
+                    case 'B': { sendto( _fd, "OK", 2, 0, (sockaddr*)&client, sizeof(sockaddr_in) ); break; } // broadcast
+                    case 'C': { _cltAddrs.push_back(client); break; } // connect
+                    case 'D': { _cltAddrs.erase(std::remove_if(_cltAddrs.begin(), _cltAddrs.end(), // disconnect
                         [client](sockaddr_in aClt) {
                             return ((aClt.sin_addr.s_addr == client.sin_addr.s_addr) && (aClt.sin_port == client.sin_port));
                         })); break; }

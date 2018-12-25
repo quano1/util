@@ -61,14 +61,19 @@ svrBC.on('message', (buff, remote) => {
 
     // buff = Buffer.allocUnsafe(1);
     // buff.writeInt8(0,0);
-    buff = Buffer.from(`{"ip_server":"${IPserver}"}`);
+    // buff = Buffer.from(`{"ip_server":"${IPserver}"}`);
 
-    svrBC.send(buff, 0, buff.length, remote.port, remote.address, (err, bytes) => {
-        if (err) throw err;
-    });
+    // svrBC.send(buff, 0, buff.length, remote.port, remote.address, (err, bytes) => {
+    //     if (err) throw err;
+    // });
 
 });
 
-svrBC.bind(6969, '0.0.0.0');
+// svrBC.bind(6969, "localhost");
 
+var buff = Buffer.from("C");
+
+svrBC.send(buff, 0, buff.length, 65500, "localhost", (err, bytes) => {
+    if (err) throw err;
+});
 
