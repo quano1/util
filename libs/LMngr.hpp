@@ -121,32 +121,34 @@ protected:
 
 struct Util
 {
-    static inline ctx_key_t get_key()
+    static size_t const MAX_BUF_SIZE = 0x1000;
+
+    static inline ctx_key_t make_key()
     {
         return {::getpid(), std::this_thread::get_id()};
     }
 
-    static inline std::string log_type_to_string(uint8_t aLogType)
+    static inline std::string to_string(_LogType aLogType)
     {
         switch(aLogType)
         {
-            case (uint8_t)_LogType::INFO: return "INFO";
-            case (uint8_t)_LogType::WARN: return "WARN";
-            case (uint8_t)_LogType::FATAL: return "FATAL";
-            case (uint8_t)_LogType::TRACE: return "TRACE";
+            case _LogType::INFO: return "INFO";
+            case _LogType::WARN: return "WARN";
+            case _LogType::FATAL: return "FATAL";
+            case _LogType::TRACE: return "TRACE";
             default: return "UNKNOWN";
         }
     }
 
     template <class Duration>
-    static inline std::string time_point_to_string(std::chrono::high_resolution_clock::time_point aTp)
+    static inline std::string to_string(std::chrono::high_resolution_clock::time_point aTp)
     {
         std::stringstream lRet;
         lRet << std::chrono::time_point_cast<Duration>(aTp).time_since_epoch().count();
         return lRet.str();
     }
 
-    static inline std::string time_point_to_string(std::string const &aFmt, std::chrono::high_resolution_clock::time_point aTp)
+    static inline std::string to_string(std::string const &aFmt, std::chrono::high_resolution_clock::time_point aTp)
     {
         std::stringstream lRet;
         std::time_t lNow = std::chrono::system_clock::to_time_t(aTp);
@@ -154,7 +156,16 @@ struct Util
         lRet << std::put_time(lpTm, aFmt.data());
         return lRet.str();
     }
+
+    static inline std::string format(char const *aFormat, va_list &aVars)
+    {
+        std::string lBuff;
+        char str[MAX_BUF_SIZE];
+        if (vsnprintf (str, sizeof str, aFormat, aVars) >= 0) lBuff = str;
+        return std::move(lBuff);
+    }
 };
+
 
 class LogMngr
 {
@@ -183,7 +194,6 @@ public:
 
     virtual void log(uint8_t aLogType, const char *fmt, ...);
     virtual void log_async(uint8_t aLogType, const char *fmt, ...);
-    virtual std::string __format(char const *aFormat, va_list &aVars) const;
 
 protected:
     ThreadPool _pool;
