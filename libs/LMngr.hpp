@@ -47,7 +47,7 @@ enum class _LogType : uint8_t
 class Export
 {
 public:
-    virtual void on_handle(__LogInfo const &aLogInfo)=0;
+    virtual void on_export(__LogInfo const &aLogInfo)=0;
     virtual int on_init()=0;
     virtual void on_deinit()=0;
 protected:
@@ -59,7 +59,7 @@ class EConsole : public Export
 public:
     virtual int on_init();
     virtual void on_deinit();
-    virtual void on_handle(__LogInfo const &aLogInfo);
+    virtual void on_export(__LogInfo const &aLogInfo);
 };
 
 class EFile : public Export
@@ -70,28 +70,46 @@ public:
 
     virtual int on_init();
     virtual void on_deinit();
-    virtual void on_handle(__LogInfo const &aLogInfo);
+    virtual void on_export(__LogInfo const &aLogInfo);
 
 protected:
-    std::ofstream ofs;
+    std::ofstream _ofs;
     std::string _f;
 };
 
-class ENetUDP : public Export
+class EUDPClt : public Export
 {
 public:
-    ENetUDP(std::string &&aHost, uint16_t aPort);
-    ENetUDP(std::string const &aHost, uint16_t aPort);
+    EUDPClt(std::string &&aHost, uint16_t aPort);
+    EUDPClt(std::string const &aHost, uint16_t aPort);
 
     virtual int on_init();
     virtual void on_deinit();
-    virtual void on_handle(__LogInfo const &aLogInfo);
+    virtual void on_export(__LogInfo const &aLogInfo);
 
 protected:
     std::string _host;
     uint16_t _port;
     int _fd;
     sockaddr_in _svrAddr;
+};
+
+class EUDPSvr : public Export
+{
+public:
+    EUDPSvr(uint16_t aPort);
+    virtual ~EUDPSvr();
+
+    virtual int on_init();
+    virtual void on_deinit();
+    virtual void on_export(__LogInfo const &aLogInfo);
+
+protected:
+    uint16_t _port;
+    int _fd;
+    bool _stop;
+    std::vector<sockaddr_in> _cltAddrs;
+    std::thread _thrd;
 };
 
 struct Util
@@ -211,9 +229,9 @@ public:
 protected:
     ThreadPool _pool;
 
-    Simple::Signal<void (__LogInfo const &)> _onExport;
-    Simple::Signal<int ()> _onInit;
-    Simple::Signal<void ()> _onDeinit;
+    Simple::Signal<void (__LogInfo const &)> _sigExport;
+    Simple::Signal<int ()> _sigInit;
+    Simple::Signal<void ()> _sigDeinit;
 
     std::vector<Export *> _exportContainer;
 

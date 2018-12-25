@@ -27,6 +27,8 @@ int main(int argc, char **argv)
 {
     std::string host = getCmdOption(argc, argv, "-h=");
     std::string port = getCmdOption(argc, argv, "-p=");
+    std::string sport = getCmdOption(argc, argv, "-s=");
+    std::string delay = getCmdOption(argc, argv, "-d=");
     std::string threads = getCmdOption(argc, argv, "-t=");
     std::string loop = getCmdOption(argc, argv, "-l=");
 
@@ -39,27 +41,36 @@ int main(int argc, char **argv)
 
     int lLoop = std::stoi(loop);
     int lPort = std::stoi(port);
+    int lSPort = std::stoi(sport);
     int lThreads = std::stoi(threads);
+    int lDelay = std::stoi(delay);
 
     {
-        LogMngr logger({new EConsole(), new EFile("log_cons.txt"), new ENetUDP(host, lPort)});
+        LogMngr logger({ 
+            new EConsole(), 
+            new EFile("EFile.log"), 
+            new EUDPClt(host, lPort),
+            new EUDPSvr(lSPort),
+        });
 
         logger.init(lThreads);
-        logger.reg_ctx("main", "async");
+        logger.reg_ctx("","");
+
 
         {
-            // TRACE(LOG, logger);
-            std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
-            for(int i=0; i<lLoop; i++)
+            TRACE(MAIN, logger);
+            std::thread t([&logger,lLoop,lDelay]()
             {
-                logger.log_async(_LogType::INFO, "%s %s %d", __FILE__, __FUNCTION__, __LINE__);
-            }
-            {
-                TRACE(DIFF, logger);
-                std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
-                double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
-                ofs << "Async: " << diff << std::endl;
-            }
+                logger.reg_ctx("","");
+                TRACE(LOG_THREADING, logger);
+                for(int i=0; i<lLoop; i++)
+                {
+                    logger.log_async(_LogType::INFO, "%s %s %d", __FILE__, __FUNCTION__, __LINE__);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(lDelay));
+                }
+            });
+
+            t.join();
         }
 
         logger.async_wait();
@@ -70,7 +81,7 @@ int main(int argc, char **argv)
     //     LogMngr logger;
     //     logger.add(new EConsole());
     //     // logger.add(new EFile("log_sync1.txt"));
-    //     // logger.add(new ENetUDP(host, lPort));
+    //     // logger.add(new EUDPClt(host, lPort));
 
     //     logger.init(1);
     //     logger.reg_ctx("", "");
@@ -91,7 +102,7 @@ int main(int argc, char **argv)
     //     LogMngr logger;
     //     logger.add(new EConsole());
     //     // logger.add(new EFile("log_sync2.txt"));
-    //     // logger.add(new ENetUDP(host, lPort));
+    //     // logger.add(new EUDPClt(host, lPort));
 
     //     logger.init();
     //     logger.reg_ctx("", "");
@@ -123,7 +134,7 @@ int main(int argc, char **argv)
 
     // {
     //     LogMngr loggerCons({new EConsole(), new EFile("log_cons.txt")});
-    //     LogMngr loggerFN({new EConsole(), new ENetUDP(host, lPort)});
+    //     LogMngr loggerFN({new EConsole(), new EUDPClt(host, lPort)});
 
     //     loggerCons.init(1);
     //     loggerCons.reg_ctx("Cons", "async");
