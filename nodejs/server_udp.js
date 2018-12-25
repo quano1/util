@@ -46,13 +46,17 @@ svrBC.on('message', (buff, remote) => {
     var date = new Date();
     var myip = require('quick-local-ip');
     var IPserver = myip.getLocalIP4();
-    console.log(buff.toString('utf8'));
     try {
         var obj = JSON.parse(buff);
         console.log(obj);
     }
     catch(err) {
         // console.error(err)
+    }
+
+    if(!obj)
+    {
+        console.log(buff.toString('utf8'));
     }
 
     // buff = Buffer.allocUnsafe(1);

@@ -48,16 +48,18 @@ int main(int argc, char **argv)
         logger.reg_ctx("main", "async");
 
         {
-            TRACE(ASYNC, logger);
+            // TRACE(LOG, logger);
             std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
             for(int i=0; i<lLoop; i++)
             {
-                TRACE(ASYNC_LOOP, logger);
-                logger.log_async(_LogType::INFO, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+                logger.log_async(_LogType::INFO, "%s %s %d", __FILE__, __FUNCTION__, __LINE__);
             }
-            std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
-            double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
-            ofs << "Async: " << diff << std::endl;
+            {
+                TRACE(DIFF, logger);
+                std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
+                double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
+                ofs << "Async: " << diff << std::endl;
+            }
         }
 
         logger.async_wait();

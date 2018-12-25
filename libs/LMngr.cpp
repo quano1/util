@@ -25,11 +25,10 @@
 
 int EConsole::on_init() { return 0; }
 void EConsole::on_deinit() { }
-void EConsole::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
-{ 
+void EConsole::on_handle(__LogInfo const &aLogInfo)
+{
     std::lock_guard<std::mutex> lock(_mutex);
-    // std::cout << Util::to_string("%D %H:%M:%S", aLogInfo._now) << " " << aLogInfo._ctx << " " << aBuff;
-    std::cout << Util::to_string<std::chrono::microseconds>(aLogInfo._now) << " " << aLogInfo._ctx << " " << aLogInfo._indent << std::string(aLogInfo._indent * 2, '-') << aBuff;
+    std::cout << aLogInfo.to_string();
 }
 
 EFile::EFile(std::string const &aFile) : _f (aFile) {}
@@ -51,10 +50,10 @@ void EFile::on_deinit()
     }
 }
 
-void EFile::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
+void EFile::on_handle(__LogInfo const &aLogInfo)
 {
     std::lock_guard<std::mutex> lock(_mutex);
-    ofs << Util::to_string<std::chrono::microseconds>(aLogInfo._now) << " " << aLogInfo._ctx << " " << aLogInfo._indent << std::string(aLogInfo._indent * 2, ' ') << aBuff;
+    std::cout << aLogInfo.to_string();
 }
 
 
@@ -92,9 +91,9 @@ void ENetUDP::on_deinit()
     if(_fd > 0) close(_fd);
 }
 
-void ENetUDP::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
+void ENetUDP::on_handle(__LogInfo const &aLogInfo)
 {
-    std::string lTmp = Util::to_string<std::chrono::microseconds>(aLogInfo._now) + " " + aLogInfo._ctx + " " + aBuff;
+    std::string lTmp = aLogInfo.to_json();
     size_t sent_bytes = sendto( _fd, lTmp.data(), lTmp.size(), 0, (sockaddr*)&_svrAddr, sizeof(sockaddr_in) );
 }
 
@@ -142,10 +141,10 @@ void LogMngr::log(_LogType aLogType, const char *fmt, ...)
 {
     va_list args;
     va_start (args, fmt);
-    std::string lBuff = Util::to_string((_LogType)aLogType) + " " + Util::format(fmt, args);
+    std::string lBuff = Util::format(fmt, args);
     va_end (args);
-    __LogInfo lInfo = {aLogType, _indents[Util::make_key()], std::chrono::system_clock::now(), _ctx[Util::make_key()] };
-    _onExport.emit(lInfo, lBuff);
+    __LogInfo lInfo = {aLogType, _indents[Util::make_key()], std::chrono::system_clock::now(), _ctx[Util::make_key()], std::move(lBuff) };
+    _onExport.emit(lInfo);
 }
 
 void LogMngr::async_wait()
@@ -157,10 +156,10 @@ void LogMngr::log_async(_LogType aLogType, const char *fmt, ...)
 {
     va_list args;
     va_start (args, fmt);
-    std::string lBuff = Util::to_string((_LogType)aLogType) + " " + Util::format(fmt, args);
+    std::string lBuff = Util::format(fmt, args);
     va_end (args);
-    __LogInfo lInfo = {aLogType, _indents[Util::make_key()], std::chrono::system_clock::now(), _ctx[Util::make_key()] };
-    _onExport.emit_async(_pool, lInfo, lBuff);
+    __LogInfo lInfo = {aLogType, _indents[Util::make_key()], std::chrono::system_clock::now(), _ctx[Util::make_key()], std::move(lBuff) };
+    _onExport.emit_async(_pool, lInfo);
 }
 
 void LogMngr::reg_ctx(std::string aProg, std::string aThrd)

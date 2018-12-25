@@ -34,6 +34,7 @@
 typedef std::tuple<pid_t, std::thread::id> ctx_key_t;
 
 class LogMngr;
+struct __LogInfo;
 
 enum class _LogType : uint8_t
 {
@@ -43,18 +44,10 @@ enum class _LogType : uint8_t
     TRACE,
 };
 
-struct __LogInfo
-{
-    _LogType _type;
-    int _indent;
-    std::chrono::high_resolution_clock::time_point _now;
-    std::string _ctx;
-};
-
 class Export
 {
 public:
-    virtual void on_handle(__LogInfo aLogInfo, std::string const &)=0;
+    virtual void on_handle(__LogInfo const &aLogInfo)=0;
     virtual int on_init()=0;
     virtual void on_deinit()=0;
 protected:
@@ -66,7 +59,7 @@ class EConsole : public Export
 public:
     virtual int on_init();
     virtual void on_deinit();
-    virtual void on_handle(__LogInfo aLogInfo, std::string const &aBuff);
+    virtual void on_handle(__LogInfo const &aLogInfo);
 };
 
 class EFile : public Export
@@ -77,7 +70,7 @@ public:
 
     virtual int on_init();
     virtual void on_deinit();
-    virtual void on_handle(__LogInfo aLogInfo, std::string const &aBuff);
+    virtual void on_handle(__LogInfo const &aLogInfo);
 
 protected:
     std::ofstream ofs;
@@ -92,7 +85,7 @@ public:
 
     virtual int on_init();
     virtual void on_deinit();
-    virtual void on_handle(__LogInfo aLogInfo, std::string const &aBuff);
+    virtual void on_handle(__LogInfo const &aLogInfo);
 
 protected:
     std::string _host;
@@ -148,6 +141,34 @@ struct Util
     }
 };
 
+struct __LogInfo
+{
+    _LogType _type;
+    int _indent;
+    std::chrono::high_resolution_clock::time_point _now;
+    std::string _ctx;
+    std::string _content;
+
+    inline std::string to_string() const
+    {
+        std::string lRet;
+        lRet = Util::to_string<std::chrono::microseconds>(_now) + " " + _ctx + " " + std::to_string(_indent) + std::string(_indent * 2, ' ') + " " + Util::to_string(_type) + " " + _content + "\n";
+        return lRet;
+    }
+
+    inline std::string to_json() const
+    {
+        std::string lRet;
+        lRet = "{";
+        lRet += "\"type\":" + std::to_string((uint8_t)_type) + ",";
+        lRet += "\"indent\":" + std::to_string(_indent) + ",";
+        lRet += "\"now\":" + Util::to_string<std::chrono::microseconds>(_now) + ",";
+        lRet += "\"content\":\"" + _ctx + "\",";
+        lRet += "\"content\":\"" + _content + "\"";
+        lRet += "}";
+        return lRet;
+    }
+};
 
 class LogMngr
 {
@@ -190,7 +211,7 @@ public:
 protected:
     ThreadPool _pool;
 
-    Simple::Signal<void (__LogInfo, std::string const &)> _onExport;
+    Simple::Signal<void (__LogInfo const &)> _onExport;
     Simple::Signal<int ()> _onInit;
     Simple::Signal<void ()> _onDeinit;
 
@@ -210,7 +231,7 @@ public:
 
     ~Tracer()
     {
-        _l.log_async(_LogType::TRACE, "~%s\n", _name.data());
+        _l.log_async(_LogType::TRACE, "~%s", _name.data());
         _l.dec_indent();
     }
 
@@ -218,6 +239,6 @@ public:
     LogMngr &_l;
 };
 
-#define TRACE(FUNC, logger) Tracer __##FUNC(#FUNC, logger); logger.log_async(_LogType::TRACE, #FUNC " %s %d\n", __FUNCTION__, __LINE__);
+#define TRACE(FUNC, logger) Tracer __##FUNC(#FUNC, logger); logger.log_async(_LogType::TRACE, #FUNC " %s %d", __FUNCTION__, __LINE__);
 
 #endif // LMNGR_HPP_
