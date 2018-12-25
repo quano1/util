@@ -35,38 +35,20 @@ typedef std::tuple<pid_t, std::thread::id> ctx_key_t;
 
 class LogMngr;
 
-struct Tracer
-{
-public:
-    Tracer() : _indent(1) {}
-    Tracer(Tracer *aObj) : _obj(aObj) 
-    {
-        _indent = _obj->_indent + 1;
-    }
-
-    ~Tracer()
-    {
-        // _indent--;
-        // if(_obj)
-    }
-
-    Tracer *_obj;
-    int _indent;
-};
-
-struct __LogInfo
-{
-    int _type;
-    std::chrono::high_resolution_clock::time_point _now;
-    std::string _ctx;
-};
-
 enum class _LogType : uint8_t
 {
     INFO=0,
     WARN,
     FATAL,
     TRACE,
+};
+
+struct __LogInfo
+{
+    _LogType _type;
+    int _indent;
+    std::chrono::high_resolution_clock::time_point _now;
+    std::string _ctx;
 };
 
 class Export
@@ -192,8 +174,18 @@ public:
 
     virtual void async_wait();
 
-    virtual void log(uint8_t aLogType, const char *fmt, ...);
-    virtual void log_async(uint8_t aLogType, const char *fmt, ...);
+    virtual void log(_LogType aLogType, const char *fmt, ...);
+    virtual void log_async(_LogType aLogType, const char *fmt, ...);
+
+    inline void inc_indent()
+    {
+        _indents[Util::make_key()]++;
+    }
+
+    inline void dec_indent()
+    {
+        _indents[Util::make_key()]--;
+    }
 
 protected:
     ThreadPool _pool;
@@ -207,5 +199,25 @@ protected:
     std::unordered_map<ctx_key_t, std::string, __key_hash> _ctx;
     std::unordered_map<ctx_key_t, int, __key_hash> _indents;
 };
+
+struct Tracer
+{
+public:
+    Tracer(std::string const &aName, LogMngr &aLogger) : _l(aLogger), _name(aName)
+    {
+        _l.inc_indent();
+    }
+
+    ~Tracer()
+    {
+        _l.log_async(_LogType::TRACE, "~%s\n", _name.data());
+        _l.dec_indent();
+    }
+
+    std::string _name;
+    LogMngr &_l;
+};
+
+#define TRACE(FUNC, logger) Tracer __##FUNC(#FUNC, logger); logger.log_async(_LogType::TRACE, #FUNC " %s %d\n", __FUNCTION__, __LINE__);
 
 #endif // LMNGR_HPP_

@@ -28,7 +28,8 @@ void EConsole::on_deinit() { }
 void EConsole::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
 { 
     std::lock_guard<std::mutex> lock(_mutex);
-    std::cout << Util::to_string("%D %H:%M:%S", aLogInfo._now) << " " << aLogInfo._ctx << " " << aBuff;
+    // std::cout << Util::to_string("%D %H:%M:%S", aLogInfo._now) << " " << aLogInfo._ctx << " " << aBuff;
+    std::cout << Util::to_string<std::chrono::microseconds>(aLogInfo._now) << " " << aLogInfo._ctx << " " << aLogInfo._indent << std::string(aLogInfo._indent * 2, '-') << aBuff;
 }
 
 EFile::EFile(std::string const &aFile) : _f (aFile) {}
@@ -53,7 +54,7 @@ void EFile::on_deinit()
 void EFile::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
 {
     std::lock_guard<std::mutex> lock(_mutex);
-    ofs << Util::to_string<std::chrono::milliseconds>(aLogInfo._now) << " " << aLogInfo._ctx << " " << aBuff;
+    ofs << Util::to_string<std::chrono::microseconds>(aLogInfo._now) << " " << aLogInfo._ctx << " " << aLogInfo._indent << std::string(aLogInfo._indent * 2, ' ') << aBuff;
 }
 
 
@@ -93,7 +94,7 @@ void ENetUDP::on_deinit()
 
 void ENetUDP::on_handle(__LogInfo aLogInfo, std::string const &aBuff)
 {
-    std::string lTmp = Util::to_string<std::chrono::milliseconds>(aLogInfo._now) + " " + aLogInfo._ctx + " " + aBuff;
+    std::string lTmp = Util::to_string<std::chrono::microseconds>(aLogInfo._now) + " " + aLogInfo._ctx + " " + aBuff;
     size_t sent_bytes = sendto( _fd, lTmp.data(), lTmp.size(), 0, (sockaddr*)&_svrAddr, sizeof(sockaddr_in) );
 }
 
@@ -137,13 +138,13 @@ void LogMngr::add(Export *aExport)
     lId = _onDeinit.connect(Simple::slot(lIns, &Export::on_deinit));
 }
 
-void LogMngr::log(uint8_t aLogType, const char *fmt, ...)
+void LogMngr::log(_LogType aLogType, const char *fmt, ...)
 {
     va_list args;
     va_start (args, fmt);
     std::string lBuff = Util::to_string((_LogType)aLogType) + " " + Util::format(fmt, args);
     va_end (args);
-    __LogInfo lInfo = {aLogType, std::chrono::system_clock::now(), _ctx[Util::make_key()] };
+    __LogInfo lInfo = {aLogType, _indents[Util::make_key()], std::chrono::system_clock::now(), _ctx[Util::make_key()] };
     _onExport.emit(lInfo, lBuff);
 }
 
@@ -152,13 +153,13 @@ void LogMngr::async_wait()
     _pool.wait_for_complete();
 }
 
-void LogMngr::log_async(uint8_t aLogType, const char *fmt, ...)
+void LogMngr::log_async(_LogType aLogType, const char *fmt, ...)
 {
     va_list args;
     va_start (args, fmt);
     std::string lBuff = Util::to_string((_LogType)aLogType) + " " + Util::format(fmt, args);
     va_end (args);
-    __LogInfo lInfo = {aLogType, std::chrono::system_clock::now(), _ctx[Util::make_key()] };
+    __LogInfo lInfo = {aLogType, _indents[Util::make_key()], std::chrono::system_clock::now(), _ctx[Util::make_key()] };
     _onExport.emit_async(_pool, lInfo, lBuff);
 }
 

@@ -32,116 +32,117 @@ int main(int argc, char **argv)
 
     std::ofstream ofs("prof.log", std::ios::out);
 
-    LOGD("%s", host.data());
-    LOGD("%s", port.data());
-    LOGD("%s", threads.data());
-    LOGD("%s", loop.data());
+    // LOGD("%s", host.data());
+    // LOGD("%s", port.data());
+    // LOGD("%s", threads.data());
+    // LOGD("%s", loop.data());
 
     int lLoop = std::stoi(loop);
     int lPort = std::stoi(port);
     int lThreads = std::stoi(threads);
 
     {
-        LogMngr logger;
-        logger.add(new EConsole());
-        // logger.add(new EFile("log_async.txt"));
-        // logger.add(new ENetUDP(host, lPort));
+        LogMngr logger({new EConsole(), new EFile("log_cons.txt"), new ENetUDP(host, lPort)});
 
         logger.init(lThreads);
-        logger.reg_ctx("", "async");
+        logger.reg_ctx("main", "async");
 
-        std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
-        for(int i=0; i<lLoop; i++)
         {
-            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            TRACE(ASYNC, logger);
+            std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
+            for(int i=0; i<lLoop; i++)
+            {
+                TRACE(ASYNC_LOOP, logger);
+                logger.log_async(_LogType::INFO, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+            }
+            std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
+            double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
+            ofs << "Async: " << diff << std::endl;
         }
-        std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
-        double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
-        ofs << "Async: " << diff << std::endl;
 
         logger.async_wait();
         logger.deinit();
     }
 
-    {
-        LogMngr logger;
-        logger.add(new EConsole());
-        // logger.add(new EFile("log_sync1.txt"));
-        // logger.add(new ENetUDP(host, lPort));
+    // {
+    //     LogMngr logger;
+    //     logger.add(new EConsole());
+    //     // logger.add(new EFile("log_sync1.txt"));
+    //     // logger.add(new ENetUDP(host, lPort));
 
-        logger.init(1);
-        logger.reg_ctx("", "");
+    //     logger.init(1);
+    //     logger.reg_ctx("", "");
 
-        std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
-        for(int i=0; i<lLoop; i++)
-        {
-            logger.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-        }
-        std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
-        double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
-        ofs << "Sync1: " << diff << std::endl;
+    //     std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
+    //     for(int i=0; i<lLoop; i++)
+    //     {
+    //         logger.log_async(_LogType::INFO, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+    //     }
+    //     std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
+    //     double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
+    //     ofs << "Sync1: " << diff << std::endl;
 
-        logger.deinit();
-    }
+    //     logger.deinit();
+    // }
 
-    {
-        LogMngr logger;
-        logger.add(new EConsole());
-        // logger.add(new EFile("log_sync2.txt"));
-        // logger.add(new ENetUDP(host, lPort));
+    // {
+    //     LogMngr logger;
+    //     logger.add(new EConsole());
+    //     // logger.add(new EFile("log_sync2.txt"));
+    //     // logger.add(new ENetUDP(host, lPort));
 
-        logger.init();
-        logger.reg_ctx("", "");
+    //     logger.init();
+    //     logger.reg_ctx("", "");
 
-        std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
-        for(int i=0; i<lLoop; i++)
-        {
-            logger.log(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-        }
-        std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
-        double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
-        ofs << "Sync2: " << diff << std::endl;
+    //     std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
+    //     for(int i=0; i<lLoop; i++)
+    //     {
+    //         logger.log(_LogType::INFO, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+    //     }
+    //     std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
+    //     double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
+    //     ofs << "Sync2: " << diff << std::endl;
 
-        logger.deinit();
-    }
+    //     logger.deinit();
+    // }
 
-    {
+    // {
 
-        std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
-        for(int i=0; i<lLoop; i++)
-        {
-            printf("%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-        }
-        std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
-        double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
-        ofs << "Raw: " << diff << std::endl;
+    //     std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
+    //     for(int i=0; i<lLoop; i++)
+    //     {
+    //         printf("%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+    //     }
+    //     std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
+    //     double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
+    //     ofs << "Raw: " << diff << std::endl;
 
-    }
+    // }
 
-    {
-        LogMngr loggerCons({new EConsole(), new EFile("log_cons.txt")});
-        LogMngr loggerFN({new EConsole(), new ENetUDP(host, lPort)});
+    // {
+    //     LogMngr loggerCons({new EConsole(), new EFile("log_cons.txt")});
+    //     LogMngr loggerFN({new EConsole(), new ENetUDP(host, lPort)});
 
-        loggerCons.init(1);
-        loggerCons.reg_ctx("Cons", "async");
-        loggerFN.init(1);
-        loggerFN.reg_ctx("FN", "async");
+    //     loggerCons.init(1);
+    //     loggerCons.reg_ctx("Cons", "async");
+    //     loggerFN.init(1);
+    //     loggerFN.reg_ctx("FN", "async");
 
-        std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
-        for(int i=0; i<lLoop; i++)
-        {
-            loggerCons.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-            loggerFN.log_async(0, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-        }
-        std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
-        double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
-        ofs << "Cons: " << diff << std::endl;
+    //     std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
+    //     for(int i=0; i<lLoop; i++)
+    //     {
+    //         loggerCons.log_async(_LogType::INFO, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+    //         loggerFN.log_async(_LogType::INFO, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+    //     }
+    //     std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
+    //     double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
+    //     ofs << "Cons: " << diff << std::endl;
 
-        loggerCons.async_wait();
-        loggerCons.deinit();
-        loggerFN.async_wait();
-        loggerFN.deinit();
-    }
+    //     loggerCons.async_wait();
+    //     loggerCons.deinit();
+    //     loggerFN.async_wait();
+    //     loggerFN.deinit();
+    // }
 
     return 0;
 }
