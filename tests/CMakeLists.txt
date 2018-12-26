@@ -56,6 +56,7 @@ SET(TARGET test_lmngr)
 
 SET(TARGET_SRC
 	${PRJ_ROOT}/tests/test_lmngr.cpp
+	${PRJ_ROOT}/tests/log2.cpp
 )
 
 ADD_EXECUTABLE(${TARGET} ${TARGET_SRC} )

@@ -7,7 +7,7 @@
 #include <vector>
 #include <algorithm>
 
-#include <libs/ThreadPool.hpp>
+#include <ThreadPool.hpp>
 
 namespace Simple {
 

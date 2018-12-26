@@ -35,72 +35,6 @@ private:
     bool stop;
 };
 
-void ThreadPool::force_stop()
-{
-    if(stop) return;
-    {
-        std::unique_lock<std::mutex> lock(queue_mutex);
-        stop = true;
-    }
-    condition.notify_all();
-    for(std::thread &worker: workers)
-    {
-        worker.join();
-    }
-}
-
-void ThreadPool::wait_for_complete()
-{
-    if(stop) return;
-    for(; !tasks.empty(); )
-    {
-        std::this_thread::yield();
-    }
-    {
-        std::unique_lock<std::mutex> lock(queue_mutex);
-        stop = true;
-    }
-    condition.notify_all();
-    for(std::thread &worker: workers)
-    {
-        worker.join();
-    }
-}
-
-void ThreadPool::add_workers(size_t threads)
-{
-    for(size_t i = 0;i<threads;++i)
-    {
-        workers.emplace_back(
-            [this]
-            {
-                for(;;)
-                {
-                    std::function<void()> task;
-
-                    {
-                        std::unique_lock<std::mutex> lock(this->queue_mutex);
-                        this->condition.wait(lock,
-                            [this]{ return this->stop || !this->tasks.empty(); });
-                        if(this->stop && this->tasks.empty())
-                            return;
-                        task = std::move(this->tasks.front());
-                        this->tasks.pop();
-                    }
-
-                    task();
-                }
-            }
-        );
-    }
-}
-
-// the constructor just launches some amount of workers
-ThreadPool::ThreadPool(size_t threads)
-    :   stop(false)
-{
-    add_workers(threads);
-}
 
 // add new work item to the pool
 template<class F, class... Args>
@@ -126,13 +60,6 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
     condition.notify_one();
     
     return res;
-}
-
-// the destructor joins all threads
-ThreadPool::~ThreadPool()
-{
-    // wait_for_complete();
-    force_stop();
 }
 
 #endif

@@ -6,6 +6,8 @@
 
 #include <cstring>
 
+int do_smt(int aLoop, int aThreadNums, int aDelay);
+
 std::string getCmdOption(int argc, char* argv[], const std::string& option)
 {
     std::string cmd;
@@ -22,6 +24,13 @@ std::string getCmdOption(int argc, char* argv[], const std::string& option)
      return cmd;
 }
 
+LogMngr logger({ 
+            new EConsole(), 
+            // new EFile("EFile.log"), 
+            // new EUDPClt(host, lPort),
+            // new EUDPSvr(lSPort),
+        });
+
 int main(int argc, char **argv)
 {
     std::string host = getCmdOption(argc, argv, "-h=");
@@ -31,7 +40,7 @@ int main(int argc, char **argv)
     std::string threads = getCmdOption(argc, argv, "-t=");
     std::string loop = getCmdOption(argc, argv, "-l=");
 
-    std::ofstream ofs("prof.log", std::ios::out);
+    // std::ofstream ofs("prof.log", std::ios::out);
 
     // LOGD("%s", host.data());
     // LOGD("%s", port.data());
@@ -45,39 +54,23 @@ int main(int argc, char **argv)
     int lDelay = std::stoi(delay);
 
     {
-        LogMngr logger({ 
-            new EConsole(), 
-            new EFile("EFile.log"), 
-            new EUDPClt(host, lPort),
-            new EUDPSvr(lSPort),
-        });
 
-        logger.init(lThreads);
-        logger.reg_ctx("","");
-
+        logger.init(1);
+        logger.reg_app("test_lmngr");
+        logger.reg_ctx("main");
 
         {
             TRACE(MAIN, logger);
-            std::thread t([&logger,lLoop,lDelay]()
-            {
-                logger.reg_ctx("","");
-                TRACE(LOG_THREADING, logger);
-                for(int i=0; i<lLoop; i++)
-                {
-                    LOGI(logger, "");
-                    std::this_thread::sleep_for(std::chrono::milliseconds(lDelay));
-                }
-            });
             LOGI(logger, "");
-            LOGW(logger, "");
-            t.join();
-            LOGF(logger, "");
+            do_smt(lLoop, lThreads, lDelay);
+            LOGI(logger, "");
         }
 
-        LOGF(logger, "");
+            LOGI(logger, "");
+        LOGE(logger, "");
 
-        logger.async_wait();
-        logger.deinit();
+        // logger.async_wait();
+        // logger.deinit();
     }
 
     // {
@@ -92,7 +85,7 @@ int main(int argc, char **argv)
     //     std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
     //     for(int i=0; i<lLoop; i++)
     //     {
-    //         logger.log_async(_LogType::INFO, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+    //         logger.log_async(LogType::INFO, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
     //     }
     //     std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
     //     double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
@@ -113,7 +106,7 @@ int main(int argc, char **argv)
     //     std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
     //     for(int i=0; i<lLoop; i++)
     //     {
-    //         logger.log(_LogType::INFO, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+    //         logger.log(LogType::INFO, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
     //     }
     //     std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
     //     double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
@@ -147,8 +140,8 @@ int main(int argc, char **argv)
     //     std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
     //     for(int i=0; i<lLoop; i++)
     //     {
-    //         loggerCons.log_async(_LogType::INFO, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-    //         loggerFN.log_async(_LogType::INFO, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+    //         loggerCons.log_async(LogType::INFO, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+    //         loggerFN.log_async(LogType::INFO, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
     //     }
     //     std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
     //     double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();

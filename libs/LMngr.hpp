@@ -2,8 +2,8 @@
 #define LMNGR_HPP_
 
 // #include "Signal.hpp"
-#include <libs/SimpleSignal.hpp>
-#include <libs/ThreadPool.hpp>
+#include <SimpleSignal.hpp>
+#include <ThreadPool.hpp>
 
 #include <iostream>
 #include <fstream>
@@ -33,24 +33,25 @@
 typedef std::tuple<pid_t, std::thread::id> ctx_key_t;
 
 class LogMngr;
-struct __LogInfo;
+struct LogInfo;
 
-enum class _LogType : uint8_t
+enum class LogType : uint8_t
 {
     INFO=0,
     WARN,
-    FATAL,
+    ERROR,
     TRACE,
 };
 
 class Export
 {
 public:
-    virtual void on_export(__LogInfo const &aLogInfo)=0;
+    virtual void on_export(LogInfo const &aLogInfo)=0;
     virtual int on_init()=0;
     virtual void on_deinit()=0;
 protected:
     std::mutex _mutex;
+    uint8_t _init=0;
 };
 
 class EConsole : public Export
@@ -58,7 +59,7 @@ class EConsole : public Export
 public:
     virtual int on_init();
     virtual void on_deinit();
-    virtual void on_export(__LogInfo const &aLogInfo);
+    virtual void on_export(LogInfo const &aLogInfo);
 };
 
 class EFile : public Export
@@ -69,7 +70,7 @@ public:
 
     virtual int on_init();
     virtual void on_deinit();
-    virtual void on_export(__LogInfo const &aLogInfo);
+    virtual void on_export(LogInfo const &aLogInfo);
 
 protected:
     std::ofstream _ofs;
@@ -84,7 +85,7 @@ public:
 
     virtual int on_init();
     virtual void on_deinit();
-    virtual void on_export(__LogInfo const &aLogInfo);
+    virtual void on_export(LogInfo const &aLogInfo);
 
 protected:
     std::string _host;
@@ -101,7 +102,7 @@ public:
 
     virtual int on_init();
     virtual void on_deinit();
-    virtual void on_export(__LogInfo const &aLogInfo);
+    virtual void on_export(LogInfo const &aLogInfo);
 
 protected:
     uint16_t _port;
@@ -120,15 +121,27 @@ struct Util
         return {::getpid(), std::this_thread::get_id()};
     }
 
-    static inline std::string to_string(_LogType aLogType)
+    static inline std::string to_string(std::thread::id const &aTid)
+    {
+        // pid_t lPid = aKey.first();
+        // std::thread::id lTid = aKey.second();
+        // std::string lProg = std::to_string((size_t)(std::get<0>(aKey)));
+        // std::string lThrd;
+        std::ostringstream ss;
+        ss << aTid;
+        // lThrd = ss.str();
+        return std::string(ss.str());
+    }
+
+    static inline std::string to_string(LogType aLogType)
     {
         switch(aLogType)
         {
-            case _LogType::INFO:    return "INFOR";
-            case _LogType::WARN:    return "WARNG";
-            case _LogType::FATAL:   return "FATAL";
-            case _LogType::TRACE:   return "TRACE";
-            default: return "_____";
+            case LogType::INFO:    return "INFO";
+            case LogType::WARN:    return "WARN";
+            case LogType::ERROR:     return "ERR!";
+            case LogType::TRACE:   return "TRAC";
+            default: return "----";
         }
     }
 
@@ -158,9 +171,9 @@ struct Util
     }
 };
 
-struct __LogInfo
+struct LogInfo
 {
-    _LogType _type;
+    LogType _type;
     int _indent;
     std::chrono::high_resolution_clock::time_point _now;
     std::string _ctx;
@@ -169,7 +182,7 @@ struct __LogInfo
     inline std::string to_string() const
     {
         std::string lRet;
-        lRet = Util::to_string<std::chrono::microseconds>(_now) + " " + _ctx + " " + std::to_string(_indent) + std::string(_indent * 2, ' ') + " " + Util::to_string(_type) + " " + _content + "\n";
+        lRet = "{" + Util::to_string<std::chrono::microseconds>(_now) + " " + _ctx + " " + Util::to_string(_type) + " "  + std::to_string(_indent) + "} " + std::string(_indent * 2, ' ')  + _content + "\n";
         return lRet;
     }
 
@@ -180,7 +193,7 @@ struct __LogInfo
         lRet += "\"type\":" + std::to_string((uint8_t)_type) + ",";
         lRet += "\"indent\":" + std::to_string(_indent) + ",";
         lRet += "\"now\":" + Util::to_string<std::chrono::microseconds>(_now) + ",";
-        lRet += "\"content\":\"" + _ctx + "\",";
+        lRet += "\"context\":\"" + _ctx + "\",";
         lRet += "\"content\":\"" + _content + "\"";
         lRet += "}";
         return lRet;
@@ -204,7 +217,7 @@ public:
     LogMngr(std::vector<Export *> const &);
     virtual ~LogMngr();
 
-    virtual void reg_ctx(std::string aProgName, std::string aThreadName);
+    virtual void reg_ctx(std::string aThreadName);
 
     virtual void init(size_t=0);
     virtual void deinit();
@@ -212,30 +225,36 @@ public:
 
     virtual void async_wait();
 
-    virtual void log(_LogType aLogType, const char *fmt, ...);
-    virtual void log_async(_LogType aLogType, const char *fmt, ...);
+    virtual void log(LogType aLogType, const char *fmt, ...);
+    virtual void log_async(LogType aLogType, const char *fmt, ...);
 
     inline void inc_indent()
     {
-        _indents[Util::make_key()]++;
+        _indents[std::this_thread::get_id()]++;
     }
 
     inline void dec_indent()
     {
-        _indents[Util::make_key()]--;
+        _indents[std::this_thread::get_id()]--;
+    }
+
+    inline void reg_app(std::string const &aProgName)
+    {
+        _appName = aProgName;
     }
 
 protected:
     ThreadPool _pool;
 
-    Simple::Signal<void (__LogInfo const &)> _sigExport;
+    Simple::Signal<void (LogInfo const &)> _sigExport;
     Simple::Signal<int ()> _sigInit;
     Simple::Signal<void ()> _sigDeinit;
 
     std::vector<Export *> _exportContainer;
 
-    std::unordered_map<ctx_key_t, std::string, __key_hash> _ctx;
-    std::unordered_map<ctx_key_t, int, __key_hash> _indents;
+    std::string _appName;
+    std::unordered_map<std::thread::id, std::string> _ctx;
+    std::unordered_map<std::thread::id, int> _indents;
 };
 
 struct Tracer
@@ -249,7 +268,7 @@ public:
     ~Tracer()
     {
         _l.dec_indent();
-        _l.log_async(_LogType::TRACE, "~%s", _name.data());
+        _l.log_async(LogType::TRACE, "~%s", _name.data());
     }
 
     std::string _name;
@@ -258,10 +277,10 @@ public:
 
 #define LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 
-#define TRACE(FUNC, logger) logger.log_async(_LogType::TRACE, #FUNC " %s %d", __FUNCTION__, __LINE__); Tracer __##FUNC(#FUNC, logger)
+#define TRACE(FUNC, logger) logger.log_async(LogType::TRACE, #FUNC " %s %d", __FUNCTION__, __LINE__); Tracer __##FUNC(#FUNC, logger)
 
-#define LOGI(logger, fmt, ...) logger.log_async(_LogType::INFO, "%s %s %d" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGW(logger, fmt, ...) logger.log_async(_LogType::WARN, "%s %s %d" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGF(logger, fmt, ...) logger.log_async(_LogType::FATAL, "%s %s %d" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGI(logger, fmt, ...) logger.log_async(LogType::INFO, "%s %s %d" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGW(logger, fmt, ...) logger.log_async(LogType::WARN, "%s %s %d" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGE(logger, fmt, ...) logger.log_async(LogType::ERROR, "%s %s %d" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
 #endif // LMNGR_HPP_
