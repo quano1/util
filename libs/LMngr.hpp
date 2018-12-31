@@ -47,6 +47,7 @@ enum class LogType : uint8_t
 class Export
 {
 public:
+    virtual ~Export()=default;
     virtual void on_export(LogInfo const &aLogInfo)=0;
     virtual int on_init()=0;
     virtual void on_deinit()=0;

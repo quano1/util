@@ -25,7 +25,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-std::string Util::SEPARATOR = "\t";
+std::string Util::SEPARATOR = ";";
 
 int EConsole::on_init() { if(_init) return 1; _init = 1; return 0; }
 void EConsole::on_deinit() { }
