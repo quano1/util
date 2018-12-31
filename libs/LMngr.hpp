@@ -286,7 +286,7 @@ public:
 
 #define LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 
-#define TRACE(FUNC, logger) logger.log_async(LogType::TRACE, #FUNC " %s %d", __FUNCTION__, __LINE__); Tracer __##FUNC(#FUNC, logger)
+#define TRACE(logger, FUNC) logger.log_async(LogType::TRACE, #FUNC " %s %d", __FUNCTION__, __LINE__); Tracer __##FUNC(#FUNC, logger)
 
 #define LOGI(logger, fmt, ...) logger.log_async(LogType::INFO, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 #define LOGW(logger, fmt, ...) logger.log_async(LogType::WARN, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)

@@ -58,11 +58,11 @@ int main(int argc, char **argv)
     {
 
         logger.init(1);
-        logger.reg_app("test_lmngr");
-        logger.reg_ctx("MAIN");
+        logger.reg_app(argv[0]);
+        // logger.reg_ctx("MAIN");
 
         {
-            TRACE(MAIN, logger);
+            TRACE(logger, MAIN);
             LOGI(logger, "");
             do_smt(lLoop, lThreads, lDelay);
             LOGI(logger, "");

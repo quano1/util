@@ -4,13 +4,13 @@ extern LogMngr logger;
 
 int do_smt(int aLoop, int aThreadNums, int aDelay)
 {
-    TRACE(do_smg, logger);
+    TRACE(logger, do_smg);
     std::thread ts[aThreadNums];
     for (auto &t : ts)
         t = std::thread([&logger,aLoop,aDelay]()
     {
         // logger.reg_ctx("do");
-        TRACE(LOG_THREADING, logger);
+        TRACE(logger, LOG_THREADING);
         for(int i=0; i<aLoop; i++)
         {
             LOGI(logger, "");
