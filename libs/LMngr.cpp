@@ -201,13 +201,15 @@ void EUDPSvr::on_export(LogInfo const &aLogInfo)
 }
 
 
-LogMngr::LogMngr(std::vector<Export *> const &aExpList)
+LogMngr::LogMngr(std::vector<Export *> const &aExpList, size_t aWorkers)
 {
     _appName = std::to_string((size_t)::getpid());
     for(auto _export : aExpList)
     {
         add(_export);
     }
+
+    init(aWorkers);
 }
 
 LogMngr::~LogMngr() 
@@ -219,19 +221,21 @@ LogMngr::~LogMngr()
     }
 }
 
-void LogMngr::init(size_t aThreads)
+void LogMngr::init(size_t aWorkers)
 {    
-    if(aThreads)
+    if(aWorkers)
     {
-        _pool.add_workers(aThreads);
+        _pool.add_workers(aWorkers);
     }
+    
     _sigInit.emit();
 }
 
 void LogMngr::deinit()
 {
     if(_forceStop) _pool.force_stop();
-    else async_wait();
+    else _pool.wait_for_complete();
+
     _sigDeinit.emit();
 }
 
@@ -250,18 +254,13 @@ void LogMngr::log(LogType aLogType, const char *fmt, ...)
     va_start (args, fmt);
     std::string lBuff = Util::format(fmt, args);
     va_end (args);
-    // ctx_key_t lKey = Util::make_key();
-    // std::string lCtx = _ctx[lKey];
+
     std::thread::id lKey = std::this_thread::get_id();
     if(_ctx[lKey].empty()) _ctx[lKey] = _appName + Util::SEPARATOR + Util::to_string(lKey);
     LogInfo lInfo = {aLogType, _indents[lKey], std::chrono::system_clock::now(), _ctx[lKey], std::move(lBuff) };
     _sigExport.emit(lInfo);
 }
 
-void LogMngr::async_wait()
-{
-    _pool.wait_for_complete();
-}
 
 void LogMngr::log_async(LogType aLogType, const char *fmt, ...)
 {
@@ -269,7 +268,7 @@ void LogMngr::log_async(LogType aLogType, const char *fmt, ...)
     va_start (args, fmt);
     std::string lBuff = Util::format(fmt, args);
     va_end (args);
-    // ctx_key_t lKey = Util::make_key();
+ 
     std::thread::id lKey = std::this_thread::get_id();
 
     if(_ctx[lKey].empty()) _ctx[lKey] = _appName + Util::SEPARATOR + Util::to_string(lKey);

@@ -35,7 +35,10 @@ int main(int argc, char **argv)
             // new EUDPSvr(lSPort),
         });
 
+    // logger.init(1);
+    logger.reg_app(argv[0]);
     gpLog = &logger;
+    Util::SEPARATOR = ";";
 
     std::string host = getCmdOption(argc, argv, "-h=");
     std::string port = getCmdOption(argc, argv, "-p=");
@@ -56,11 +59,6 @@ int main(int argc, char **argv)
     int lSPort = std::stoi(sport);
     int lThreads = std::stoi(threads);
     int lDelay = std::stoi(delay);
-
-    Util::SEPARATOR = ";";
-
-    logger.init(1);
-    logger.reg_app(argv[0]);
 
     std::srand(std::time(nullptr));
     TRACE(MAIN);

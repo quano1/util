@@ -214,15 +214,8 @@ private:
 public:
 
     LogMngr() = default;
-    LogMngr(std::vector<Export *> const &);
+    LogMngr(std::vector<Export *> const &, size_t=1);
     virtual ~LogMngr();
-
-
-    virtual void init(size_t=0);
-    virtual void deinit();
-    virtual void add(Export *aExport);
-
-    virtual void async_wait();
 
     virtual void log(LogType aLogType, const char *fmt, ...);
     virtual void log_async(LogType aLogType, const char *fmt, ...);
@@ -252,9 +245,14 @@ public:
         _forceStop = aForceStop;
     }
 
-    bool _forceStop=true;
 protected:
+    
+    virtual void init(size_t=0);
+    virtual void deinit();
+    virtual void add(Export *aExport);
+
     ThreadPool _pool;
+    bool _forceStop=true;
 
     Simple::Signal<void (LogInfo const &)> _sigExport;
     Simple::Signal<int ()> _sigInit;
