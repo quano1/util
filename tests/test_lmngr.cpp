@@ -24,15 +24,19 @@ std::string getCmdOption(int argc, char* argv[], const std::string& option)
      return cmd;
 }
 
-LogMngr logger({ 
-            new EConsole(), 
-            new EFile("EFile.log"), 
+LogMngr *gpLog;
+
+int main(int argc, char **argv)
+{
+    LogMngr logger({ 
+            new EConsole(),
+            new EFile("run.log"), 
             // new EUDPClt(host, lPort),
             // new EUDPSvr(lSPort),
         });
 
-int main(int argc, char **argv)
-{
+    gpLog = &logger;
+
     std::string host = getCmdOption(argc, argv, "-h=");
     std::string port = getCmdOption(argc, argv, "-p=");
     std::string sport = getCmdOption(argc, argv, "-s=");
@@ -55,21 +59,18 @@ int main(int argc, char **argv)
 
     Util::SEPARATOR = ";";
 
+    logger.init(1);
+    logger.reg_app(argv[0]);
+
+    std::srand(std::time(nullptr));
+    TRACE(MAIN);
+
     {
-
-        logger.init(1);
-        logger.reg_app(argv[0]);
         // logger.reg_ctx("MAIN");
-
         {
-            TRACE(logger, MAIN);
-            LOGI(logger, "");
+            TRACE(MAIN);
             do_smt(lLoop, lThreads, lDelay);
-            LOGI(logger, "");
         }
-
-            LOGI(logger, "%d", logger._forceStop);
-        LOGE(logger, "");
 
         // logger.async_wait();
         // logger.deinit();

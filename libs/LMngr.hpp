@@ -197,6 +197,7 @@ struct LogInfo
         lRet += "}";
         return lRet;
     }
+
 };
 
 class LogMngr
@@ -270,27 +271,28 @@ protected:
 struct Tracer
 {
 public:
-    Tracer(std::string const &aName, LogMngr &aLogger) : _l(aLogger), _name(aName)
+    Tracer(std::string const &aName, LogMngr *aLogger) : _pLog(aLogger), _name(aName)
     {
-        _l.inc_indent();
+        _pLog->inc_indent();
     }
 
     ~Tracer()
     {
-        _l.dec_indent();
-        _l.log_async(LogType::TRACE, "~%s", _name.data());
+        _pLog->dec_indent();
+        _pLog->log_async(LogType::TRACE, "~%s", _name.data());
     }
 
+    std::chrono::high_resolution_clock::time_point _beg;
     std::string _name;
-    LogMngr &_l;
+    LogMngr *_pLog;
 };
 
 #define LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 
-#define TRACE(logger, FUNC) logger.log_async(LogType::TRACE, #FUNC " %s %d", __FUNCTION__, __LINE__); Tracer __##FUNC(#FUNC, logger)
+#define TRACE(FUNC) gpLog->log_async(LogType::TRACE, #FUNC " %s %d", __FUNCTION__, __LINE__); Tracer __##FUNC(#FUNC, gpLog)
 
-#define LOGI(logger, fmt, ...) logger.log_async(LogType::INFO, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGW(logger, fmt, ...) logger.log_async(LogType::WARN, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGE(logger, fmt, ...) logger.log_async(LogType::ERROR, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGI(fmt, ...) gpLog->log_async(LogType::INFO, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGW(fmt, ...) gpLog->log_async(LogType::WARN, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGE(fmt, ...) gpLog->log_async(LogType::ERROR, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
 #endif // LMNGR_HPP_

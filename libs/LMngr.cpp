@@ -271,6 +271,7 @@ void LogMngr::log_async(LogType aLogType, const char *fmt, ...)
     va_end (args);
     // ctx_key_t lKey = Util::make_key();
     std::thread::id lKey = std::this_thread::get_id();
+
     if(_ctx[lKey].empty()) _ctx[lKey] = _appName + Util::SEPARATOR + Util::to_string(lKey);
     LogInfo lInfo = {aLogType, _indents[lKey], std::chrono::system_clock::now(), _ctx[lKey], std::move(lBuff) };
     _sigExport.emit_async(_pool, lInfo);
