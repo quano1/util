@@ -25,12 +25,14 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+std::string Util::SEPARATOR = "\t";
+
 int EConsole::on_init() { if(_init) return 1; _init = 1; return 0; }
 void EConsole::on_deinit() { }
 void EConsole::on_export(LogInfo const &aLogInfo)
 {
     std::lock_guard<std::mutex> lock(_mutex);
-    std::cout << aLogInfo.to_string();
+    std::cout << aLogInfo.to_string(Util::SEPARATOR);
 }
 
 EFile::EFile(std::string const &aFile) : _f (aFile) {}
@@ -57,7 +59,7 @@ void EFile::on_deinit()
 void EFile::on_export(LogInfo const &aLogInfo)
 {
     std::lock_guard<std::mutex> lock(_mutex);
-    _ofs << aLogInfo.to_string();
+    _ofs << aLogInfo.to_string(Util::SEPARATOR);
 }
 
 
@@ -228,8 +230,8 @@ void LogMngr::init(size_t aThreads)
 
 void LogMngr::deinit()
 {
-    // _pool.force_stop();
-    async_wait();
+    if(_forceStop) _pool.force_stop();
+    else async_wait();
     _sigDeinit.emit();
 }
 
@@ -251,7 +253,7 @@ void LogMngr::log(LogType aLogType, const char *fmt, ...)
     // ctx_key_t lKey = Util::make_key();
     // std::string lCtx = _ctx[lKey];
     std::thread::id lKey = std::this_thread::get_id();
-    if(_ctx[lKey].empty()) _ctx[lKey] = _appName + ":" + Util::to_string(lKey);
+    if(_ctx[lKey].empty()) _ctx[lKey] = _appName + Util::SEPARATOR + Util::to_string(lKey);
     LogInfo lInfo = {aLogType, _indents[lKey], std::chrono::system_clock::now(), _ctx[lKey], std::move(lBuff) };
     _sigExport.emit(lInfo);
 }
@@ -269,31 +271,9 @@ void LogMngr::log_async(LogType aLogType, const char *fmt, ...)
     va_end (args);
     // ctx_key_t lKey = Util::make_key();
     std::thread::id lKey = std::this_thread::get_id();
-    if(_ctx[lKey].empty()) _ctx[lKey] = _appName + ":" + Util::to_string(lKey);
+    if(_ctx[lKey].empty()) _ctx[lKey] = _appName + Util::SEPARATOR + Util::to_string(lKey);
     LogInfo lInfo = {aLogType, _indents[lKey], std::chrono::system_clock::now(), _ctx[lKey], std::move(lBuff) };
     _sigExport.emit_async(_pool, lInfo);
-}
-
-void LogMngr::reg_ctx(std::string aThreadName)
-{
-    // pid_t lPid = ::getpid();
-    std::thread::id lTid = std::this_thread::get_id();
-    // ctx_key_t lKey = std::make_tuple(lPid, lTid);
-
-    // std::string lProg = !_appName.empty() ? _appName : std::to_string((size_t)lPid);
-    std::string lThrd;
-    if(!aThreadName.empty())
-    {
-        lThrd = aThreadName;
-    } 
-    else
-    {
-        std::ostringstream ss;
-        ss << lTid;
-        lThrd = ss.str();
-    }
-
-    _ctx[lTid] = _appName + ":" + lThrd;
 }
 
 void ThreadPool::force_stop()
@@ -304,6 +284,7 @@ void ThreadPool::force_stop()
         stop = true;
     }
     condition.notify_all();
+
     for(std::thread &worker: workers)
     {
         worker.join();
@@ -313,6 +294,7 @@ void ThreadPool::force_stop()
 void ThreadPool::wait_for_complete()
 {
     if(stop) return;
+    
     for(; !tasks.empty(); )
     {
         std::this_thread::yield();

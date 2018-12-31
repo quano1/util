@@ -26,7 +26,7 @@ std::string getCmdOption(int argc, char* argv[], const std::string& option)
 
 LogMngr logger({ 
             new EConsole(), 
-            // new EFile("EFile.log"), 
+            new EFile("EFile.log"), 
             // new EUDPClt(host, lPort),
             // new EUDPSvr(lSPort),
         });
@@ -53,11 +53,13 @@ int main(int argc, char **argv)
     int lThreads = std::stoi(threads);
     int lDelay = std::stoi(delay);
 
+    Util::SEPARATOR = ";";
+
     {
 
         logger.init(1);
         logger.reg_app("test_lmngr");
-        logger.reg_ctx("main");
+        logger.reg_ctx("MAIN");
 
         {
             TRACE(MAIN, logger);
@@ -66,7 +68,7 @@ int main(int argc, char **argv)
             LOGI(logger, "");
         }
 
-            LOGI(logger, "");
+            LOGI(logger, "%d", logger._forceStop);
         LOGE(logger, "");
 
         // logger.async_wait();

@@ -14,6 +14,7 @@
 #include <unordered_map>
 #include <tuple>
 #include <sstream>
+#include <string>
 
 #include <cstdarg>
 #include <cstdint>
@@ -115,6 +116,7 @@ protected:
 struct Util
 {
     static size_t const MAX_BUF_SIZE = 0x1000;
+    static std::string SEPARATOR;
 
     static inline ctx_key_t make_key()
     {
@@ -123,13 +125,8 @@ struct Util
 
     static inline std::string to_string(std::thread::id const &aTid)
     {
-        // pid_t lPid = aKey.first();
-        // std::thread::id lTid = aKey.second();
-        // std::string lProg = std::to_string((size_t)(std::get<0>(aKey)));
-        // std::string lThrd;
         std::ostringstream ss;
         ss << aTid;
-        // lThrd = ss.str();
         return std::string(ss.str());
     }
 
@@ -169,7 +166,8 @@ struct Util
         if (vsnprintf (str, sizeof str, aFormat, aVars) >= 0) lBuff = str;
         return std::move(lBuff);
     }
-};
+
+}; // class Util
 
 struct LogInfo
 {
@@ -179,10 +177,10 @@ struct LogInfo
     std::string _ctx;
     std::string _content;
 
-    inline std::string to_string() const
+    inline std::string to_string(std::string aSepa="\t") const
     {
         std::string lRet;
-        lRet = "{" + Util::to_string<std::chrono::microseconds>(_now) + " " + _ctx + " " + Util::to_string(_type) + " "  + std::to_string(_indent) + "} " + std::string(_indent * 2, ' ')  + _content + "\n";
+        lRet = Util::to_string<std::chrono::microseconds>(_now) + aSepa + _ctx + aSepa + Util::to_string(_type) + aSepa  + std::to_string(_indent) + aSepa + /*std::string(_indent * 2, aSepa) +*/ _content + "\n";
         return lRet;
     }
 
@@ -217,7 +215,6 @@ public:
     LogMngr(std::vector<Export *> const &);
     virtual ~LogMngr();
 
-    virtual void reg_ctx(std::string aThreadName);
 
     virtual void init(size_t=0);
     virtual void deinit();
@@ -243,6 +240,17 @@ public:
         _appName = aProgName;
     }
 
+    inline void reg_ctx(std::string aThreadName)
+    {
+        _ctx[std::this_thread::get_id()] = _appName + Util::SEPARATOR + aThreadName;
+    }
+
+    inline void set_force_stop(bool aForceStop) 
+    {
+        _forceStop = aForceStop;
+    }
+
+    bool _forceStop=true;
 protected:
     ThreadPool _pool;
 
@@ -255,6 +263,7 @@ protected:
     std::string _appName;
     std::unordered_map<std::thread::id, std::string> _ctx;
     std::unordered_map<std::thread::id, int> _indents;
+
 };
 
 struct Tracer
@@ -279,8 +288,8 @@ public:
 
 #define TRACE(FUNC, logger) logger.log_async(LogType::TRACE, #FUNC " %s %d", __FUNCTION__, __LINE__); Tracer __##FUNC(#FUNC, logger)
 
-#define LOGI(logger, fmt, ...) logger.log_async(LogType::INFO, "%s %s %d" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGW(logger, fmt, ...) logger.log_async(LogType::WARN, "%s %s %d" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGE(logger, fmt, ...) logger.log_async(LogType::ERROR, "%s %s %d" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGI(logger, fmt, ...) logger.log_async(LogType::INFO, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGW(logger, fmt, ...) logger.log_async(LogType::WARN, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGE(logger, fmt, ...) logger.log_async(LogType::ERROR, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
 #endif // LMNGR_HPP_
