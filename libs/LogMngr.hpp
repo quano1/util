@@ -49,7 +49,7 @@ public:
         _forceStop = aForceStop;
     }
 
-protected:
+// protected:
     
     virtual void init(size_t=0);
     virtual void deinit();

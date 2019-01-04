@@ -72,7 +72,6 @@ void LogMngr::log_async(LogType aLogType, const char *fmt, ...)
     va_start (args, fmt);
     std::string lBuff = Util::format(fmt, args);
     va_end (args);
- 
     std::thread::id lKey = std::this_thread::get_id();
 
     if(_ctx[lKey].empty()) _ctx[lKey] = _appName + Util::SEPARATOR + Util::to_string(lKey);
@@ -137,3 +136,28 @@ ThreadPool::~ThreadPool()
 {
     stop(true);
 }
+
+extern "C" void log_init(LogMngr **aLogger)
+{
+    *aLogger = new LogMngr({
+            new EConsole(),
+            new EFile("run.log"),
+            // new EUDPClt(host, lPort),
+            // new EUDPSvr(lSPort),
+        });
+}
+
+extern "C" void log_deinit(LogMngr *aLogger)
+{
+    if(aLogger) delete aLogger;
+}
+
+extern "C" void logi_async(LogMngr *aLogger, const char *fmt, ...)
+{
+    va_list args;
+    va_start (args, fmt);
+    std::string lBuff = Util::format(fmt, args);
+    va_end (args);
+    aLogger->log_async(LogType::INFO, lBuff.data());
+}
+
