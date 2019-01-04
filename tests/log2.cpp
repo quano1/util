@@ -1,20 +1,20 @@
-#include <LMngr.hpp>
+#include <LogMngr.hpp>
 
-extern LogMngr *gpLog;
+extern llt::LogMngr *gpLog;
 
 int do_smt(int aLoop, int aThreadNums, int aDelay)
 {
     gpLog->reg_ctx("do_smt");
-    TRACE(*gpLog, THREADING);
+    TRACE(gpLog, THREADING);
     std::thread ts[aThreadNums];
     for (auto &t : ts)
         t = std::thread([aLoop,aDelay]()
     {
         // gpLog->reg_ctx("sub do_smt");
-        TRACE(*gpLog, Thread);
+        TRACE(gpLog, Thread);
         for(int i=0; i<aLoop; i++)
         {
-            LOGI(*gpLog, "");
+            LOGI(gpLog, "");
             std::this_thread::sleep_for(std::chrono::microseconds(aDelay));
         }
     });

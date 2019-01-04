@@ -1,4 +1,4 @@
-#include <libs/LMngr.hpp>
+#include <LogMngr.hpp>
 
 #include <string>
 #include <chrono>
@@ -24,13 +24,13 @@ std::string getCmdOption(int argc, char* argv[], const std::string& option)
      return cmd;
 }
 
-LogMngr *gpLog;
+llt::LogMngr *gpLog;
 
 int main(int argc, char **argv)
 {
-    LogMngr logger({ 
-            new EConsole(),
-            new EFile("run.log"), 
+    llt::LogMngr logger({ 
+            new llt::EConsole(),
+            new llt::EFile("run.log"), 
             // new EUDPClt(host, lPort),
             // new EUDPSvr(lSPort),
         });
@@ -39,7 +39,7 @@ int main(int argc, char **argv)
     logger.reg_app(argv[0]);
     logger.reg_ctx("main");
     gpLog = &logger;
-    Util::SEPARATOR = ";";
+    llt::Util::SEPARATOR = ";";
 
     std::string host = getCmdOption(argc, argv, "-h=");
     std::string port = getCmdOption(argc, argv, "-p=");
@@ -62,12 +62,12 @@ int main(int argc, char **argv)
     int lDelay = std::stoi(delay);
 
     std::srand(std::time(nullptr));
-    TRACE(*gpLog, MAIN);
+    TRACE(gpLog, MAIN);
 
     {
         // logger.reg_ctx("MAIN");
         {
-            TRACE(*gpLog, MAIN);
+            TRACE(gpLog, MAIN);
             do_smt(lLoop, lThreads, lDelay);
         }
 

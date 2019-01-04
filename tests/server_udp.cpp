@@ -1,4 +1,4 @@
-#include <libs/log.hpp>
+#include <LogMngr.hpp>
 
 #include <thread>
 #include <iostream>
