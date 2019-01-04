@@ -73,7 +73,7 @@ public:
 struct Tracer
 {
 public:
-    Tracer(std::string const &aName, LogMngr *aLogger) : _pLogger(aLogger), _name(aName)
+    Tracer(LogMngr *aLogger, std::string const &aName) : _pLogger(aLogger), _name(aName)
     {
         _pLogger->inc_indent();
     }
@@ -84,16 +84,15 @@ public:
         _pLogger->log_async(LogType::TRACE, "~%s", _name.data());
     }
 
-    std::chrono::high_resolution_clock::time_point _beg;
-    std::string _name;
     LogMngr *_pLogger;
+    std::string _name;
 };
 
 } // llt
 
 #define LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 
-#define TRACE(logger, FUNC) (logger)->log_async(llt::LogType::TRACE, #FUNC " %s %d", __FUNCTION__, __LINE__); llt::Tracer __##FUNC(#FUNC, logger)
+#define TRACE(logger, FUNC) (logger)->log_async(llt::LogType::TRACE, #FUNC " %s %d", __FUNCTION__, __LINE__); llt::Tracer __##FUNC(logger, #FUNC)
 
 #define LOGI(logger, fmt, ...) (logger)->log_async(llt::LogType::INFO, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 #define LOGW(logger, fmt, ...) (logger)->log_async(llt::LogType::WARN, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)

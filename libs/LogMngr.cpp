@@ -152,12 +152,21 @@ extern "C" void log_deinit(LogMngr *aLogger)
     if(aLogger) delete aLogger;
 }
 
-extern "C" void logi_async(LogMngr *aLogger, const char *fmt, ...)
+extern "C" void log_async(LogMngr *aLogger, int aLogType, const char *fmt, ...)
 {
     va_list args;
     va_start (args, fmt);
     std::string lBuff = Util::format(fmt, args);
     va_end (args);
-    aLogger->log_async(LogType::INFO, lBuff.data());
+    aLogger->log_async(static_cast<LogType>(aLogType), lBuff.data());
 }
 
+extern "C" void start_trace(LogMngr *aLogger, Tracer **aTracer, char const *aBuf)
+{
+    *aTracer = new Tracer(aLogger, aBuf);
+}
+
+extern "C" void stop_trace(Tracer *aTracer)
+{
+    delete aTracer;
+}
