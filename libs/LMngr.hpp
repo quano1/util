@@ -252,7 +252,7 @@ protected:
     virtual void add(Export *aExport);
 
     ThreadPool _pool;
-    bool _forceStop=true;
+    bool _forceStop=false;
 
     Simple::Signal<void (LogInfo const &)> _sigExport;
     Simple::Signal<int ()> _sigInit;
@@ -269,28 +269,28 @@ protected:
 struct Tracer
 {
 public:
-    Tracer(std::string const &aName, LogMngr *aLogger) : _pLog(aLogger), _name(aName)
+    Tracer(std::string const &aName, LogMngr &aLogger) : _logger(aLogger), _name(aName)
     {
-        _pLog->inc_indent();
+        _logger.inc_indent();
     }
 
     ~Tracer()
     {
-        _pLog->dec_indent();
-        _pLog->log_async(LogType::TRACE, "~%s", _name.data());
+        _logger.dec_indent();
+        _logger.log_async(LogType::TRACE, "~%s", _name.data());
     }
 
     std::chrono::high_resolution_clock::time_point _beg;
     std::string _name;
-    LogMngr *_pLog;
+    LogMngr &_logger;
 };
 
 #define LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 
-#define TRACE(FUNC) gpLog->log_async(LogType::TRACE, #FUNC " %s %d", __FUNCTION__, __LINE__); Tracer __##FUNC(#FUNC, gpLog)
+#define TRACE(logger, FUNC) (logger).log_async(LogType::TRACE, #FUNC " %s %d", __FUNCTION__, __LINE__); Tracer __##FUNC(#FUNC, logger)
 
-#define LOGI(fmt, ...) gpLog->log_async(LogType::INFO, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGW(fmt, ...) gpLog->log_async(LogType::WARN, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGE(fmt, ...) gpLog->log_async(LogType::ERROR, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGI(logger, fmt, ...) (logger).log_async(LogType::INFO, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGW(logger, fmt, ...) (logger).log_async(LogType::WARN, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGE(logger, fmt, ...) (logger).log_async(LogType::ERROR, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
 #endif // LMNGR_HPP_

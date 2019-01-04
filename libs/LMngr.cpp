@@ -233,9 +233,7 @@ void LogMngr::init(size_t aWorkers)
 
 void LogMngr::deinit()
 {
-    if(_forceStop) _pool.force_stop();
-    else _pool.wait_for_complete();
-
+    _pool.stop(_forceStop);
     _sigDeinit.emit();
 }
 
@@ -276,34 +274,16 @@ void LogMngr::log_async(LogType aLogType, const char *fmt, ...)
     _sigExport.emit_async(_pool, lInfo);
 }
 
-void ThreadPool::force_stop()
+void ThreadPool::stop(bool aForce)
 {
-    if(stop) return;
+    if(_stop) return;
     {
         std::unique_lock<std::mutex> lock(queue_mutex);
-        stop = true;
+        _stop = true;
+        if(aForce) tasks = std::queue< std::function<void()> >();
     }
     condition.notify_all();
 
-    for(std::thread &worker: workers)
-    {
-        worker.join();
-    }
-}
-
-void ThreadPool::wait_for_complete()
-{
-    if(stop) return;
-    
-    for(; !tasks.empty(); )
-    {
-        std::this_thread::yield();
-    }
-    {
-        std::unique_lock<std::mutex> lock(queue_mutex);
-        stop = true;
-    }
-    condition.notify_all();
     for(std::thread &worker: workers)
     {
         worker.join();
@@ -324,8 +304,8 @@ void ThreadPool::add_workers(size_t threads)
                     {
                         std::unique_lock<std::mutex> lock(this->queue_mutex);
                         this->condition.wait(lock,
-                            [this]{ return this->stop || !this->tasks.empty(); });
-                        if(this->stop && this->tasks.empty())
+                            [this]{ return this->_stop || !this->tasks.empty(); });
+                        if(this->_stop && this->tasks.empty())
                             return;
                         task = std::move(this->tasks.front());
                         this->tasks.pop();
@@ -340,7 +320,7 @@ void ThreadPool::add_workers(size_t threads)
 
 // the constructor just launches some amount of workers
 ThreadPool::ThreadPool(size_t threads)
-    :   stop(false)
+    :   _stop(false)
 {
     add_workers(threads);
 }
@@ -349,6 +329,5 @@ ThreadPool::ThreadPool(size_t threads)
 // the destructor joins all threads
 ThreadPool::~ThreadPool()
 {
-    // wait_for_complete();
-    force_stop();
+    stop(true);
 }

@@ -37,6 +37,7 @@ int main(int argc, char **argv)
 
     // logger.init(1);
     logger.reg_app(argv[0]);
+    logger.reg_ctx("main");
     gpLog = &logger;
     Util::SEPARATOR = ";";
 
@@ -61,12 +62,12 @@ int main(int argc, char **argv)
     int lDelay = std::stoi(delay);
 
     std::srand(std::time(nullptr));
-    TRACE(MAIN);
+    TRACE(*gpLog, MAIN);
 
     {
         // logger.reg_ctx("MAIN");
         {
-            TRACE(MAIN);
+            TRACE(*gpLog, MAIN);
             do_smt(lLoop, lThreads, lDelay);
         }
 

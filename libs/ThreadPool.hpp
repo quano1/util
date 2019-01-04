@@ -13,7 +13,7 @@
 
 class ThreadPool {
 public:
-    ThreadPool() : stop(false) {}
+    ThreadPool() : _stop(false) {}
     ThreadPool(size_t);
     template<class F, class... Args>
     auto enqueue(F&& f, Args&&... args) 
@@ -21,8 +21,7 @@ public:
     virtual ~ThreadPool();
 
     void add_workers(size_t);
-    void wait_for_complete();
-    void force_stop();
+    void stop(bool=false);
 private:
     // need to keep track of threads so we can join them
     std::vector< std::thread > workers;
@@ -32,7 +31,7 @@ private:
     // synchronization
     std::mutex queue_mutex;
     std::condition_variable condition;
-    bool stop;
+    bool _stop;
 };
 
 
@@ -52,7 +51,7 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
         std::unique_lock<std::mutex> lock(queue_mutex);
 
         // don't allow enqueueing after stopping the pool
-        if(stop)
+        if(_stop)
             throw std::runtime_error("enqueue on stopped ThreadPool");
 
         tasks.emplace([task](){ (*task)(); });
