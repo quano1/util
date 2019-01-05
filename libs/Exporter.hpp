@@ -52,14 +52,14 @@ struct Util
     }
 
     template <class Duration>
-    static inline std::string to_string(std::chrono::high_resolution_clock::time_point aTp)
+    static inline std::string to_string(std::chrono::system_clock::time_point aTp)
     {
         std::stringstream lRet;
         lRet << std::chrono::time_point_cast<Duration>(aTp).time_since_epoch().count();
         return lRet.str();
     }
 
-    static inline std::string to_string(std::string const &aFmt, std::chrono::high_resolution_clock::time_point aTp)
+    static inline std::string to_string(std::string const &aFmt, std::chrono::system_clock::time_point aTp)
     {
         std::stringstream lRet;
         std::time_t lNow = std::chrono::system_clock::to_time_t(aTp);
@@ -83,14 +83,17 @@ struct LogInfo
 {
     LogType _type;
     int _indent;
-    std::chrono::high_resolution_clock::time_point _now;
+    std::chrono::system_clock::time_point _now;
     std::string _ctx;
     std::string _content;
 
     inline std::string to_string(std::string aSepa="\t") const
     {
         std::string lRet;
-        lRet = Util::to_string<std::chrono::microseconds>(_now) + aSepa + _ctx + aSepa + Util::to_string(_type) + aSepa  + std::to_string(_indent) + aSepa + /*std::string(_indent * 2, aSepa) +*/ _content + "\n";
+        lRet = Util::to_string<std::chrono::microseconds>(_now) \
+                + aSepa + _ctx + aSepa \
+                + Util::to_string(_type) + aSepa  \
+                + std::to_string(_indent) + aSepa + /*std::string(_indent * 2, aSepa) +*/ _content + "\n";
         return lRet;
     }
 

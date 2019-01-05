@@ -16,7 +16,7 @@ ADD_EXECUTABLE(${TARGET} ${TARGET_SRC} )
 SET_TARGET_PROPERTIES(${TARGET} PROPERTIES LINK_FLAGS "-Wl,-rpath,./")
 
 TARGET_LINK_LIBRARIES(${TARGET}
-    lltlog.so
+    lltlog
     pthread
 )
 

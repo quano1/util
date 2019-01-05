@@ -13,7 +13,7 @@ SET(TARGET_SRC
 
 #TARGET-------------------------------------------------------------------------
 # set target
-ADD_LIBRARY(${TARGET} SHARED STATIC ${TARGET_SRC} )
+ADD_LIBRARY(${TARGET} STATIC ${TARGET_SRC} )
 
 TARGET_LINK_LIBRARIES(${TARGET}
     pthread
@@ -30,7 +30,7 @@ SET(TARGET_SRC
 
 #TARGET-------------------------------------------------------------------------
 # set target
-ADD_LIBRARY(${TARGET} SHARED STATIC ${TARGET_SRC} )
+ADD_LIBRARY(${TARGET} STATIC ${TARGET_SRC} )
 
 TARGET_LINK_LIBRARIES(${TARGET}
     pthread

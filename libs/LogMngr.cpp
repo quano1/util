@@ -5,6 +5,8 @@
 #include <thread>
 #include <chrono>
 
+#include <unistd.h>
+
 using namespace llt;
 
 LogMngr::LogMngr(std::vector<Export *> const &aExpList, size_t aWorkers)
