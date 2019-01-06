@@ -1,0 +1,32 @@
+{
+  "name": "lltlog Viewer",
+  "version": "0.1",
+  "manifest_version": 2,
+  "minimum_chrome_version": "33",
+  "description": "",
+  "app": {
+    "background": {
+      "scripts": [
+        "MulticastSocket.js",
+        "ChatClient.js",
+        "background.js"]
+    }
+  },
+
+  "sockets": {
+    "udp": {
+      "bind": "*",
+      "send": "*",
+      "multicastMembership": ""
+    }
+  },
+  "permissions": [ 
+    "storage",
+    "fullscreen",
+    "https://docs.google.com/feeds/",
+    "https://docs.googleusercontent.com/",
+    "https://spreadsheets.google.com/feeds/",
+    "https://ssl.gstatic.com/",
+    "https://www.googleapis.com/"
+  ]
+}
