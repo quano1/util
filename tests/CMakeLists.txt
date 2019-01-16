@@ -33,6 +33,9 @@ set(TARGET_SRC
 )
 
 add_executable(${TARGET} ${TARGET_SRC} )
+target_link_libraries(${TARGET}
+  	${PRJ_LINK_LIB}
+)
 
 set_property(TARGET ${TARGET} PROPERTY CXX_STANDARD 11)
 set_property(TARGET ${TARGET} PROPERTY CXX_STANDARD_REQUIRED ON)

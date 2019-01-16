@@ -50,16 +50,10 @@ include_directories(
 set( CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE} )
 set( CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE} )
 
-if (CMAKE_SYSTEM_NAME STREQUAL "QNX")
-message(STATUS "OI TROI OI")
-endif()
-
 set(PRJ_LINK_LIB
   $<$<STREQUAL:${CMAKE_SYSTEM_NAME},QNX>:socket> 
   $<$<STREQUAL:${CMAKE_SYSTEM_NAME},Linux>:socket>
 )
-
-message ( STATUS "PRJ_LINK_LIB: "${PRJ_LINK_LIB})
 
 add_subdirectory(libs)
 add_subdirectory(tests)
