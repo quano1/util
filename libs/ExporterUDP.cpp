@@ -93,7 +93,7 @@ int EUDPSvr::on_init()
     _svrAddr.sin_family = AF_INET;
     _svrAddr.sin_addr.s_addr = INADDR_ANY;
     _svrAddr.sin_port = htons( _port );
-    LOGD("%d", _port);
+    
     if ( ::bind( _fd, (const sockaddr*) &_svrAddr, sizeof(_svrAddr) ) < 0 )
     {
         LOGD("");
@@ -150,6 +150,7 @@ int EUDPSvr::on_init()
 
 void EUDPSvr::on_deinit()
 {
+    if(_stop) return;
     _stop = true;
     _thrd.join();
     if(_fd > 0) close(_fd);

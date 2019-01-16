@@ -1,4 +1,5 @@
 #include <LogMngr.hpp>
+#include <ExporterUDP.hpp>
 
 #include <string>
 #include <chrono>
@@ -28,17 +29,6 @@ llt::LogMngr *gpLog;
 
 int main(int argc, char **argv)
 {
-    llt::LogMngr logger({ 
-            new llt::EConsole(),
-            new llt::EFile("run.log"), 
-            // new EUDPClt(host, lPort),
-            // new EUDPSvr(lSPort),
-        });
-
-    // logger.init(1);
-    logger.reg_app(argv[0]);
-    logger.reg_ctx("main");
-    gpLog = &logger;
     llt::Util::SEPARATOR = ";";
 
     std::string host = getCmdOption(argc, argv, "-h=");
@@ -62,6 +52,19 @@ int main(int argc, char **argv)
     int lDelay = std::stoi(delay);
 
     std::srand(std::time(nullptr));
+    llt::LogMngr logger({ 
+            new llt::EConsole(),
+            new llt::EFile("run.log"), 
+            new llt::EUDPClt(host, lPort),
+            new llt::EUDPSvr(lSPort),
+        });
+
+    // logger.init(1);
+    logger.reg_app(argv[0]);
+    logger.reg_ctx("main");
+    gpLog = &logger;
+
+
     TRACE(gpLog, MAIN);
 
     {

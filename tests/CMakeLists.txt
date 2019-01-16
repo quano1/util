@@ -16,8 +16,9 @@ add_executable(${TARGET} ${TARGET_SRC} )
 set_target_properties(${TARGET} PROPERTIES LINK_FLAGS "-Wl,-rpath,./")
 
 target_link_libraries(${TARGET}
-    lltlog.${PROJECT_VERSION}
-    pthread
+    lltlogall_static
+    lltlog_static
+    ${PRJ_LINK_LIB}
 )
 
 set_property(TARGET ${TARGET} PROPERTY CXX_STANDARD 11)
@@ -50,7 +51,7 @@ set_target_properties(${TARGET} PROPERTIES LINK_FLAGS "-Wl,-rpath,./")
 
 target_link_libraries(${TARGET}
     lltlog.${PROJECT_VERSION}
-    pthread
+  	${PRJ_LINK_LIB}
 )
 
 set_property(TARGET ${TARGET} PROPERTY CXX_STANDARD 11)

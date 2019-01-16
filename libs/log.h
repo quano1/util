@@ -5,7 +5,7 @@ struct Exporter;
 struct Tracer;
 
 void log_async(struct LogMngr *aLogger, int aLogType, const char *fmt, ...);
-void log_init(struct LogMngr *aLogger);
+void log_init(struct LogMngr **aLogger);
 void log_deinit(struct LogMngr *aLogger);
 
 void start_trace(struct LogMngr *aLogger, struct Tracer **aTracer, char const *aBuf);

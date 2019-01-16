@@ -22,7 +22,7 @@ set_property(TARGET ${TARGET}_obj PROPERTY POSITION_INDEPENDENT_CODE 1)
 add_library(${TARGET}_static STATIC $<TARGET_OBJECTS:${TARGET}_obj>)
 add_library(${TARGET}.${PROJECT_VERSION} SHARED $<TARGET_OBJECTS:${TARGET}_obj>)
 target_link_libraries(${TARGET}.${PROJECT_VERSION}
-    pthread
+	${PRJ_LINK_LIB}
 )
 
 #TARGET-------------------------------------------------------------------------
@@ -41,8 +41,8 @@ set_property(TARGET ${TARGET}_obj PROPERTY CXX_STANDARD_REQUIRED ON)
 set_property(TARGET ${TARGET}_obj PROPERTY POSITION_INDEPENDENT_CODE 1)
 
 add_library(${TARGET}_static STATIC $<TARGET_OBJECTS:${TARGET}_obj>)
-add_library(${TARGET} SHARED $<TARGET_OBJECTS:${TARGET}_obj>)
-target_link_libraries(${TARGET}
-    pthread
+add_library(${TARGET}.${PROJECT_VERSION} SHARED $<TARGET_OBJECTS:${TARGET}_obj>)
+target_link_libraries(${TARGET}.${PROJECT_VERSION}
+    ${PRJ_LINK_LIB}
     lltlog.${PROJECT_VERSION}
 )
