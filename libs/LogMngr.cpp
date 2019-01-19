@@ -9,7 +9,7 @@
 
 using namespace llt;
 
-LogMngr::LogMngr(std::vector<Export *> const &aExpList, size_t aWorkerNum)
+LogMngr::LogMngr(std::vector<Exporter *> const &aExpList, size_t aWorkerNum)
 {
     _appName = std::to_string((size_t)::getpid());
     for(auto _export : aExpList)
@@ -19,7 +19,12 @@ LogMngr::LogMngr(std::vector<Export *> const &aExpList, size_t aWorkerNum)
 
     if(aWorkerNum)
     {
+        _isAsync = true;
         _pool.add_worker(aWorkerNum);
+    }
+    else
+    {
+        _isAsync = false;
     }
 
     init();
@@ -28,7 +33,7 @@ LogMngr::LogMngr(std::vector<Export *> const &aExpList, size_t aWorkerNum)
 LogMngr::~LogMngr() 
 {
     deinit();
-    for(auto lp : _exportContainer)
+    for(auto lp : _exporters)
     {
         delete lp;
     }
@@ -45,13 +50,13 @@ void LogMngr::deinit()
     _sigDeinit.emit();
 }
 
-void LogMngr::add(Export *aExport)
+void LogMngr::add(Exporter *aExporter)
 {
-    _exportContainer.push_back(aExport);
-    Export *lIns = _exportContainer.back();
-    size_t lId = _sigExport.connect(Simple::slot(lIns, &Export::on_export));
-    lId = _sigInit.connect(Simple::slot(lIns, &Export::on_init));
-    lId = _sigDeinit.connect(Simple::slot(lIns, &Export::on_deinit));
+    _exporters.push_back(aExporter);
+    Exporter *lIns = _exporters.back();
+    size_t lId = _sigExport.connect(Simple::slot(lIns, &Exporter::on_export));
+    lId = _sigInit.connect(Simple::slot(lIns, &Exporter::on_init));
+    lId = _sigDeinit.connect(Simple::slot(lIns, &Exporter::on_deinit));
 }
 
 void LogMngr::log(LogType aLogType, const char *fmt, ...)
@@ -64,7 +69,7 @@ void LogMngr::log(LogType aLogType, const char *fmt, ...)
 
     std::thread::id lKey = std::this_thread::get_id();
     if(_ctx[lKey].empty()) _ctx[lKey] = _appName + Util::SEPARATOR + Util::to_string(lKey);
-    LogInfo lInfo = {aLogType, _indents[lKey], std::chrono::system_clock::now(), _ctx[lKey], std::move(lBuff) };
+    LogInfo lInfo = {aLogType, _indents[lKey], std::chrono::system_clock::now(), _ctx[lKey], std::move(lBuff), _appName };
 
     if(_isAsync) _sigExport.emit_async(_pool, lInfo);
     else _sigExport.emit(lInfo);

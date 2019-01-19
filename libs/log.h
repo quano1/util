@@ -32,7 +32,7 @@ void llt_stop_trace(struct Tracer *aTracer);
 
 #define LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 
-#define TRACES(logger, FUNC) struct Tracer *__##FUNC; llt_log(logger, 3, #FUNC " %s %s %d", __FILE__, __FUNCTION__, __LINE__); llt_start_trace(logger, &__##FUNC, #FUNC)
+#define TRACES(logger, FUNC) struct Tracer *__##FUNC; llt_log(logger, 3, #FUNC); llt_start_trace(logger, &__##FUNC, #FUNC)
 #define TRACEE(FUNC) llt_stop_trace(__##FUNC)
 
 #define LOGI(logger, fmt, ...) llt_log(logger, 0, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)

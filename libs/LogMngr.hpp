@@ -18,7 +18,7 @@ class LogMngr
 public:
 
     LogMngr() = default;
-    LogMngr(std::vector<Export *> const &, size_t);
+    LogMngr(std::vector<Exporter *> const &, size_t);
     virtual ~LogMngr();
 
     virtual void log(LogType aLogType, const char *fmt, ...);
@@ -57,7 +57,7 @@ protected:
     
     virtual void init();
     virtual void deinit();
-    virtual void add(Export *aExport);
+    virtual void add(Exporter *);
 
     ThreadPool _pool;
     bool _forceStop=false;
@@ -66,7 +66,7 @@ protected:
     Simple::Signal<int ()> _sigInit;
     Simple::Signal<void ()> _sigDeinit;
 
-    std::vector<Export *> _exportContainer;
+    std::vector<Exporter *> _exporters;
 
     std::string _appName;
     std::unordered_map<std::thread::id, std::string> _ctx;
@@ -100,7 +100,7 @@ public:
 
 #define LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 
-#define TRACE(logger, FUNC) (logger)->log(llt::LogType::TRACE, #FUNC " %s %s %d", __FILE__, __FUNCTION__, __LINE__); llt::Tracer __##FUNC(logger, #FUNC)
+#define TRACE(logger, FUNC) (logger)->log(llt::LogType::TRACE, #FUNC); llt::Tracer __##FUNC(logger, #FUNC)
 
 #define LOGI(logger, fmt, ...) (logger)->log(llt::LogType::INFO, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 #define LOGW(logger, fmt, ...) (logger)->log(llt::LogType::WARN, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)

@@ -110,7 +110,7 @@ int EUDPSvr::on_init()
 
         while(!_stop)
         {
-            struct timeval timeout = {1, 0}; // make select() return once per second
+            struct timeval timeout = {0, 50000}; // make select() return once per second
 
             fd_set readSet;
             FD_ZERO(&readSet);

@@ -18,7 +18,7 @@
 
 namespace llt {
 
-class EUDPClt : public Export
+class EUDPClt : public Exporter
 {
 public:
     EUDPClt(std::string &&aHost, uint16_t aPort);
@@ -35,7 +35,7 @@ protected:
     sockaddr_in _svrAddr;
 };
 
-class EUDPSvr : public Export
+class EUDPSvr : public Exporter
 {
 public:
     EUDPSvr(uint16_t aPort);

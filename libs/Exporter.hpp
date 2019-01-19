@@ -17,7 +17,7 @@
 namespace llt {
 
 struct LogInfo;
-class Export;
+class Exporter;
 
 enum class LogType : uint8_t
 {
@@ -86,6 +86,7 @@ struct LogInfo
     std::chrono::system_clock::time_point _now;
     std::string _ctx;
     std::string _content;
+    std::string _appName;
 
     inline std::string to_string(std::string aSepa="\t") const
     {
@@ -101,9 +102,10 @@ struct LogInfo
     {
         std::string lRet;
         lRet = "{";
+        lRet += "\"now\":" + Util::to_string<std::chrono::microseconds>(_now) + ",";
         lRet += "\"type\":" + std::to_string((uint8_t)_type) + ",";
         lRet += "\"indent\":" + std::to_string(_indent) + ",";
-        lRet += "\"now\":" + Util::to_string<std::chrono::microseconds>(_now) + ",";
+        lRet += "\"appName\":\"" + _appName + "\",";
         lRet += "\"context\":\"" + _ctx + "\",";
         lRet += "\"content\":\"" + _content + "\"";
         lRet += "}";
@@ -112,10 +114,10 @@ struct LogInfo
 
 };
 
-class Export
+class Exporter
 {
 public:
-    virtual ~Export()=default;
+    virtual ~Exporter()=default;
     virtual void on_export(LogInfo const &aLogInfo)=0;
     virtual int on_init()=0;
     virtual void on_deinit()=0;
@@ -124,7 +126,7 @@ protected:
     uint8_t _init=0;
 };
 
-class EConsole : public Export
+class EConsole : public Exporter
 {
 public:
     virtual int on_init();
@@ -132,7 +134,7 @@ public:
     virtual void on_export(LogInfo const &aLogInfo);
 };
 
-class EFile : public Export
+class EFile : public Exporter
 {
 public:
     EFile(std::string const &aFile);
