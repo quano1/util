@@ -20,8 +20,10 @@ public:
         -> std::future<typename std::result_of<F(Args...)>::type>;
     virtual ~ThreadPool();
 
-    void add_workers(size_t);
+    void add_worker(size_t);
     void stop(bool=false);
+
+    inline size_t worker_size() { return workers.size(); }
 private:
     // need to keep track of threads so we can join them
     std::vector< std::thread > workers;

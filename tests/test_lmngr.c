@@ -7,7 +7,7 @@ struct LogMngr *lp;
 int main()
 {
 	// struct Tracer *tr;
-	log_init(&lp);
+	LOG_INIT(lp, 1, true);
 	// start_trace(lp, &tr, "MAIN");
 	TRACES(lp, MAIN);
 
@@ -19,6 +19,6 @@ int main()
 
 	TRACEE(MAIN);
 
-	log_deinit(lp);
+	LOG_DEINIT(lp);
 	return 0;
 }

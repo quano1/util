@@ -54,12 +54,12 @@ int main(int argc, char **argv)
     std::srand(std::time(nullptr));
     llt::LogMngr logger({ 
             new llt::EConsole(),
-            new llt::EFile("run.log"), 
+            new llt::EFile(std::string(argv[0])+".log"), 
             new llt::EUDPClt(host, lPort),
             new llt::EUDPSvr(lSPort),
-        });
+        }, 1);
 
-    // logger.init(1);
+    logger.set_async(1);
     logger.reg_app(argv[0]);
     logger.reg_ctx("main");
     gpLog = &logger;

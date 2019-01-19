@@ -18,11 +18,10 @@ class LogMngr
 public:
 
     LogMngr() = default;
-    LogMngr(std::vector<Export *> const &, size_t=1);
+    LogMngr(std::vector<Export *> const &, size_t);
     virtual ~LogMngr();
 
     virtual void log(LogType aLogType, const char *fmt, ...);
-    virtual void log_async(LogType aLogType, const char *fmt, ...);
 
     inline void inc_indent()
     {
@@ -49,9 +48,14 @@ public:
         _forceStop = aForceStop;
     }
 
-// protected:
+    inline void set_async(bool aAsync)
+    {
+        _isAsync = aAsync;
+    }
+
+protected:
     
-    virtual void init(size_t=0);
+    virtual void init();
     virtual void deinit();
     virtual void add(Export *aExport);
 
@@ -68,6 +72,8 @@ public:
     std::unordered_map<std::thread::id, std::string> _ctx;
     std::unordered_map<std::thread::id, int> _indents;
 
+    bool _isAsync=false;
+
 };
 
 struct Tracer
@@ -81,7 +87,7 @@ public:
     ~Tracer()
     {
         _pLogger->dec_indent();
-        _pLogger->log_async(LogType::TRACE, "~%s", _name.data());
+        _pLogger->log(LogType::TRACE, "~%s", _name.data());
     }
 
     LogMngr *_pLogger;
@@ -90,10 +96,12 @@ public:
 
 } // llt
 
+#define LLT_ASSERT(cond, msg) if(!(cond)) throw std::runtime_error(msg)
+
 #define LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 
-#define TRACE(logger, FUNC) (logger)->log_async(llt::LogType::TRACE, #FUNC " %s %d", __FUNCTION__, __LINE__); llt::Tracer __##FUNC(logger, #FUNC)
+#define TRACE(logger, FUNC) (logger)->log(llt::LogType::TRACE, #FUNC " %s %s %d", __FILE__, __FUNCTION__, __LINE__); llt::Tracer __##FUNC(logger, #FUNC)
 
-#define LOGI(logger, fmt, ...) (logger)->log_async(llt::LogType::INFO, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGW(logger, fmt, ...) (logger)->log_async(llt::LogType::WARN, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGE(logger, fmt, ...) (logger)->log_async(llt::LogType::ERROR, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGI(logger, fmt, ...) (logger)->log(llt::LogType::INFO, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGW(logger, fmt, ...) (logger)->log(llt::LogType::WARN, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGE(logger, fmt, ...) (logger)->log(llt::LogType::ERROR, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)

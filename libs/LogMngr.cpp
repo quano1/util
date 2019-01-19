@@ -9,7 +9,7 @@
 
 using namespace llt;
 
-LogMngr::LogMngr(std::vector<Export *> const &aExpList, size_t aWorkers)
+LogMngr::LogMngr(std::vector<Export *> const &aExpList, size_t aWorkerNum)
 {
     _appName = std::to_string((size_t)::getpid());
     for(auto _export : aExpList)
@@ -17,7 +17,12 @@ LogMngr::LogMngr(std::vector<Export *> const &aExpList, size_t aWorkers)
         add(_export);
     }
 
-    init(aWorkers);
+    if(aWorkerNum)
+    {
+        _pool.add_worker(aWorkerNum);
+    }
+
+    init();
 }
 
 LogMngr::~LogMngr() 
@@ -29,13 +34,8 @@ LogMngr::~LogMngr()
     }
 }
 
-void LogMngr::init(size_t aWorkers)
-{    
-    if(aWorkers)
-    {
-        _pool.add_workers(aWorkers);
-    }
-    
+void LogMngr::init()
+{
     _sigInit.emit();
 }
 
@@ -56,6 +56,7 @@ void LogMngr::add(Export *aExport)
 
 void LogMngr::log(LogType aLogType, const char *fmt, ...)
 {
+    if(_isAsync) LLT_ASSERT(_pool.worker_size(), "EMPTY WORKER");
     va_list args;
     va_start (args, fmt);
     std::string lBuff = Util::format(fmt, args);
@@ -64,21 +65,9 @@ void LogMngr::log(LogType aLogType, const char *fmt, ...)
     std::thread::id lKey = std::this_thread::get_id();
     if(_ctx[lKey].empty()) _ctx[lKey] = _appName + Util::SEPARATOR + Util::to_string(lKey);
     LogInfo lInfo = {aLogType, _indents[lKey], std::chrono::system_clock::now(), _ctx[lKey], std::move(lBuff) };
-    _sigExport.emit(lInfo);
-}
 
-
-void LogMngr::log_async(LogType aLogType, const char *fmt, ...)
-{
-    va_list args;
-    va_start (args, fmt);
-    std::string lBuff = Util::format(fmt, args);
-    va_end (args);
-    std::thread::id lKey = std::this_thread::get_id();
-
-    if(_ctx[lKey].empty()) _ctx[lKey] = _appName + Util::SEPARATOR + Util::to_string(lKey);
-    LogInfo lInfo = {aLogType, _indents[lKey], std::chrono::system_clock::now(), _ctx[lKey], std::move(lBuff) };
-    _sigExport.emit_async(_pool, lInfo);
+    if(_isAsync) _sigExport.emit_async(_pool, lInfo);
+    else _sigExport.emit(lInfo);
 }
 
 void ThreadPool::stop(bool aForce)
@@ -97,7 +86,7 @@ void ThreadPool::stop(bool aForce)
     }
 }
 
-void ThreadPool::add_workers(size_t threads)
+void ThreadPool::add_worker(size_t threads)
 {
     for(size_t i = 0;i<threads;++i)
     {
@@ -129,7 +118,7 @@ void ThreadPool::add_workers(size_t threads)
 ThreadPool::ThreadPool(size_t threads)
     :   _stop(false)
 {
-    add_workers(threads);
+    add_worker(threads);
 }
 
 
@@ -139,36 +128,41 @@ ThreadPool::~ThreadPool()
     stop(true);
 }
 
-extern "C" void log_init(LogMngr **aLogger)
+extern "C" void llt_log_init(LogMngr **aLogger, size_t aWorkerNum)
 {
     *aLogger = new LogMngr({
             new EConsole(),
             new EFile("run.log"),
             // new EUDPClt(host, lPort),
             // new EUDPSvr(lSPort),
-        });
+        }, aWorkerNum);
 }
 
-extern "C" void log_deinit(LogMngr *aLogger)
+extern "C" void llt_log_deinit(LogMngr *aLogger)
 {
     if(aLogger) delete aLogger;
 }
 
-extern "C" void log_async(LogMngr *aLogger, int aLogType, const char *fmt, ...)
+extern "C" void llt_log(LogMngr *aLogger, int aLogType, const char *fmt, ...)
 {
     va_list args;
     va_start (args, fmt);
     std::string lBuff = Util::format(fmt, args);
     va_end (args);
-    aLogger->log_async(static_cast<LogType>(aLogType), lBuff.data());
+    aLogger->log(static_cast<LogType>(aLogType), lBuff.data());
 }
 
-extern "C" void start_trace(LogMngr *aLogger, Tracer **aTracer, char const *aBuf)
+extern "C" void llt_start_trace(LogMngr *aLogger, Tracer **aTracer, char const *aBuf)
 {
     *aTracer = new Tracer(aLogger, aBuf);
 }
 
-extern "C" void stop_trace(Tracer *aTracer)
+extern "C" void llt_stop_trace(Tracer *aTracer)
 {
     delete aTracer;
+}
+
+extern "C" void llt_set_async(LogMngr *aLogger, bool aAsync)
+{
+    aLogger->set_async(aAsync);
 }
