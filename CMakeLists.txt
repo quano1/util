@@ -19,13 +19,12 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   # Debug
   set(CMAKE_C_FLAGS_DEBUG "-g -O0")
   add_definitions(
-    -DLOG_EN
+    -D__LLT_DEBUG__
   )
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
   # Release
   set(CMAKE_C_FLAGS_DEBUG "-O3")
   add_definitions(
-    -DLOG_EN
   )
 endif()
 

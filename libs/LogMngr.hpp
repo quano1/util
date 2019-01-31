@@ -96,7 +96,11 @@ public:
 
 } // llt
 
+#if (defined __LLT_DEBUG__)
+#define LLT_ASSERT(cond, msg) std::assert(cond, msg)
+#else
 #define LLT_ASSERT(cond, msg) if(!(cond)) throw std::runtime_error(msg)
+#endif
 
 #define LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 
