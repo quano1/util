@@ -1,0 +1,11 @@
+{
+    "project_type": "javascript",
+    "width"         : 640,
+    "height"        : 480,
+    "showFPS"       : 1,
+    "debugMode"     : 1,
+    "frameRate"     : 30,
+    "id"            : "gameCanvas",
+    "renderMode"    : 2,
+    "jsList"        : []
+}
