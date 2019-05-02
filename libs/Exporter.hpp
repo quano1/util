@@ -13,6 +13,8 @@
 
 #include <netinet/in.h>
 #include <unistd.h> // close
+#include <sys/socket.h>
+#include <sys/un.h>
 
 namespace llt {
 
@@ -147,6 +149,23 @@ public:
 protected:
     std::ofstream _ofs;
     std::string _f;
+};
+
+class ENSClt : public Exporter
+{
+public:
+    ENSClt(std::string const &aFile);
+    ENSClt(std::string &&aFile);
+    ~ENSClt();
+
+    virtual int on_init();
+    virtual void on_deinit();
+    virtual void on_export(LogInfo const &aLogInfo);
+
+protected:
+    int _fd;
+    std::string _sockName;
+    sockaddr_un _svrAddr;
 };
 
 } // llt

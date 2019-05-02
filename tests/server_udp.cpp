@@ -19,71 +19,91 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+/*
+* File server.c
+*/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
+
+#include <string>
+
+const std::string SOCKET_NAME = "/tmp/llt.dgram";
+
+struct sockaddr_un name;
+int down_flag = 0;
+int ret;
 int _fd;
-std::string _host = "localhost";
-uint16_t _port = 65530;
-sockaddr_in _svrAddr;
-int namelen;
+int _clt;
+int result;
+// char buffer[BUFFER_SIZE];
 
 int init()
 {
-    _fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    
-    if ( _fd <= 0 )
-    {
-        LOGD("");
-        return 1;
-    }
+   /*
+    * In case the program exited inadvertently on the last run,
+    * remove the socket.
+    */
 
-    _svrAddr.sin_family = AF_INET;
-    _svrAddr.sin_addr.s_addr = INADDR_ANY;
-    _svrAddr.sin_port = htons( _port );
+   unlink(SOCKET_NAME.data());
 
-    if ( ::bind( _fd, (const sockaddr*) &_svrAddr, sizeof(_svrAddr) ) < 0 )
-    {
-        LOGD("");
-        // m_error = SOCKET_ERROR_BIND_IPV4_FAILED;
-        return 1;
-    }
+   /* Create local socket. */
 
-    /* Find out what port was really assigned and print it */
-    namelen = sizeof(_svrAddr);
-    if (getsockname(_fd, (struct sockaddr *) &_svrAddr, (socklen_t *)&namelen) < 0)
-    {
-        LOGD("");
-        return 1;
-    }
+   _fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+   if (_fd == -1) {
+       perror("socket");
+       exit(EXIT_FAILURE);
+   }
 
-    printf("host: %s - Port %d\n", inet_ntoa(_svrAddr.sin_addr), ntohs(_svrAddr.sin_port));
+   /*
+    * For portability clear the whole structure, since some
+    * implementations have additional (nonstandard) fields in
+    * the structure.
+    */
 
-    // set non-blocking io
-    if ( fcntl( _fd, F_SETFL, O_NONBLOCK, 1 ) == -1 )
+   memset(&name, 0, sizeof(struct sockaddr_un));
+
+   /* Bind socket to socket name. */
+
+   name.sun_family = AF_UNIX;
+   strncpy(name.sun_path, SOCKET_NAME.data(), sizeof(name.sun_path) - 1);
+
+   ret = bind(_fd, (const struct sockaddr *) &name,
+              sizeof(struct sockaddr_un));
+   if (ret == -1) {
+       perror("bind");
+       exit(EXIT_FAILURE);
+   }
+
+   if ( fcntl( _fd, F_SETFL, O_NONBLOCK, 1 ) == -1 )
     {
         LOGD( "failed to make socket non-blocking" );
         return 1;
     }
+
 }
 
 int main()
 {
-    init();
-
     struct sockaddr_in client;
     int client_address_size = sizeof(client);
 
     char buf[0x1000];
 
+    init();
+
     while(1)
     {
-        if(recvfrom(_fd, buf, sizeof(buf), 0, (struct sockaddr *) &client,
-            (socklen_t*)&client_address_size) >= 0)
+      int size = recvfrom(_fd, buf, sizeof(buf), 0, (struct sockaddr *) &client,
+            (socklen_t*)&client_address_size);
+        if(size >= 0)
         {
-            printf("Received message %s from domain %s port %d internet\
-                address %s\n",
-                buf,
-                (client.sin_family == AF_INET?"AF_INET":"UNKNOWN"),
-            ntohs(client.sin_port),
-            inet_ntoa(client.sin_addr));
+          buf[size]=0;
+            printf("%s\n",buf);
         }
 
         std::this_thread::yield();
