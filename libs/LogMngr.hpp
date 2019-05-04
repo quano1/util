@@ -24,14 +24,14 @@ public:
     virtual void log(LogType aLogType, const std::string &aFile, const std::string &aFunction, int aLine, const char *fmt, ...);
     virtual void log(LogType aLogType, const char *fmt, ...);
 
-    inline void inc_indent()
+    inline void inc_level()
     {
-        _indents[std::this_thread::get_id()]++;
+        _levels[std::this_thread::get_id()]++;
     }
 
-    inline void dec_indent()
+    inline void dec_level()
     {
-        _indents[std::this_thread::get_id()]--;
+        _levels[std::this_thread::get_id()]--;
     }
 
     inline void reg_app(std::string const &aProgName)
@@ -39,9 +39,9 @@ public:
         _appName = aProgName;
     }
 
-    inline void reg_ctx(std::string aThreadName)
+    inline void reg_ctx(std::string aContext)
     {
-        _contexts[std::this_thread::get_id()] = _appName + Util::SEPARATOR + aThreadName;
+        _contexts[std::this_thread::get_id()] = aContext;
     }
 
     inline void set_force_stop(bool aForceStop) 
@@ -71,7 +71,7 @@ protected:
 
     std::string _appName;
     std::unordered_map<std::thread::id, std::string> _contexts;
-    std::unordered_map<std::thread::id, int> _indents;
+    std::unordered_map<std::thread::id, int> _levels;
 
     bool _isAsync=false;
 
@@ -82,12 +82,12 @@ struct Tracer
 public:
     Tracer(LogMngr *aLogger, std::string const &aName) : _pLogger(aLogger), _name(aName)
     {
-        _pLogger->inc_indent();
+        _pLogger->inc_level();
     }
 
     ~Tracer()
     {
-        _pLogger->dec_indent();
+        _pLogger->dec_level();
         _pLogger->log(LogType::TRACE, "~%s", _name.data());
     }
 
@@ -107,6 +107,6 @@ public:
 
 #define TRACE(logger, FUNC) (logger)->log(llt::LogType::TRACE, __FILE__, __FUNCTION__, __LINE__, #FUNC); llt::Tracer __##FUNC(logger, #FUNC)
 
-#define LOGI(logger, fmt, ...) (logger)->log(llt::LogType::INFO, __FILE__, __FUNCTION__, __LINE__, ";" fmt "", ##__VA_ARGS__)
-#define LOGW(logger, fmt, ...) (logger)->log(llt::LogType::WARN, __FILE__, __FUNCTION__, __LINE__, ";" fmt "", ##__VA_ARGS__)
-#define LOGE(logger, fmt, ...) (logger)->log(llt::LogType::ERROR, __FILE__, __FUNCTION__, __LINE__, ";" fmt "", ##__VA_ARGS__)
+#define LOGI(logger, fmt, ...) (logger)->log(llt::LogType::INFO, __FILE__, __FUNCTION__, __LINE__, fmt "", ##__VA_ARGS__)
+#define LOGW(logger, fmt, ...) (logger)->log(llt::LogType::WARN, __FILE__, __FUNCTION__, __LINE__, fmt "", ##__VA_ARGS__)
+#define LOGE(logger, fmt, ...) (logger)->log(llt::LogType::ERROR, __FILE__, __FUNCTION__, __LINE__, fmt "", ##__VA_ARGS__)
