@@ -34,10 +34,11 @@ struct Util
     static size_t const MAX_BUF_SIZE = 0x1000;
     static std::string SEPARATOR;
 
-    static inline std::string to_string(std::thread::id const &aTid)
+    template <typename T>
+    static inline std::string to_string(T const &aVal)
     {
         std::ostringstream ss;
-        ss << aTid;
+        ss << aVal;
         return std::string(ss.str());
     }
 
@@ -86,6 +87,9 @@ struct LogInfo
     LogType _type;
     int _indent;
     std::chrono::system_clock::time_point _now;
+    std::string _file;
+    std::string _function;
+    int _line;
     std::string _context;
     std::string _content;
     std::string _appName;
@@ -93,10 +97,14 @@ struct LogInfo
     inline std::string to_string(std::string aSepa="\t") const
     {
         std::string lRet;
-        lRet = Util::to_string<std::chrono::microseconds>(_now) \
-                + aSepa + _context + aSepa \
+        lRet = Util::to_string<std::chrono::microseconds>(_now) + aSepa \
+                + _context + aSepa \
                 + Util::to_string(_type) + aSepa  \
-                + std::to_string(_indent) + aSepa + /*std::string(_indent * 2, aSepa) +*/ _content + "\n";
+                + std::to_string(_indent) + aSepa \
+                + _file + aSepa \
+                + _function + aSepa \
+                + Util::to_string(_line) + aSepa \
+                + /*std::string(_indent * 2, aSepa) +*/ _content + "\n";
         return lRet;
     }
 

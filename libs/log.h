@@ -31,11 +31,11 @@ void llt_stop_trace(struct Tracer *aTracer);
 #define LOG_INIT(logger, workerNum, async, fileName) llt_log_init(&logger, workerNum, fileName); llt_set_async(logger, async)
 #define LOG_DEINIT(logger) llt_log_deinit(logger)
 
-#define LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
+#define LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
-#define TRACES(logger, FUNC) struct Tracer *__##FUNC; llt_log(logger, 3, #FUNC); llt_start_trace(logger, &__##FUNC, #FUNC)
+#define TRACES(logger, FUNC) struct Tracer *__##FUNC; llt_log(logger, 3, __FILE__, __FUNCTION__, __LINE__, #FUNC); llt_start_trace(logger, &__##FUNC, #FUNC)
 #define TRACEE(FUNC) llt_stop_trace(__##FUNC)
 
-#define LOGI(logger, fmt, ...) llt_log(logger, 0, "%s;%s;%d;" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGW(logger, fmt, ...) llt_log(logger, 1, "%s;%s;%d;" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGE(logger, fmt, ...) llt_log(logger, 2, "%s;%s;%d;" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGI(logger, fmt, ...) llt_log(logger, 0, __FILE__, __FUNCTION__, __LINE__, fmt "", ##__VA_ARGS__)
+#define LOGW(logger, fmt, ...) llt_log(logger, 1, __FILE__, __FUNCTION__, __LINE__, fmt "", ##__VA_ARGS__)
+#define LOGE(logger, fmt, ...) llt_log(logger, 2, __FILE__, __FUNCTION__, __LINE__, fmt "", ##__VA_ARGS__)

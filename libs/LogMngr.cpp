@@ -59,6 +59,22 @@ void LogMngr::add(Exporter *aExporter)
     lId = _sigDeinit.connect(Simple::slot(lIns, &Exporter::on_deinit));
 }
 
+void LogMngr::log(LogType aLogType, const std::string &aFile, const std::string &aFunction, int aLine, const char *fmt, ...)
+{
+    if(_isAsync) LLT_ASSERT(_pool.worker_size(), "EMPTY WORKER");
+    va_list args;
+    va_start (args, fmt);
+    std::string lBuff = Util::format(fmt, args);
+    va_end (args);
+
+    std::thread::id lKey = std::this_thread::get_id();
+    if(_contexts[lKey].empty()) _contexts[lKey] = _appName + Util::SEPARATOR + Util::to_string(lKey);
+    LogInfo lInfo = {aLogType, _indents[lKey], std::chrono::system_clock::now(), aFile, aFunction, aLine, _contexts[lKey], std::move(lBuff), _appName };
+
+    if(_isAsync) _sigExport.emit_async(_pool, lInfo);
+    else _sigExport.emit(lInfo);
+}
+
 void LogMngr::log(LogType aLogType, const char *fmt, ...)
 {
     if(_isAsync) LLT_ASSERT(_pool.worker_size(), "EMPTY WORKER");
@@ -69,7 +85,7 @@ void LogMngr::log(LogType aLogType, const char *fmt, ...)
 
     std::thread::id lKey = std::this_thread::get_id();
     if(_contexts[lKey].empty()) _contexts[lKey] = _appName + Util::SEPARATOR + Util::to_string(lKey);
-    LogInfo lInfo = {aLogType, _indents[lKey], std::chrono::system_clock::now(), _contexts[lKey], std::move(lBuff), _appName };
+    LogInfo lInfo = {aLogType, _indents[lKey], std::chrono::system_clock::now(), std::string(), std::string(), -1, _contexts[lKey], std::move(lBuff), _appName };
 
     if(_isAsync) _sigExport.emit_async(_pool, lInfo);
     else _sigExport.emit(lInfo);
@@ -148,13 +164,13 @@ extern "C" void llt_log_deinit(LogMngr *aLogger)
     if(aLogger) delete aLogger;
 }
 
-extern "C" void llt_log(LogMngr *aLogger, int aLogType, const char *fmt, ...)
+extern "C" void llt_log(LogMngr *aLogger, int aLogType, const char *aFile, const char *aFunction, int aLine, const char *fmt, ...)
 {
     va_list args;
     va_start (args, fmt);
     std::string lBuff = Util::format(fmt, args);
     va_end (args);
-    aLogger->log(static_cast<LogType>(aLogType), lBuff.data());
+    aLogger->log(static_cast<LogType>(aLogType), aFile, aFunction, aLine, lBuff.data());
 }
 
 extern "C" void llt_start_trace(LogMngr *aLogger, Tracer **aTracer, char const *aBuf)

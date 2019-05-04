@@ -21,6 +21,7 @@ public:
     LogMngr(std::vector<Exporter *> const &, size_t);
     virtual ~LogMngr();
 
+    virtual void log(LogType aLogType, const std::string &aFile, const std::string &aFunction, int aLine, const char *fmt, ...);
     virtual void log(LogType aLogType, const char *fmt, ...);
 
     inline void inc_indent()
@@ -102,10 +103,10 @@ public:
 #define LLT_ASSERT(cond, msg) if(!(cond)) throw std::runtime_error(msg)
 // #endif
 
-#define LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
+#define LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
-#define TRACE(logger, FUNC) (logger)->log(llt::LogType::TRACE, #FUNC); llt::Tracer __##FUNC(logger, #FUNC)
+#define TRACE(logger, FUNC) (logger)->log(llt::LogType::TRACE, __FILE__, __FUNCTION__, __LINE__, #FUNC); llt::Tracer __##FUNC(logger, #FUNC)
 
-#define LOGI(logger, fmt, ...) (logger)->log(llt::LogType::INFO, "%s;%s;%d;" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGW(logger, fmt, ...) (logger)->log(llt::LogType::WARN, "%s;%s;%d;" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGE(logger, fmt, ...) (logger)->log(llt::LogType::ERROR, "%s;%s;%d;" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGI(logger, fmt, ...) (logger)->log(llt::LogType::INFO, __FILE__, __FUNCTION__, __LINE__, ";" fmt "", ##__VA_ARGS__)
+#define LOGW(logger, fmt, ...) (logger)->log(llt::LogType::WARN, __FILE__, __FUNCTION__, __LINE__, ";" fmt "", ##__VA_ARGS__)
+#define LOGE(logger, fmt, ...) (logger)->log(llt::LogType::ERROR, __FILE__, __FUNCTION__, __LINE__, ";" fmt "", ##__VA_ARGS__)
