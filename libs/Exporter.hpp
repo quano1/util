@@ -86,7 +86,7 @@ struct LogInfo
     LogType _type;
     int _indent;
     std::chrono::system_clock::time_point _now;
-    std::string _ctx;
+    std::string _context;
     std::string _content;
     std::string _appName;
 
@@ -94,7 +94,7 @@ struct LogInfo
     {
         std::string lRet;
         lRet = Util::to_string<std::chrono::microseconds>(_now) \
-                + aSepa + _ctx + aSepa \
+                + aSepa + _context + aSepa \
                 + Util::to_string(_type) + aSepa  \
                 + std::to_string(_indent) + aSepa + /*std::string(_indent * 2, aSepa) +*/ _content + "\n";
         return lRet;
@@ -108,9 +108,9 @@ struct LogInfo
         lRet += "\"type\":" + std::to_string((uint8_t)_type) + ",";
         lRet += "\"indent\":" + std::to_string(_indent) + ",";
         lRet += "\"appName\":\"" + _appName + "\",";
-        lRet += "\"context\":\"" + _ctx + "\",";
+        lRet += "\"context\":\"" + _context + "\",";
         lRet += "\"content\":\"" + _content + "\"";
-        lRet += "}";
+        lRet += "},\n";
         return lRet;
     }
 

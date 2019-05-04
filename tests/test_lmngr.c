@@ -4,18 +4,22 @@
 
 struct LogMngr *lp;
 
-int main()
+const int BUF_SIZE = 0x100;
+
+int main(int argc, char **argv)
 {
 	// struct Tracer *tr;
-	LOG_INIT(lp, 1, true);
+	char buffer[BUF_SIZE];
+	snprintf(buffer, BUF_SIZE, "%s.log", argv[0]);
+	LOG_INIT(lp, 1, true, buffer);
 	// start_trace(lp, &tr, "MAIN");
 	TRACES(lp, MAIN);
 
-	LOGI(lp, "");
+	LOGI(lp, "Test log Info");
 	TRACES(lp, MAIN2);
-	LOGW(lp, "");
+	LOGW(lp, "Test log Warning");
 	TRACEE(MAIN2);
-	LOGE(lp, "");
+	LOGE(lp, "Test log Error");
 
 	TRACEE(MAIN);
 

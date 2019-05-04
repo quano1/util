@@ -46,7 +46,7 @@ int EFile::on_init()
 {
     if(_init) return 1; 
     _init = 1;
-    _ofs.open(_f, std::ios::out | std::ios::app );
+    _ofs.open(_f, std::ios::out /*| std::ios::app*/ );
     if(!_ofs.is_open()) return 1;
     return 0;
 }
@@ -63,8 +63,8 @@ void EFile::on_deinit()
 void EFile::on_export(LogInfo const &aLogInfo)
 {
     std::lock_guard<std::mutex> lock(_mutex);
-    // _ofs << aLogInfo.to_string(Util::SEPARATOR);
-    _ofs << aLogInfo.to_json();
+    _ofs << aLogInfo.to_string(Util::SEPARATOR);
+    // _ofs << aLogInfo.to_json();
 }
 
 ENSClt::ENSClt(std::string const &aSockName) : _sockName (aSockName) {}

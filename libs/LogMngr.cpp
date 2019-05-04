@@ -68,8 +68,8 @@ void LogMngr::log(LogType aLogType, const char *fmt, ...)
     va_end (args);
 
     std::thread::id lKey = std::this_thread::get_id();
-    if(_ctx[lKey].empty()) _ctx[lKey] = _appName + Util::SEPARATOR + Util::to_string(lKey);
-    LogInfo lInfo = {aLogType, _indents[lKey], std::chrono::system_clock::now(), _ctx[lKey], std::move(lBuff), _appName };
+    if(_contexts[lKey].empty()) _contexts[lKey] = _appName + Util::SEPARATOR + Util::to_string(lKey);
+    LogInfo lInfo = {aLogType, _indents[lKey], std::chrono::system_clock::now(), _contexts[lKey], std::move(lBuff), _appName };
 
     if(_isAsync) _sigExport.emit_async(_pool, lInfo);
     else _sigExport.emit(lInfo);
@@ -133,11 +133,11 @@ ThreadPool::~ThreadPool()
     stop(true);
 }
 
-extern "C" void llt_log_init(LogMngr **aLogger, size_t aWorkerNum)
+extern "C" void llt_log_init(LogMngr **aLogger, size_t aWorkerNum, const char *aFileName)
 {
     *aLogger = new LogMngr({
             new EConsole(),
-            new EFile("run.log"),
+            new EFile(aFileName),
             // new EUDPClt(host, lPort),
             // new EUDPSvr(lSPort),
         }, aWorkerNum);

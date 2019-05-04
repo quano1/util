@@ -40,7 +40,7 @@ public:
 
     inline void reg_ctx(std::string aThreadName)
     {
-        _ctx[std::this_thread::get_id()] = _appName + Util::SEPARATOR + aThreadName;
+        _contexts[std::this_thread::get_id()] = _appName + Util::SEPARATOR + aThreadName;
     }
 
     inline void set_force_stop(bool aForceStop) 
@@ -69,7 +69,7 @@ protected:
     std::vector<Exporter *> _exporters;
 
     std::string _appName;
-    std::unordered_map<std::thread::id, std::string> _ctx;
+    std::unordered_map<std::thread::id, std::string> _contexts;
     std::unordered_map<std::thread::id, int> _indents;
 
     bool _isAsync=false;
@@ -106,6 +106,6 @@ public:
 
 #define TRACE(logger, FUNC) (logger)->log(llt::LogType::TRACE, #FUNC); llt::Tracer __##FUNC(logger, #FUNC)
 
-#define LOGI(logger, fmt, ...) (logger)->log(llt::LogType::INFO, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGW(logger, fmt, ...) (logger)->log(llt::LogType::WARN, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGE(logger, fmt, ...) (logger)->log(llt::LogType::ERROR, "%s %s %d " fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGI(logger, fmt, ...) (logger)->log(llt::LogType::INFO, "%s;%s;%d;" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGW(logger, fmt, ...) (logger)->log(llt::LogType::WARN, "%s;%s;%d;" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGE(logger, fmt, ...) (logger)->log(llt::LogType::ERROR, "%s;%s;%d;" fmt "", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
