@@ -73,10 +73,11 @@ struct Util
 
     static inline std::string format(char const *aFormat, va_list &aVars)
     {
-        std::string lBuff;
+        // std::string lBuff;
         char str[MAX_BUF_SIZE];
-        if (vsnprintf (str, sizeof str, aFormat, aVars) >= 0) lBuff = str;
-        return std::move(lBuff);
+        if (vsnprintf (str, sizeof str, aFormat, aVars) >= 0) return str;
+        return "";
+        // return std::move(lBuff);
     }
 
 }; // class Util
@@ -98,6 +99,7 @@ struct LogInfo
     {
         std::string lRet;
         lRet = Util::to_string<std::chrono::microseconds>(_now) + aSepa \
+                + _appName + aSepa \
                 + _context + aSepa \
                 + Util::to_string(_type) + aSepa  \
                 + std::to_string(_level) + aSepa \
