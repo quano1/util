@@ -7,7 +7,7 @@
 
 #include <cstring>
 
-int do_smt(int aLoop, int aThreadNums, int aDelay);
+void do_smt(int aLoop, int aThreadNums, int aDelay);
 
 std::string getCmdOption(int argc, char* argv[], const std::string& option)
 {
@@ -62,102 +62,21 @@ int main(int argc, char **argv)
 
     logger.set_async(1);
     logger.reg_app(argv[0]);
-    logger.reg_ctx("main");
+    // logger.reg_ctx("main");
     gpLog = &logger;
-
 
     TRACE(gpLog, MAIN);
 
     {
         // logger.reg_ctx("MAIN");
         {
-            TRACE(gpLog, MAIN);
+            TRACE(gpLog, MAIN2);
             do_smt(lLoop, lThreads, lDelay);
         }
 
         // logger.async_wait();
         // logger.deinit();
     }
-
-    // {
-    //     LogMngr logger;
-    //     logger.add(new EConsole());
-    //     // logger.add(new EFile("log_sync1.txt"));
-    //     // logger.add(new EUDPClt(host, lPort));
-
-    //     logger.init(1);
-    //     logger.reg_ctx("", "");
-
-    //     std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
-    //     for(int i=0; i<lLoop; i++)
-    //     {
-    //         logger.log_async(LogType::INFO, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-    //     }
-    //     std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
-    //     double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
-    //     ofs << "Sync1: " << diff << std::endl;
-
-    //     logger.deinit();
-    // }
-
-    // {
-    //     LogMngr logger;
-    //     logger.add(new EConsole());
-    //     // logger.add(new EFile("log_sync2.txt"));
-    //     // logger.add(new EUDPClt(host, lPort));
-
-    //     logger.init();
-    //     logger.reg_ctx("", "");
-
-    //     std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
-    //     for(int i=0; i<lLoop; i++)
-    //     {
-    //         logger.log(LogType::INFO, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-    //     }
-    //     std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
-    //     double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
-    //     ofs << "Sync2: " << diff << std::endl;
-
-    //     logger.deinit();
-    // }
-
-    // {
-
-    //     std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
-    //     for(int i=0; i<lLoop; i++)
-    //     {
-    //         printf("%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-    //     }
-    //     std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
-    //     double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
-    //     ofs << "Raw: " << diff << std::endl;
-
-    // }
-
-    // {
-    //     LogMngr loggerCons({new EConsole(), new EFile("log_cons.txt")});
-    //     LogMngr loggerFN({new EConsole(), new EUDPClt(host, lPort)});
-
-    //     loggerCons.init(1);
-    //     loggerCons.reg_ctx("Cons", "async");
-    //     loggerFN.init(1);
-    //     loggerFN.reg_ctx("FN", "async");
-
-    //     std::chrono::high_resolution_clock::time_point _tbeg = std::chrono::high_resolution_clock::now();
-    //     for(int i=0; i<lLoop; i++)
-    //     {
-    //         loggerCons.log_async(LogType::INFO, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-    //         loggerFN.log_async(LogType::INFO, "%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-    //     }
-    //     std::chrono::high_resolution_clock::time_point lNow = std::chrono::high_resolution_clock::now();
-    //     double diff = std::chrono::duration <double, std::milli> (lNow - _tbeg).count();
-    //     ofs << "Cons: " << diff << std::endl;
-
-    //     loggerCons.async_wait();
-    //     loggerCons.deinit();
-    //     loggerFN.async_wait();
-    //     loggerFN.deinit();
-    // }
 
     return 0;
 }

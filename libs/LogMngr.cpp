@@ -11,7 +11,7 @@ using namespace llt;
 
 LogMngr::LogMngr(std::vector<Exporter *> const &aExpList, size_t aWorkerNum)
 {
-    _appName = std::to_string((size_t)::getpid());
+    _appName = Util::to_string_hex((size_t)::getpid());
     for(auto _export : aExpList)
     {
         add(_export);
@@ -59,7 +59,7 @@ void LogMngr::add(Exporter *aExporter)
     lId = _sigDeinit.connect(Simple::slot(lIns, &Exporter::on_deinit));
 }
 
-void LogMngr::log(LogType aLogType, const std::string &aFile, const std::string &aFunction, int aLine, const char *fmt, ...)
+void LogMngr::log(LogType aLogType, const void *aThis, const std::string &aFile, const std::string &aFunction, int aLine, const char *fmt, ...)
 {
     if(_isAsync) LLT_ASSERT(_pool.worker_size(), "EMPTY WORKER");
     va_list args;
@@ -68,14 +68,14 @@ void LogMngr::log(LogType aLogType, const std::string &aFile, const std::string 
     va_end (args);
 
     std::thread::id lKey = std::this_thread::get_id();
-    if(_contexts[lKey].empty()) _contexts[lKey] = Util::to_string(lKey);
-    LogInfo lInfo = {aLogType, _levels[lKey], std::chrono::system_clock::now(), aFile, aFunction, aLine, _contexts[lKey], std::move(lBuff), _appName };
+    if(_contexts[lKey].empty()) _contexts[lKey] = Util::to_string_hex(lKey);
+    LogInfo lInfo = {aLogType, _levels[lKey], std::chrono::system_clock::now(), aFile, aFunction, aLine, _contexts[lKey], std::move(lBuff), _appName, aThis};
 
     if(_isAsync) _sigExport.emit_async(_pool, lInfo);
     else _sigExport.emit(lInfo);
 }
 
-void LogMngr::log(LogType aLogType, const char *fmt, ...)
+void LogMngr::log(LogType aLogType, const void *aThis, const char *fmt, ...)
 {
     if(_isAsync) LLT_ASSERT(_pool.worker_size(), "EMPTY WORKER");
     va_list args;
@@ -84,8 +84,8 @@ void LogMngr::log(LogType aLogType, const char *fmt, ...)
     va_end (args);
 
     std::thread::id lKey = std::this_thread::get_id();
-    if(_contexts[lKey].empty()) _contexts[lKey] = Util::to_string(lKey);
-    LogInfo lInfo = {aLogType, _levels[lKey], std::chrono::system_clock::now(), std::string(), std::string(), -1, _contexts[lKey], std::move(lBuff), _appName };
+    if(_contexts[lKey].empty()) _contexts[lKey] = Util::to_string_hex(lKey);
+    LogInfo lInfo = {aLogType, _levels[lKey], std::chrono::system_clock::now(), std::string(), std::string(), -1, _contexts[lKey], std::move(lBuff), _appName, aThis};
 
     if(_isAsync) _sigExport.emit_async(_pool, lInfo);
     else _sigExport.emit(lInfo);
@@ -164,13 +164,13 @@ extern "C" void llt_log_deinit(LogMngr *aLogger)
     if(aLogger) delete aLogger;
 }
 
-extern "C" void llt_log(LogMngr *aLogger, int aLogType, const char *aFile, const char *aFunction, int aLine, const char *fmt, ...)
+extern "C" void llt_log(LogMngr *aLogger, int aLogType, const void *aThis, const char *aFile, const char *aFunction, int aLine, const char *fmt, ...)
 {
     va_list args;
     va_start (args, fmt);
     std::string lBuff = Util::format(fmt, args);
     va_end (args);
-    aLogger->log(static_cast<LogType>(aLogType), aFile, aFunction, aLine, lBuff.data());
+    aLogger->log(static_cast<LogType>(aLogType), aThis, aFile, aFunction, aLine, lBuff.data());
 }
 
 extern "C" void llt_start_trace(LogMngr *aLogger, Tracer **aTracer, char const *aBuf)

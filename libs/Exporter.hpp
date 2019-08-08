@@ -42,6 +42,14 @@ struct Util
         return std::string(ss.str());
     }
 
+    template <typename T>
+    static inline std::string to_string_hex(T const &aVal)
+    {
+        std::ostringstream ss;
+        ss << "0x" << std::hex << aVal;
+        return std::string(ss.str());
+    }
+
     static inline std::string to_string(LogType aLogType)
     {
         switch(aLogType)
@@ -94,6 +102,7 @@ struct LogInfo
     std::string _context;
     std::string _content;
     std::string _appName;
+    void const *_this;
 
     inline std::string to_string(std::string aSepa="\t") const
     {
@@ -101,6 +110,7 @@ struct LogInfo
         lRet = Util::to_string<std::chrono::microseconds>(_now) + aSepa \
                 + _appName + aSepa \
                 + _context + aSepa \
+                + Util::to_string_hex(reinterpret_cast<uintptr_t>(_this)) + aSepa \
                 + Util::to_string(_type) + aSepa  \
                 + std::to_string(_level) + aSepa \
                 + _file + aSepa \
