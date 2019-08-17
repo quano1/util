@@ -2,7 +2,7 @@
 
 # head -n 9 test_lmngr.log | \
 
-dd if=test_lmngr.log iflag=skip_bytes,count_bytes,fullblock bs=4096 skip=0 count=4096 2> /tmp/null | \
+dd if=big.log iflag=skip_bytes,count_bytes,fullblock bs=4096 skip=0 count=4096 2> /tmp/null | \
 sort -t \; -k1 | \
 sed 's#/home/helloworld/workspace/util/tests/##g' | \
 awk -F  ";" '
