@@ -1,46 +1,17 @@
-1565279193600376;./test_lmngr;0x7f403b490740;0x0;TRAC;0;/home/helloworld/workspace/util/tests/test_lmngr.cpp;int main(int, char**);68;MAIN
-1565279193600392;./test_lmngr;0x7f403b490740;0x0;TRAC;1;/home/helloworld/workspace/util/tests/test_lmngr.cpp;int main(int, char**);73;MAIN2
-1565279193600396;./test_lmngr;0x7f403b490740;0x0;TRAC;2;/home/helloworld/workspace/util/tests/log2.cpp;void do_smt(int, int, int);40;THREADING
-1565279193600494;./test_lmngr;0x7f403b490740;0x0;TRAC;2;;;-1;~THREADING
-1565279193600534;./test_lmngr;0x7f4039260700;0x0;TRAC;0;/home/helloworld/workspace/util/tests/log2.cpp;do_smt(int, int, int)::<lambda()>;45;Thread
-1565279193600546;./test_lmngr;0x7f4039260700;0x0;INFO;1;/home/helloworld/workspace/util/tests/log2.cpp;do_smt(int, int, int)::<lambda()>;50;
-1565279193600550;./test_lmngr;0x7f4039260700;0x7f403925fd10;TRAC;1;/home/helloworld/workspace/util/tests/log2.cpp;void Base1::do_smt();13;_
-1565279193600566;./test_lmngr;0x7f4039260700;0x0;TRAC;1;;;-1;~_
-1565279193600570;./test_lmngr;0x7f4039260700;0x7f403925fd18;TRAC;1;/home/helloworld/workspace/util/tests/log2.cpp;void Base1::do_smt();13;_
-1565279193600573;./test_lmngr;0x7f4039260700;0x0;TRAC;1;;;-1;~_
-1565279193600581;./test_lmngr;0x7f4039260700;0x7f403925fd20;TRAC;1;/home/helloworld/workspace/util/tests/log2.cpp;void Base2::do_smt();28;_
-1565279193600573;./test_lmngr;0x7f4039a70700;0x0;TRAC;0;/home/helloworld/workspace/util/tests/log2.cpp;do_smt(int, int, int)::<lambda()>;45;Thread
-1565279193600586;./test_lmngr;0x7f4039260700;0x0;TRAC;1;;;-1;~_
-1565279193600588;./test_lmngr;0x7f4039a70700;0x0;INFO;1;/home/helloworld/workspace/util/tests/log2.cpp;do_smt(int, int, int)::<lambda()>;50;
-1565279193600593;./test_lmngr;0x7f4039a70700;0x7f4039a6fd10;TRAC;1;/home/helloworld/workspace/util/tests/log2.cpp;void Base1::do_smt();13;_
-1565279193600594;./test_lmngr;0x7f4039260700;0x7f403925fd28;TRAC;1;/home/helloworld/workspace/util/tests/log2.cpp;void Base2::do_smt();28;_
-1565279193600598;./test_lmngr;0x7f4039260700;0x0;TRAC;1;;;-1;~_
-1565279193600602;./test_lmngr;0x7f4039a70700;0x0;TRAC;1;;;-1;~_
-1565279193600601;./test_lmngr;0x7f4039260700;0x0;INFO;1;/home/helloworld/workspace/util/tests/log2.cpp;do_smt(int, int, int)::<lambda()>;50;
-1565279193600606;./test_lmngr;0x7f4039a70700;0x7f4039a6fd18;TRAC;1;/home/helloworld/workspace/util/tests/log2.cpp;void Base1::do_smt();13;_
-1565279193600610;./test_lmngr;0x7f4039a70700;0x0;TRAC;1;;;-1;~_
-1565279193600609;./test_lmngr;0x7f4039260700;0x7f403925fd10;TRAC;1;/home/helloworld/workspace/util/tests/log2.cpp;void Base1::do_smt();13;_
-1565279193600614;./test_lmngr;0x7f4039260700;0x0;TRAC;1;;;-1;~_
-1565279193600636;./test_lmngr;0x7f4039a70700;0x7f4039a6fd20;TRAC;1;/home/helloworld/workspace/util/tests/log2.cpp;void Base2::do_smt();28;_
-1565279193600640;./test_lmngr;0x7f4039a70700;0x0;TRAC;1;;;-1;~_
-1565279193600639;./test_lmngr;0x7f4039260700;0x7f403925fd18;TRAC;1;/home/helloworld/workspace/util/tests/log2.cpp;void Base1::do_smt();13;_
-1565279193600643;./test_lmngr;0x7f4039260700;0x0;TRAC;1;;;-1;~_
-1565279193600643;./test_lmngr;0x7f4039a70700;0x7f4039a6fd28;TRAC;1;/home/helloworld/workspace/util/tests/log2.cpp;void Base2::do_smt();28;_
-1565279193600652;./test_lmngr;0x7f4039a70700;0x0;TRAC;1;;;-1;~_
-1565279193600669;./test_lmngr;0x7f4039a70700;0x0;INFO;1;/home/helloworld/workspace/util/tests/log2.cpp;do_smt(int, int, int)::<lambda()>;50;
-1565279193600671;./test_lmngr;0x7f4039260700;0x7f403925fd20;TRAC;1;/home/helloworld/workspace/util/tests/log2.cpp;void Base2::do_smt();28;_
-1565279193600675;./test_lmngr;0x7f4039260700;0x0;TRAC;1;;;-1;~_
-1565279193600673;./test_lmngr;0x7f4039a70700;0x7f4039a6fd10;TRAC;1;/home/helloworld/workspace/util/tests/log2.cpp;void Base1::do_smt();13;_
-1565279193600685;./test_lmngr;0x7f4039a70700;0x0;TRAC;1;;;-1;~_
-1565279193600682;./test_lmngr;0x7f4039260700;0x7f403925fd28;TRAC;1;/home/helloworld/workspace/util/tests/log2.cpp;void Base2::do_smt();28;_
-1565279193600706;./test_lmngr;0x7f4039a70700;0x7f4039a6fd18;TRAC;1;/home/helloworld/workspace/util/tests/log2.cpp;void Base1::do_smt();13;_
-1565279193600709;./test_lmngr;0x7f4039260700;0x0;TRAC;1;;;-1;~_
-1565279193600726;./test_lmngr;0x7f4039260700;0x0;TRAC;0;;;-1;~Thread
-1565279193600728;./test_lmngr;0x7f4039a70700;0x0;TRAC;1;;;-1;~_
-1565279193600730;./test_lmngr;0x7f4039a70700;0x7f4039a6fd20;TRAC;1;/home/helloworld/workspace/util/tests/log2.cpp;void Base2::do_smt();28;_
-1565279193600735;./test_lmngr;0x7f4039a70700;0x0;TRAC;1;;;-1;~_
-1565279193600743;./test_lmngr;0x7f4039a70700;0x7f4039a6fd28;TRAC;1;/home/helloworld/workspace/util/tests/log2.cpp;void Base2::do_smt();28;_
-1565279193600747;./test_lmngr;0x7f4039a70700;0x0;TRAC;1;;;-1;~_
-1565279193600756;./test_lmngr;0x7f4039a70700;0x0;TRAC;0;;;-1;~Thread
-1565279193600871;./test_lmngr;0x7f403b490740;0x0;TRAC;1;;;-1;~MAIN2
-1565279193600875;./test_lmngr;0x7f403b490740;0x0;TRAC;0;;;-1;~MAIN
+1566040304557469;./test_lmngr;0x7fddacc10740;0x0;TRAC;0;/home/helloworld/workspace/util/tests/test_lmngr.cpp;main;68;MAIN
+1566040304557481;./test_lmngr;0x7fddacc10740;0x0;TRAC;1;/home/helloworld/workspace/util/tests/test_lmngr.cpp;main;73;MAIN2
+1566040304557485;./test_lmngr;0x7fddacc10740;0x0;TRAC;2;/home/helloworld/workspace/util/tests/log2.cpp;do_smt;43;THREADING
+1566040304557587;./test_lmngr;0x7fddacc10740;0x0;TRAC;2;;;-1;~THREADING
+1566040304557654;./test_lmngr;0x7fddab270700;0x0;TRAC;0;/home/helloworld/workspace/util/tests/log2.cpp;operator();48;Thread
+1566040304557661;./test_lmngr;0x7fddab270700;0x0;INFO;1;/home/helloworld/workspace/util/tests/log2.cpp;operator();53;
+1566040304557667;./test_lmngr;0x7fddab270700;0x7fddab26fdc8;TRAC;1;/home/helloworld/workspace/util/tests/log2.cpp;do_smt;14;_
+1566040304557683;./test_lmngr;0x7fddab270700;0x0;TRAC;2;/home/helloworld/workspace/util/tests/global.hpp;global1;9;_
+1566040304557685;./test_lmngr;0x7fddab270700;0x0;TRAC;2;;;-1;~_
+1566040304557687;./test_lmngr;0x7fddab270700;0x0;TRAC;1;;;-1;~_
+1566040304557688;./test_lmngr;0x7fddab270700;0x7fddab26fdd0;TRAC;1;/home/helloworld/workspace/util/tests/log2.cpp;do_smt;30;_
+1566040304557689;./test_lmngr;0x7fddab270700;0x0;TRAC;2;/home/helloworld/workspace/util/tests/global.hpp;global2;14;_
+1566040304557691;./test_lmngr;0x7fddab270700;0x0;TRAC;2;;;-1;~_
+1566040304557692;./test_lmngr;0x7fddab270700;0x0;TRAC;1;;;-1;~_
+1566040304557693;./test_lmngr;0x7fddab270700;0x0;TRAC;0;;;-1;~Thread
+1566040304557793;./test_lmngr;0x7fddacc10740;0x0;TRAC;1;;;-1;~MAIN2
+1566040304557796;./test_lmngr;0x7fddacc10740;0x0;TRAC;0;;;-1;~MAIN

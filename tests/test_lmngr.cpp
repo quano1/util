@@ -53,11 +53,11 @@ int main(int argc, char **argv)
 
     std::srand(std::time(nullptr));
     llt::LogMngr logger({ 
-            new llt::EConsole(),
+            // new llt::EConsole(),
             new llt::EFile(std::string(argv[0])+".log"), 
             // new llt::EUDPClt(host, lPort),
             // new llt::EUDPSvr(lSPort),
-            new llt::ENSClt("/tmp/llt.dgram"),
+            // new llt::ENSClt("/tmp/llt.dgram"),
         }, 1);
 
     logger.set_async(1);

@@ -103,12 +103,12 @@ public:
 #define LLT_ASSERT(cond, msg) if(!(cond)) throw std::runtime_error(msg)
 // #endif
 
-#define LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __PRETTY_FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGD(format, ...) printf("[Dbg] %s %s %d " format "\n", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
-#define TRACE(logger, FUNC) (logger)->log(llt::LogType::TRACE, nullptr, __FILE__, __PRETTY_FUNCTION__, __LINE__, #FUNC); llt::Tracer __##FUNC(logger, #FUNC)
+#define TRACE(logger, FUNC) (logger)->log(llt::LogType::TRACE, nullptr, __FILE__, __FUNCTION__, __LINE__, #FUNC); llt::Tracer __##FUNC(logger, #FUNC)
 
-#define LOGI(logger, fmt, ...) (logger)->log(llt::LogType::INFO, nullptr, __FILE__, __PRETTY_FUNCTION__, __LINE__, fmt "", ##__VA_ARGS__)
-#define LOGW(logger, fmt, ...) (logger)->log(llt::LogType::WARN, nullptr, __FILE__, __PRETTY_FUNCTION__, __LINE__, fmt "", ##__VA_ARGS__)
-#define LOGE(logger, fmt, ...) (logger)->log(llt::LogType::ERROR, nullptr, __FILE__, __PRETTY_FUNCTION__, __LINE__, fmt "", ##__VA_ARGS__)
+#define LOGI(logger, fmt, ...) (logger)->log(llt::LogType::INFO, nullptr, __FILE__, __FUNCTION__, __LINE__, fmt "", ##__VA_ARGS__)
+#define LOGW(logger, fmt, ...) (logger)->log(llt::LogType::WARN, nullptr, __FILE__, __FUNCTION__, __LINE__, fmt "", ##__VA_ARGS__)
+#define LOGE(logger, fmt, ...) (logger)->log(llt::LogType::ERROR, nullptr, __FILE__, __FUNCTION__, __LINE__, fmt "", ##__VA_ARGS__)
 
-#define TRACE_THIS(logger, FUNC) (logger)->log(llt::LogType::TRACE, this, __FILE__, __PRETTY_FUNCTION__, __LINE__, #FUNC); llt::Tracer __##FUNC(logger, #FUNC)
+#define TRACE_THIS(logger, FUNC) (logger)->log(llt::LogType::TRACE, this, __FILE__, __FUNCTION__, __LINE__, #FUNC); llt::Tracer __##FUNC(logger, #FUNC)
