@@ -6,8 +6,8 @@
 #include <fstream>
 
 #include <cstring>
-
-void do_smt(int aLoop, int aThreadNums, int aDelay);
+#include <Base.hpp>
+// void do_smt(int aLoop, int aThreadNums, int aDelay);
 
 std::string getCmdOption(int argc, char* argv[], const std::string& option)
 {
@@ -26,6 +26,33 @@ std::string getCmdOption(int argc, char* argv[], const std::string& option)
 }
 
 llt::LogMngr *gpLog;
+
+
+void create_thread(int aLoop, int aThreadNums, int aDelay)
+{
+    std::thread ts[aThreadNums];
+    {
+        TRACE(gpLog, THREADING);
+        for (auto &t : ts)
+            t = std::thread([aLoop,aDelay]()
+        {
+            // gpLog->reg_ctx("sub do_smt");
+            TRACE(gpLog, Thread);
+            Base1 b1;
+            Base2 b2;
+            for(int i=0; i<aLoop; i++)
+            {
+                LOGI(gpLog, "");
+                b1.do_smt();
+                b2.do_smt();
+                std::this_thread::sleep_for(std::chrono::microseconds(aDelay));
+            }
+        });
+    }
+        
+    for(auto &t : ts) t.join();
+}
+
 
 int main(int argc, char **argv)
 {
@@ -68,14 +95,11 @@ int main(int argc, char **argv)
     TRACE(gpLog, MAIN);
 
     {
-        // logger.reg_ctx("MAIN");
-        {
-            TRACE(gpLog, MAIN2);
-            do_smt(lLoop, lThreads, lDelay);
-        }
+        TRACE(gpLog, main_self_call);
+    }
 
-        // logger.async_wait();
-        // logger.deinit();
+    {
+        ::create_thread(lLoop, lThreads, lDelay);
     }
 
     return 0;

@@ -8,7 +8,7 @@ set(TARGET test_lmngr)
 
 set(TARGET_SRC
 	${PRJ_ROOT}/tests/test_lmngr.cpp
-	${PRJ_ROOT}/tests/log2.cpp
+	${PRJ_ROOT}/tests/Base.cpp
 )
 
 add_executable(${TARGET} ${TARGET_SRC} )
