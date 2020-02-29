@@ -9,7 +9,8 @@
 
 using namespace llt;
 
-LogMngr::LogMngr(std::vector<Exporter *> const &aExpList, size_t aWorkerNum)
+template <typename T>
+LogMngr::LogMngr(std::vector<Exporter<T> *> const &aExpList, size_t aWorkerNum)
 {
     _appName = Util::to_string_hex((size_t)::getpid());
     for(auto _export : aExpList)
@@ -50,13 +51,14 @@ void LogMngr::deinit()
     _sigDeinit.emit();
 }
 
-void LogMngr::add(Exporter *aExporter)
+template <typename T>
+void LogMngr::add(Exporter<T> *exporter)
 {
-    _exporters.push_back(aExporter);
-    Exporter *lIns = _exporters.back();
-    size_t lId = _sigExport.connect(Simple::slot(lIns, &Exporter::on_export));
-    lId = _sigInit.connect(Simple::slot(lIns, &Exporter::on_init));
-    lId = _sigDeinit.connect(Simple::slot(lIns, &Exporter::on_deinit));
+    _exporters.push_back(exporter);
+    Exporter<T> *lIns = _exporters.back();
+    size_t lId = _sigExport.connect(Simple::slot(lIns, &Exporter<T>::onExport));
+    lId = _sigInit.connect(Simple::slot(lIns, &Exporter<T>::onInit));
+    lId = _sigDeinit.connect(Simple::slot(lIns, &Exporter<T>::onDeinit));
 }
 
 void LogMngr::log(LogType aLogType, const void *aThis, const std::string &aFile, const std::string &aFunction, int aLine, const char *fmt, ...)

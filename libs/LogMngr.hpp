@@ -18,11 +18,12 @@ class LogMngr
 public:
 
     LogMngr() = default;
-    LogMngr(std::vector<Exporter *> const &, size_t);
-    virtual ~LogMngr();
+    template <typename T>
+    LogMngr(std::vector<Exporter<T> *> const &, size_t);
+    ~LogMngr();
 
-    virtual void log(LogType aLogType, const void *aThis, const std::string &aFile, const std::string &aFunction, int aLine, const char *fmt, ...);
-    virtual void log(LogType aLogType, const void *aThis, const char *fmt, ...);
+    void log(LogType aLogType, const void *aThis, const std::string &aFile, const std::string &aFunction, int aLine, const char *fmt, ...);
+    void log(LogType aLogType, const void *aThis, const char *fmt, ...);
 
     inline void inc_level()
     {
@@ -56,9 +57,10 @@ public:
 
 protected:
     
-    virtual void init();
-    virtual void deinit();
-    virtual void add(Exporter *);
+    void init();
+    void deinit();
+    template <typename T>
+    void add(Exporter<T> *);
 
     ThreadPool _pool;
     bool _forceStop=false;

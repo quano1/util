@@ -1,6 +1,8 @@
 #ifndef THREAD_POOL_HPP_
 #define THREAD_POOL_HPP_
 
+// https://github.com/progschj/ThreadPool
+
 #include <vector>
 #include <queue>
 #include <memory>
