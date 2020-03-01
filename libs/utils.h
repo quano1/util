@@ -56,21 +56,21 @@ size_t timestamp(typename C::time_point const &t)
 
 struct Timer
 {
-    using __clock = std::chrono::high_resolution_clock;
+    using _clock = std::chrono::high_resolution_clock;
 
-    Timer() : id_(""), begin_(__clock::now()) {}
-    Timer(std::string id) : id_(std::move(id)), begin_(__clock::now()) {printf(" (%ld)%s\n", ::utils::timestamp<__clock, std::milli>(__clock::now()), id_.data());}
+    Timer() : id_(""), begin_(_clock::now()) {}
+    Timer(std::string id) : id_(std::move(id)), begin_(_clock::now()) {printf(" (%ld)%s\n", ::utils::timestamp<_clock, std::milli>(_clock::now()), id_.data());}
     ~Timer()
     {
         if(!id_.empty())
-            printf(" (%ld)~%s: %.3f (ms)\n", ::utils::timestamp<__clock, std::milli>(__clock::now()), id_.data(), elapse<double,std::milli>());
+            printf(" (%ld)~%s: %.3f (ms)\n", ::utils::timestamp<_clock, std::milli>(_clock::now()), id_.data(), elapse<double,std::milli>());
     }
 
     template <typename T=double, typename D=std::milli>
     T reset()
     {
         T ret = elapse<T,D>();
-        begin_ = __clock::now();
+        begin_ = _clock::now();
         return ret;
     }
 
@@ -78,18 +78,18 @@ struct Timer
     T elapse() const
     {
         using namespace std::chrono;
-        return duration_cast<std::chrono::duration<T,D>>(__clock::now() - begin_).count();
+        return duration_cast<std::chrono::duration<T,D>>(_clock::now() - begin_).count();
     }
 
     template <typename T=double, typename D=std::milli>
     std::chrono::duration<T,D> duration() const
     {
         using namespace std::chrono;
-        auto ret = duration_cast<std::chrono::duration<T,D>>(__clock::now() - begin_);
+        auto ret = duration_cast<std::chrono::duration<T,D>>(_clock::now() - begin_);
         return ret;
     }
 
-    __clock::time_point begin_;
+    _clock::time_point begin_;
     std::string id_;
 };
 }

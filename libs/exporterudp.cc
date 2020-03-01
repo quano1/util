@@ -30,10 +30,10 @@
 
 namespace llt {
 
-// EUDPClt::EUDPClt(std::string &&aHost, uint16_t aPort) : host_(std::move(aHost)), _port(aPort) {}
-// EUDPClt::EUDPClt(std::string const &aHost, uint16_t aPort) : host_(aHost), _port(aPort) {}
+// LUDPClt::LUDPClt(std::string &&aHost, uint16_t aPort) : host_(std::move(aHost)), _port(aPort) {}
+// LUDPClt::LUDPClt(std::string const &aHost, uint16_t aPort) : host_(aHost), _port(aPort) {}
 
-int EUDPClt::onInit()
+int LUDPClt::onInit()
 {
     if(init_) return 1; 
     fd_ = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -61,26 +61,26 @@ int EUDPClt::onInit()
     return 0;
 }
 
-void EUDPClt::onDeinit()
+void LUDPClt::onDeinit()
 {
     if(fd_ > 0) close(fd_);
     init_=0;
 }
 
-void EUDPClt::onExport(LogInfo const &log)
+void LUDPClt::onExport(LogInfo const &log)
 {
     std::string json = log.toJson();
     size_t sent_bytes = sendto( fd_, json.data(), json.size(), 0, (sockaddr*)&svr_addr_, sizeof(sockaddr_in) );
 }
 
 
-// EUDPSvr::EUDPSvr(uint16_t aPort) : _port(aPort) {}
-// EUDPSvr::~EUDPSvr()
+// LUDPSvr::LUDPSvr(uint16_t aPort) : _port(aPort) {}
+// LUDPSvr::~LUDPSvr()
 // {
 //     onDeinit();
 // }
 
-int EUDPSvr::onInit()
+int LUDPSvr::onInit()
 {
     if(init_) return 1;
 
@@ -150,7 +150,7 @@ int EUDPSvr::onInit()
     return 0;
 }
 
-void EUDPSvr::onDeinit()
+void LUDPSvr::onDeinit()
 {
     if(!is_running_) return;
     is_running_ = false;
@@ -159,7 +159,7 @@ void EUDPSvr::onDeinit()
     init_=0;
 }
 
-void EUDPSvr::onExport(LogInfo const &log)
+void LUDPSvr::onExport(LogInfo const &log)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     std::string json = log.toJson();

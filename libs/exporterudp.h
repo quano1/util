@@ -18,11 +18,11 @@
 
 namespace llt {
 
-class EUDPClt : public Exporter<EUDPClt>
+class LUDPClt : public Logger<LUDPClt>
 {
 public:
-    EUDPClt(std::string host, uint16_t port) : host_(std::move(host)), port_(port) {}
-    ~EUDPClt() {onDeinit();}
+    LUDPClt(std::string host, uint16_t port) : host_(std::move(host)), port_(port) {}
+    ~LUDPClt() {onDeinit();}
     UTIL_INLINE int onInit();
     UTIL_INLINE void onDeinit();
     UTIL_INLINE void onExport(LogInfo const &);
@@ -34,11 +34,11 @@ protected:
     sockaddr_in svr_addr_;
 };
 
-class EUDPSvr : public Exporter<EUDPSvr>
+class LUDPSvr : public Logger<LUDPSvr>
 {
 public:
-    EUDPSvr(uint16_t port) : port_(port), is_running_(false) {}
-    ~EUDPSvr() { onDeinit(); }
+    LUDPSvr(uint16_t port) : port_(port), is_running_(false) {}
+    ~LUDPSvr() { onDeinit(); }
 
     UTIL_INLINE int onInit();
     UTIL_INLINE void onDeinit();

@@ -29,7 +29,7 @@ namespace llt {
 
 
 struct LogInfo;
-template <typename T> class Exporter;
+template <typename T> class Logger;
 
 enum class LogType : uint8_t
 {
@@ -103,56 +103,55 @@ struct Util
 
 struct LogInfo
 {
-    LogType _type;
-    int _level;
-    std::chrono::system_clock::time_point _now;
-    std::string _file;
-    std::string _function;
-    int _line;
-    std::string _context;
-    std::string _content;
-    std::string _appName;
-    void const *_this;
+    LogType type_; //< log type
+    size_t timestamp_; //< timestamp
+    std::string tid_; //< process id, thread id
+    std::string pid_; //< process id, thread id
+    std::string logger_; //< address of logger
+    std::string file_; //< file, function, line
+    std::string func_; //< file, function, line
+    std::string line_; //< file, function, line
+    std::string message_; //< log message
 
     inline std::string to_string(std::string aSepa="\t") const
     {
-        std::string lRet;
-        lRet = Util::to_string<std::chrono::microseconds>(_now) + aSepa \
-                + _appName + aSepa \
-                + _context + aSepa \
-                + Util::to_string_hex(reinterpret_cast<uintptr_t>(_this)) + aSepa \
-                + Util::to_string(_type) + aSepa  \
-                + std::to_string(_level) + aSepa \
-                + _file + aSepa \
-                + _function + aSepa \
-                + Util::to_string(_line) + aSepa \
-                + /*std::string(_level * 2, aSepa) +*/ _content + "\n";
-        return lRet;
+        std::string ret;
+        // ret = Util::to_string<std::chrono::microseconds>(_now) + aSepa \
+        //         + pid_ + aSepa \
+        //         + tid_ + aSepa \
+        //         + Util::to_string_hex(reinterpret_cast<uintptr_t>(_this)) + aSepa \
+        //         + Util::to_string(type_) + aSepa  \
+        //         + std::to_string(_level) + aSepa \
+        //         + _file + aSepa \
+        //         + _function + aSepa \
+        //         + Util::to_string(_line) + aSepa \
+        //         + /*std::string(_level * 2, aSepa) +*/ content_ + "\n";
+        return ret;
     }
 
     inline std::string toJson() const
     {
-        std::string lRet;
-        lRet = "{";
-        lRet += "\"now\":" + Util::to_string<std::chrono::microseconds>(_now) + ",";
-        lRet += "\"type\":" + std::to_string((uint8_t)_type) + ",";
-        lRet += "\"indent\":" + std::to_string(_level) + ",";
-        lRet += "\"appName\":\"" + _appName + "\",";
-        lRet += "\"context\":\"" + _context + "\",";
-        lRet += "\"content\":\"" + _content + "\"";
-        lRet += "},\n";
-        return lRet;
+        std::string ret;
+        // ret = "{";
+        // ret += "\"now\":" + Util::to_string<std::chrono::microseconds>(_now) + ",";
+        // ret += "\"type\":" + std::to_string((uint8_t)type_) + ",";
+        // ret += "\"indent\":" + std::to_string(_level) + ",";
+        // ret += "\"appName\":\"" + pid_ + "\",";
+        // ret += "\"context\":\"" + tid_ + "\",";
+        // ret += "\"content\":\"" + content_ + "\"";
+        // ret += "},\n";
+        return ret;
     }
 
 };
 
 
 template <typename T>
-class Exporter : public crtp<T, Exporter>
+class Logger : public crtp<T, Logger>
 {
 public:
-    // ~Exporter()=default;
-    void onExport(LogInfo const &log) { return this->underlying().onExport(log); }
+    // ~Logger()=default;
+    void onLog(LogInfo const &log) { return this->underlying().onLog(log); }
     int onInit() { return this->underlying().onInit(); }
     void onDeinit() { return this->underlying().onDeinit(); }
 protected:
@@ -160,38 +159,38 @@ protected:
     uint8_t init_=0;
 };
 
-class EConsole : public Exporter<EConsole>
+class LConsole : public Logger<LConsole>
 {
 public:
     UTIL_INLINE int onInit();
     UTIL_INLINE void onDeinit();
-    UTIL_INLINE void onExport(LogInfo const&);
+    UTIL_INLINE void onLog(LogInfo const&);
 };
 
-class EFile : public Exporter<EFile>
+class LFile : public Logger<LFile>
 {
 public:
-    EFile(std::string file_name) : file_ (std::move(file_name)) {}
-    ~EFile() {onDeinit();}
+    LFile(std::string file_name) : file_ (std::move(file_name)) {}
+    ~LFile() {onDeinit();}
 
     UTIL_INLINE int onInit();
     UTIL_INLINE void onDeinit();
-    UTIL_INLINE void onExport(LogInfo const&);
+    UTIL_INLINE void onLog(LogInfo const&);
 
 protected:
     std::ofstream ofs_;
     std::string file_;
 };
 
-class ENSClt : public Exporter<ENSClt>
+class LNSClt : public Logger<LNSClt>
 {
 public:
-    ENSClt(std::string sock_name) : sock_(std::move(sock_name)) {} ;
-    ~ENSClt() { onDeinit(); }
+    LNSClt(std::string sock_name) : sock_(std::move(sock_name)) {} ;
+    ~LNSClt() { onDeinit(); }
 
     UTIL_INLINE int onInit();
     UTIL_INLINE void onDeinit();
-    UTIL_INLINE void onExport(LogInfo const&);
+    UTIL_INLINE void onLog(LogInfo const&);
 
 protected:
     int fd_;
@@ -199,6 +198,14 @@ protected:
     sockaddr_un svr_addr_;
 };
 
+class LogSystem
+{
+public:
+    UTIL_INLINE size_t log(LogInfo const &);
+
+protected:
+    
+};
 
 } // llt
 

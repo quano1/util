@@ -31,18 +31,18 @@ namespace llt {
 
 std::string const Util::SEPARATOR = ";";
 
-int EConsole::onInit() { if(init_) return 1; init_ = 1; return 0; }
-void EConsole::onDeinit() { }
-void EConsole::onExport(LogInfo const &log)
+int LConsole::onInit() { if(init_) return 1; init_ = 1; return 0; }
+void LConsole::onDeinit() { }
+void LConsole::onLog(LogInfo const &log)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     std::cout << log.to_string(Util::SEPARATOR);
 }
 
-// EFile::EFile(std::string const &aFile) : file_ (aFile) {}
-// EFile::EFile(std::string &&aFile) : file_ (std::move(aFile)) {}
+// LFile::LFile(std::string const &aFile) : file_ (aFile) {}
+// LFile::LFile(std::string &&aFile) : file_ (std::move(aFile)) {}
 
-int EFile::onInit()
+int LFile::onInit()
 {
     if(init_) return 1; 
     init_ = 1;
@@ -51,7 +51,7 @@ int EFile::onInit()
     return 0;
 }
 
-void EFile::onDeinit()
+void LFile::onDeinit()
 {
     if(ofs_.is_open())
     {
@@ -61,17 +61,17 @@ void EFile::onDeinit()
     init_=0;
 }
 
-void EFile::onExport(LogInfo const &log)
+void LFile::onLog(LogInfo const &log)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     ofs_ << log.to_string(Util::SEPARATOR);
     // ofs_ << log.toJson();
 }
 
-// // ENSClt::ENSClt(std::string const &aSockName) : sock_ (aSockName) {}
-// // ENSClt::ENSClt(std::string &&aSockName) : sock_ (std::move(aSockName)) {}
+// // LNSClt::LNSClt(std::string const &aSockName) : sock_ (aSockName) {}
+// // LNSClt::LNSClt(std::string &&aSockName) : sock_ (std::move(aSockName)) {}
 
-int ENSClt::onInit() 
+int LNSClt::onInit() 
 { 
     if(init_) return 1; 
     init_ = 1;
@@ -94,8 +94,8 @@ int ENSClt::onInit()
     return ret;
 }
 
-void ENSClt::onDeinit() { if(fd_ > 0) close(fd_); init_=0; }
-void ENSClt::onExport(LogInfo const &log)
+void LNSClt::onDeinit() { if(fd_ > 0) close(fd_); init_=0; }
+void LNSClt::onLog(LogInfo const &log)
 {
     std::string json = log.toJson();
     /*size_t sent_bytes = */sendto( fd_, json.data(), json.size(), 0, (sockaddr *)&svr_addr_, sizeof(sockaddr_un) );
