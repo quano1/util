@@ -6,6 +6,8 @@
 #include <unordered_map>
 #include <string>
 #include <sstream>
+#include <atomic>
+#include <cstring>
 
 #define LOGPD(format, ...) printf("[D](%ld)%s(%s:%d)(%s):" format "\n", ::utils::timestamp<std::chrono::high_resolution_clock, std::milli>(std::chrono::high_resolution_clock::now()), __FILE__, __PRETTY_FUNCTION__, __LINE__, ::utils::tid().data(), ##__VA_ARGS__)
 #define LOGD(format, ...) printf("[D](%ld)%s(%s:%d)(%s):" format "\n", ::utils::timestamp<std::chrono::high_resolution_clock, std::milli>(std::chrono::high_resolution_clock::now()), __FILE__, __FUNCTION__, __LINE__, ::utils::tid().data(), ##__VA_ARGS__)
@@ -48,10 +50,16 @@ inline std::string tid()
     return ss.str();
 }
 
+// template <typename C=std::chrono::high_resolution_clock, typename D=std::ratio<1,1>>
+// size_t timestamp()
+// {
+//     return std::chrono::duration_cast<std::chrono::duration<size_t,D>>(C::now().time_since_epoch()).count();
+// }
+
 template <typename C=std::chrono::high_resolution_clock, typename D=std::ratio<1,1>>
-size_t timestamp(typename C::time_point const &t)
+size_t timestamp(typename C::time_point &&t = C::now())
 {
-    return std::chrono::duration_cast<std::chrono::duration<size_t,D>>(t.time_since_epoch()).count();
+    return std::chrono::duration_cast<std::chrono::duration<size_t,D>>(std::forward<typename C::time_point>(t).time_since_epoch()).count();
 }
 
 struct Timer
@@ -59,11 +67,11 @@ struct Timer
     using _clock = std::chrono::high_resolution_clock;
 
     Timer() : id_(""), begin_(_clock::now()) {}
-    Timer(std::string id) : id_(std::move(id)), begin_(_clock::now()) {printf(" (%ld)%s\n", ::utils::timestamp<_clock, std::milli>(_clock::now()), id_.data());}
+    Timer(std::string id) : id_(std::move(id)), begin_(_clock::now()) {printf(" (%ld)%s\n", ::utils::timestamp<_clock, std::milli>(), id_.data());}
     ~Timer()
     {
         if(!id_.empty())
-            printf(" (%ld)~%s: %.3f (ms)\n", ::utils::timestamp<_clock, std::milli>(_clock::now()), id_.data(), elapse<double,std::milli>());
+            printf(" (%ld)~%s: %.3f (ms)\n", ::utils::timestamp<_clock, std::milli>(), id_.data(), elapse<double,std::milli>());
     }
 
     template <typename T=double, typename D=std::milli>
@@ -92,4 +100,240 @@ struct Timer
     _clock::time_point begin_;
     std::string id_;
 };
+
+/// format
+template <typename T>
+T Argument(T value) noexcept
+{
+    return value;
 }
+
+template <typename T>
+T const * Argument(std::basic_string<T> const & value) noexcept
+{
+    return value.data();
+}
+
+template <typename ... Args>
+int StringPrint(char * const buffer,
+                size_t const bufferCount,
+                char const * const format,
+                Args const & ... args) noexcept
+{
+    int const result = snprintf(buffer,
+                              bufferCount,
+                              format,
+                              Argument(args) ...);
+    // assert(-1 != result);
+    return result;
+}
+
+template <typename ... Args>
+int StringPrint(wchar_t * const buffer,
+                size_t const bufferCount,
+                wchar_t const * const format,
+                Args const & ... args) noexcept
+{
+    int const result = swprintf(buffer,
+                              bufferCount,
+                              format,
+                              Argument(args) ...);
+    // assert(-1 != result);
+    return result;
+}
+
+template <typename T, typename ... Args>
+std::basic_string<T> Format(
+            size_t size,
+            T const * const format,
+            Args const & ... args)
+{
+    std::basic_string<T> buffer;
+    // size_t const size = StringPrint(&buffer[0],
+    //                               buffer.size() + 1,
+    //                               format,
+    //                               args ...);
+    // if (size > 0)
+    {
+        buffer.reserve(size);
+        StringPrint(&buffer[0], size + 1, format, args ...);
+    }
+
+    return buffer;
+}
+
+template <typename T, typename ... Args>
+std::basic_string<T> Format(
+            T const * const format,
+            Args const & ... args)
+{
+    std::basic_string<T> buffer;
+    size_t const size = StringPrint(&buffer[0],
+                                  buffer.size() + 1,
+                                  format,
+                                  args ...);
+    if (size > 0)
+    {
+        buffer.resize(size);
+        StringPrint(&buffer[0], buffer.size() + 1, format, args ...);
+    }
+
+    return buffer;
+}
+
+inline uint32_t nextPowerOf2(uint32_t val)
+{
+    val--;
+    val |= val >> 1;
+    val |= val >> 2;
+    val |= val >> 4;
+    val |= val >> 8;
+    val |= val >> 16;
+    val++;
+    return val;
+}
+
+inline bool powerOf2(uint32_t val)
+{
+    return (val & (val - 1)) == 0;
+}
+
+template <typename T>
+class BSDLFQ
+{
+public:
+    BSDLFQ(uint32_t queue_size) : prod_tail_(0), prod_head_(0), cons_tail_(0), cons_head_(0)
+    {
+        queue_size_ = powerOf2(queue_size) ? queue_size : nextPowerOf2(queue_size);
+        buff_.resize(queue_size_);
+    }
+
+    void pop(T &elem)
+    {
+        uint32_t cons_head = cons_head_.load(std::memory_order_relaxed);
+        for(;;)
+        {
+            if (cons_head == prod_tail_.load(std::memory_order_relaxed))
+                continue;
+
+            if(cons_head_.compare_exchange_strong(cons_head, cons_head + 1, std::memory_order_relaxed))
+                break;
+        }
+        // memcpy(buff, buff_ + (elem_size_ * wrap(cons_head)), elem_size_);
+        elem = buff_[wrap(cons_head)];
+        while (cons_tail_.load(std::memory_order_relaxed) != cons_head);
+
+        cons_tail_.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    void push(T elem)
+    {
+        uint32_t prod_head = prod_head_.load(std::memory_order_relaxed);
+        for(;;)
+        {
+            if (prod_head == (cons_tail_.load(std::memory_order_relaxed) + queue_size_))
+                continue;
+
+            if(prod_head_.compare_exchange_strong(prod_head, prod_head + 1, std::memory_order_relaxed))
+                break;
+        }
+        // memcpy(buff_, buff + (elem_size_ * wrap(prod_head)), elem_size_);
+        buff_[wrap(prod_head)] = elem;
+        while (prod_tail_.load(std::memory_order_relaxed) != prod_head);
+
+        prod_tail_.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    inline bool tryPop(uint32_t &cons_head)
+    {
+        cons_head = cons_head_.load(std::memory_order_relaxed);
+    
+        for(;;)
+        {
+            if (cons_head == prod_tail_.load(std::memory_order_relaxed))
+                return false;
+
+            if(cons_head_.compare_exchange_strong(cons_head, cons_head + 1, std::memory_order_relaxed))
+                return true;
+        }
+
+        return false;
+    }
+
+    inline bool completePop(uint32_t cons_head)
+    {
+        while (cons_tail_.load(std::memory_order_relaxed) != cons_head);
+        cons_tail_.fetch_add(1, std::memory_order_relaxed);
+
+        return true;
+    }
+
+    inline bool tryPush(uint32_t &prod_head)
+    {
+        prod_head = prod_head_.load(std::memory_order_relaxed);
+    
+        for(;;)
+        {
+            if (prod_head == (cons_tail_.load(std::memory_order_relaxed) + queue_size_))
+                return false;
+
+            if(prod_head_.compare_exchange_strong(prod_head, prod_head + 1, std::memory_order_relaxed))
+                return true;
+        }
+        return false;
+    }
+
+    inline bool completePush(uint32_t prod_head)
+    {
+        while (prod_tail_.load(std::memory_order_relaxed) != prod_head);
+
+        prod_tail_.fetch_add(1, std::memory_order_relaxed);
+        return true;
+    }
+
+    inline uint32_t available() const
+    {
+        return prod_tail_.load(std::memory_order_relaxed) - cons_tail_.load(std::memory_order_relaxed);
+    }
+
+    inline uint32_t wrap(uint32_t a_index) const
+    {
+        return a_index & (queue_size_ - 1);
+    }
+
+    inline uint32_t queue_size() const { return queue_size_; }
+
+    // inline void *&buff()
+    // {
+    //     return buff_;
+    // }
+
+    inline T &buff(uint32_t index)
+    {
+        return buff_[index];
+    }
+
+    inline T const &buff(uint32_t index) const
+    {
+        return buff_[index];
+    }
+
+    // inline size_t &elemSize()
+    // {
+    //     return elem_size_;
+    // }
+
+    // inline size_t elemSize() const
+    // {
+    //     return elem_size_;
+    // }
+
+private:
+
+    std::atomic<uint32_t> prod_tail_, prod_head_, cons_tail_, cons_head_;
+    uint32_t queue_size_;
+    std::vector<T> buff_;
+    // size_t elem_size_;
+};
+
+} /// utils
