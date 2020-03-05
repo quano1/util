@@ -36,26 +36,13 @@ enum class LogType : uint8_t
     kFatal,
 };
 
-struct LogInfo
-{
-    LogType type;
-    // size_t timestamp;
-    // std::string context;
-    std::string message;
-
-    friend std::string to_string(LogInfo const &log)
-    {
-        return utils::Format("[%d]%s", log.type, log.message);
-    }
-};
-
-template <unsigned int delay>
+template <uint32_t elem_size, uint32_t num_of_elem, uint32_t delay>
 class Logger
 {
 public:
-    Logger() : lf_queue_(0x1000), is_running_(true)
+    Logger() : lf_queue_(num_of_elem), is_running_(true), is_dirty_(false)
     {
-        grabber = std::thread([this]()
+        writer_ = std::thread([this]()
         {
             while(is_running_)
             {
@@ -67,17 +54,28 @@ public:
                     continue;
                 }
                 if(!is_running_) return;
-                std::string log_message = to_string(lf_queue_.buff(cons_head));
+                
+                std::string log_message(lf_queue_.buff(cons_head));
                 lf_queue_.completePop(cons_head);
+                if(is_dirty_)
+                {
+                    is_dirty_ = false;
+                    for(auto fd : add_reqs_) fds_.insert(fd);
+                    for(auto fd : rem_reqs_) fds_.erase(fd);
+
+                    add_reqs_.clear();
+                    rem_reqs_.clear();
+                }
                 for(auto fd : fds_)
-                    write(fd, log_message.data(), log_message.size());
+                    auto size = write(fd, log_message.data(), log_message.size());
             }
         });
     }
+    
     ~Logger() 
     {
         is_running_ = false;
-        grabber.join();
+        writer_.join();
     }
 
     inline void join()
@@ -86,34 +84,48 @@ public:
             std::this_thread::sleep_for(std::chrono::microseconds(delay));
     }
 
-    template <LogType type, typename... Args>
-    void log(const char *format, Args &&... args)
+    template <typename... Args>
+    void log(const char *format, Args &&...args)
     {
-        lf_queue_.push({
-            .type = type,
-            // .timestamp = utils::timestamp(),
-            // .context = ::utils::tid(),
-            .message = utils::Format(format, std::forward<Args>(args)...)
-        });
+        lf_queue_.push(utils::Format(format, std::forward<Args>(args)...).data());
+    }
+
+    template <typename ... Fds>
+    void add(int fd, Fds ...fds)
+    {
+        add_reqs_.push_back(fd);
+        add(fds...);
     }
 
     inline void add(int fd)
     {
-        join();
-        fds_.insert(fd);
+        // join();
+        // fds_.insert(fd);
+        add_reqs_.push_back(fd);
+        is_dirty_ = true;
     }
 
+    template <typename ... Fds>
+    void rem(int fd, Fds ...fds)
+    {
+        rem_reqs_.push_back(fd);
+        rem(fds...);
+    }
     inline void rem(int fd)
     {
-        join();
-        fds_.erase(fd);
+        // join();
+        // fds_.erase(fd);
+        rem_reqs_.push_back(fd);
+        is_dirty_ = true;
     }
 
-    utils::BSDLFQ<LogInfo> lf_queue_;
+    utils::BSDLFQ<elem_size> lf_queue_;
+    bool is_dirty_;
     bool is_running_;
-    std::thread grabber;
-    // std::vector<int> fds_;
+    std::thread writer_;
     std::unordered_set<int> fds_;
+    std::vector<int> add_reqs_;
+    std::vector<int> rem_reqs_;
 };
 
 } // llt

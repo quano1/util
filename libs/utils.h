@@ -156,7 +156,7 @@ std::basic_string<T> Format(
     // if (size > 0)
     {
         buffer.reserve(size);
-        StringPrint(&buffer[0], size + 1, format, args ...);
+        StringPrint(&buffer[0], buffer.size() + 1, format, args ...);
     }
 
     return buffer;
@@ -168,10 +168,8 @@ std::basic_string<T> Format(
             Args const & ... args)
 {
     std::basic_string<T> buffer;
-    size_t const size = StringPrint(&buffer[0],
-                                  buffer.size() + 1,
-                                  format,
-                                  args ...);
+    // size_t const size = 0x100;
+    size_t const size = StringPrint(&buffer[0], 0, format, args ...);
     if (size > 0)
     {
         buffer.resize(size);
@@ -198,17 +196,17 @@ inline bool powerOf2(uint32_t val)
     return (val & (val - 1)) == 0;
 }
 
-template <typename T>
+template <uint32_t elem_size>
 class BSDLFQ
 {
 public:
     BSDLFQ(uint32_t queue_size) : prod_tail_(0), prod_head_(0), cons_tail_(0), cons_head_(0)
     {
         queue_size_ = powerOf2(queue_size) ? queue_size : nextPowerOf2(queue_size);
-        buff_.resize(queue_size_);
+        buff_.resize(queue_size_ * elem_size);
     }
 
-    void pop(T &elem)
+    void pop(char *elem)
     {
         uint32_t cons_head = cons_head_.load(std::memory_order_relaxed);
         for(;;)
@@ -219,14 +217,15 @@ public:
             if(cons_head_.compare_exchange_strong(cons_head, cons_head + 1, std::memory_order_relaxed))
                 break;
         }
-        // memcpy(buff, buff_ + (elem_size_ * wrap(cons_head)), elem_size_);
-        elem = buff_[wrap(cons_head)];
+        memcpy(elem, &buff_[elem_size * wrap(cons_head)], elem_size);
+        // elem = buff_[wrap(cons_head)];
+
         while (cons_tail_.load(std::memory_order_relaxed) != cons_head);
 
         cons_tail_.fetch_add(1, std::memory_order_relaxed);
     }
 
-    void push(T elem)
+    void push(char const *elem)
     {
         uint32_t prod_head = prod_head_.load(std::memory_order_relaxed);
         for(;;)
@@ -237,8 +236,8 @@ public:
             if(prod_head_.compare_exchange_strong(prod_head, prod_head + 1, std::memory_order_relaxed))
                 break;
         }
-        // memcpy(buff_, buff + (elem_size_ * wrap(prod_head)), elem_size_);
-        buff_[wrap(prod_head)] = elem;
+        memcpy(&buff_[elem_size * wrap(prod_head)], elem, elem_size);
+        // buff_[wrap(prod_head)] = elem;
         while (prod_tail_.load(std::memory_order_relaxed) != prod_head);
 
         prod_tail_.fetch_add(1, std::memory_order_relaxed);
@@ -296,9 +295,9 @@ public:
         return prod_tail_.load(std::memory_order_relaxed) - cons_tail_.load(std::memory_order_relaxed);
     }
 
-    inline uint32_t wrap(uint32_t a_index) const
+    inline uint32_t wrap(uint32_t index) const
     {
-        return a_index & (queue_size_ - 1);
+        return index & (queue_size_ - 1);
     }
 
     inline uint32_t queue_size() const { return queue_size_; }
@@ -308,32 +307,32 @@ public:
     //     return buff_;
     // }
 
-    inline T &buff(uint32_t index)
+    inline char *buff(uint32_t index)
     {
-        return buff_[index];
+        return &buff_[elem_size * wrap(index)];
     }
 
-    inline T const &buff(uint32_t index) const
+    inline char const *buff(uint32_t index) const
     {
-        return buff_[index];
+        return &buff_[elem_size * wrap(index)];
     }
 
     // inline size_t &elemSize()
     // {
-    //     return elem_size_;
+    //     return elem_size;
     // }
 
-    // inline size_t elemSize() const
-    // {
-    //     return elem_size_;
-    // }
+    inline uint32_t elemSize() const
+    {
+        return elem_size;
+    }
 
 private:
 
     std::atomic<uint32_t> prod_tail_, prod_head_, cons_tail_, cons_head_;
     uint32_t queue_size_;
-    std::vector<T> buff_;
-    // size_t elem_size_;
+    // size_t elem_size;
+    std::vector<char> buff_;
 };
 
 } /// utils
