@@ -67,11 +67,13 @@ public:
                     rem_reqs_.clear();
                 }
                 for(auto fd : fds_)
+                {
                     auto size = write(fd, log_message.data(), log_message.size());
+                }
             }
         });
     }
-    
+
     ~Logger() 
     {
         is_running_ = false;
@@ -87,7 +89,8 @@ public:
     template <typename... Args>
     void log(const char *format, Args &&...args)
     {
-        lf_queue_.push(utils::Format(format, std::forward<Args>(args)...).data());
+        std::string log_msg = utils::Format(elem_size, format, std::forward<Args>(args)...);
+        lf_queue_.push(log_msg.data());
     }
 
     template <typename ... Fds>

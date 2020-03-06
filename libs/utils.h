@@ -149,16 +149,9 @@ std::basic_string<T> Format(
             Args const & ... args)
 {
     std::basic_string<T> buffer;
-    // size_t const size = StringPrint(&buffer[0],
-    //                               buffer.size() + 1,
-    //                               format,
-    //                               args ...);
-    // if (size > 0)
-    {
-        buffer.reserve(size);
-        StringPrint(&buffer[0], buffer.size() + 1, format, args ...);
-    }
-
+    buffer.resize(size);
+    int len = StringPrint(&buffer[0], buffer.size(), format, args ...);
+    buffer.resize(len);
     return buffer;
 }
 
@@ -211,7 +204,7 @@ public:
         uint32_t cons_head = cons_head_.load(std::memory_order_relaxed);
         for(;;)
         {
-            if (cons_head == prod_tail_.load(std::memory_order_relaxed))
+            if (cons_head == prod_tail_.load(std::memory_order_acquire))
                 continue;
 
             if(cons_head_.compare_exchange_strong(cons_head, cons_head + 1, std::memory_order_relaxed))
@@ -222,7 +215,7 @@ public:
 
         while (cons_tail_.load(std::memory_order_relaxed) != cons_head);
 
-        cons_tail_.fetch_add(1, std::memory_order_relaxed);
+        cons_tail_.fetch_add(1, std::memory_order_release);
     }
 
     void push(char const *elem)
@@ -230,7 +223,7 @@ public:
         uint32_t prod_head = prod_head_.load(std::memory_order_relaxed);
         for(;;)
         {
-            if (prod_head == (cons_tail_.load(std::memory_order_relaxed) + queue_size_))
+            if (prod_head == (cons_tail_.load(std::memory_order_acquire) + queue_size_))
                 continue;
 
             if(prod_head_.compare_exchange_strong(prod_head, prod_head + 1, std::memory_order_relaxed))
@@ -240,7 +233,7 @@ public:
         // buff_[wrap(prod_head)] = elem;
         while (prod_tail_.load(std::memory_order_relaxed) != prod_head);
 
-        prod_tail_.fetch_add(1, std::memory_order_relaxed);
+        prod_tail_.fetch_add(1, std::memory_order_release);
     }
 
     inline bool tryPop(uint32_t &cons_head)
@@ -249,7 +242,7 @@ public:
     
         for(;;)
         {
-            if (cons_head == prod_tail_.load(std::memory_order_relaxed))
+            if (cons_head == prod_tail_.load(std::memory_order_acquire))
                 return false;
 
             if(cons_head_.compare_exchange_strong(cons_head, cons_head + 1, std::memory_order_relaxed))
@@ -262,8 +255,8 @@ public:
     inline bool completePop(uint32_t cons_head)
     {
         while (cons_tail_.load(std::memory_order_relaxed) != cons_head);
-        cons_tail_.fetch_add(1, std::memory_order_relaxed);
-
+        
+        cons_tail_.fetch_add(1, std::memory_order_release);
         return true;
     }
 
@@ -273,7 +266,7 @@ public:
     
         for(;;)
         {
-            if (prod_head == (cons_tail_.load(std::memory_order_relaxed) + queue_size_))
+            if (prod_head == (cons_tail_.load(std::memory_order_acquire) + queue_size_))
                 return false;
 
             if(prod_head_.compare_exchange_strong(prod_head, prod_head + 1, std::memory_order_relaxed))
@@ -286,7 +279,7 @@ public:
     {
         while (prod_tail_.load(std::memory_order_relaxed) != prod_head);
 
-        prod_tail_.fetch_add(1, std::memory_order_relaxed);
+        prod_tail_.fetch_add(1, std::memory_order_release);
         return true;
     }
 
