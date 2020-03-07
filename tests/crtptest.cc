@@ -28,7 +28,8 @@ int main(int argc, char const *argv[])
 	{
 		TIMER(logger);
 		Logger<0x400, 0x1000, 0> lg;
-		lg.add(1, fdraw1, fdraw2, fdraw3);
+		lg.add(1);
+		lg.add(fdraw1);
 		for(int i=0; i<std::stoi(argv[1]); i++)
 			lg.log("[%d]%ld:%s:%s:%d[%s](%d %s)\n", (int)LogType::kInfo, utils::timestamp(), __FILE__, __FUNCTION__, __LINE__, utils::tid(), 10, "oi troi oi");
 		lg.join();

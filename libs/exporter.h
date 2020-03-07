@@ -16,7 +16,7 @@
 #include <unistd.h> // close
 #include <sys/socket.h>
 #include <sys/un.h>
-
+#include <functional>
 #include "utils.h"
 
 #ifndef STATIC_LIB
@@ -47,18 +47,23 @@ public:
             while(is_running_)
             {
                 using namespace std;
-                uint32_t cons_head;
-                while(!lf_queue_.tryPop(cons_head) && is_running_)
+                // uint32_t head;
+                // while(!lf_queue_.tryPop(head) && is_running_)
+                //     std::this_thread::sleep_for(std::chrono::microseconds(delay));
+
+                // if(!is_running_) break;
+
+                // std::string log_message(lf_queue_.data(head));
+                // lf_queue_.completePop(head);
+
+                std::string log_message;
+                lf_queue_.pop([&log_message](char *, char const *buff, uint32_t)
                 {
-                    std::this_thread::sleep_for(std::chrono::microseconds(delay));
-                    continue;
-                }
-                if(!is_running_) return;
-                
-                std::string log_message(lf_queue_.buff(cons_head));
-                lf_queue_.completePop(cons_head);
+                    log_message = std::string(buff);
+                });
                 if(is_dirty_)
                 {
+                    std::lock_guard<std::mutex> lock(fd_lock_);
                     is_dirty_ = false;
                     for(auto fd : add_reqs_) fds_.insert(fd);
                     for(auto fd : rem_reqs_) fds_.erase(fd);
@@ -90,43 +95,47 @@ public:
     void log(const char *format, Args &&...args)
     {
         std::string log_msg = utils::Format(elem_size, format, std::forward<Args>(args)...);
-        lf_queue_.push(log_msg.data());
+        // lf_queue_.push(log_msg.data());
+        lf_queue_.push([](char const *elem, char *buff, uint32_t size)
+        {
+            memcpy(buff, elem, size);
+        }, log_msg.data());
     }
 
-    template <typename ... Fds>
-    void add(int fd, Fds ...fds)
-    {
-        add_reqs_.push_back(fd);
-        add(fds...);
-    }
+    // template <typename ... Fds>
+    // void add(int fd, Fds ...fds)
+    // {
+    //     add_reqs_.push_back(fd);
+    //     add(fds...);
+    // }
 
     inline void add(int fd)
     {
-        // join();
-        // fds_.insert(fd);
+        std::lock_guard<std::mutex> lock(fd_lock_);
         add_reqs_.push_back(fd);
         is_dirty_ = true;
     }
 
-    template <typename ... Fds>
-    void rem(int fd, Fds ...fds)
-    {
-        rem_reqs_.push_back(fd);
-        rem(fds...);
-    }
+    // template <typename ... Fds>
+    // void rem(int fd, Fds ...fds)
+    // {
+    //     rem_reqs_.push_back(fd);
+    //     rem(fds...);
+    // }
+    
     inline void rem(int fd)
     {
-        // join();
-        // fds_.erase(fd);
+        std::lock_guard<std::mutex> lock(fd_lock_);
         rem_reqs_.push_back(fd);
         is_dirty_ = true;
     }
 
-    utils::BSDLFQ<elem_size> lf_queue_;
+    utils::BSDLFQ<elem_size, char> lf_queue_;
     bool is_dirty_;
     bool is_running_;
     std::thread writer_;
     std::unordered_set<int> fds_;
+    std::mutex fd_lock_;
     std::vector<int> add_reqs_;
     std::vector<int> rem_reqs_;
 };

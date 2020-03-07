@@ -189,17 +189,18 @@ inline bool powerOf2(uint32_t val)
     return (val & (val - 1)) == 0;
 }
 
-template <uint32_t const kELemSize>
+template <uint32_t const kELemSize, typename T>
 class BSDLFQ
 {
 public:
     BSDLFQ(uint32_t queue_size) : prod_tail_(0), prod_head_(0), cons_tail_(0), cons_head_(0)
     {
         queue_size_ = powerOf2(queue_size) ? queue_size : nextPowerOf2(queue_size);
-        buff_.resize(queue_size_ * kELemSize);
+        buffer_.resize(queue_size_ * kELemSize);
     }
 
-    void pop(char *elem)
+    template <typename F>
+    void pop(F &&doPop, T *elem=nullptr)
     {
         uint32_t cons_head = cons_head_.load(std::memory_order_relaxed);
         for(;;)
@@ -210,13 +211,15 @@ public:
             if(cons_head_.compare_exchange_weak(cons_head, cons_head + 1, std::memory_order_relaxed))
                 break;
         }
-        memcpy(elem, &buff_[kELemSize * wrap(cons_head)], kELemSize);
+        // memcpy(elem, data(cons_head), kELemSize);
+        std::forward<F>(doPop)(elem, data(cons_head), kELemSize);
         while (cons_tail_.load(std::memory_order_relaxed) != cons_head);
 
         cons_tail_.fetch_add(1, std::memory_order_release);
     }
 
-    void push(char const *elem)
+    template <typename F>
+    void push(F &&doPush, T const *elem=nullptr)
     {
         uint32_t prod_head = prod_head_.load(std::memory_order_relaxed);
         for(;;)
@@ -227,7 +230,8 @@ public:
             if(prod_head_.compare_exchange_weak(prod_head, prod_head + 1, std::memory_order_relaxed))
                 break;
         }
-        memcpy(&buff_[kELemSize * wrap(prod_head)], elem, kELemSize);
+        // memcpy(data(prod_head), elem, kELemSize);
+        std::forward<F>(doPush)(elem, data(prod_head), kELemSize);
         while (prod_tail_.load(std::memory_order_relaxed) != prod_head);
 
         prod_tail_.fetch_add(1, std::memory_order_release);
@@ -292,14 +296,14 @@ public:
 
     inline uint32_t queue_size() const { return queue_size_; }
 
-    inline char *buff(uint32_t index)
+    inline T *data(uint32_t index)
     {
-        return &buff_[kELemSize * wrap(index)];
+        return &buffer_[kELemSize * wrap(index)];
     }
 
-    inline char const *buff(uint32_t index) const
+    inline T const *data(uint32_t index) const
     {
-        return &buff_[kELemSize * wrap(index)];
+        return &buffer_[kELemSize * wrap(index)];
     }
 
     inline uint32_t elemSize() const
@@ -311,7 +315,7 @@ private:
 
     std::atomic<uint32_t> prod_tail_, prod_head_, cons_tail_, cons_head_;
     uint32_t queue_size_;
-    std::vector<char> buff_;
+    std::vector<T> buffer_;
 };
 
 } /// utils
