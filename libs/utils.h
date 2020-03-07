@@ -165,8 +165,8 @@ std::basic_string<T> Format(
     size_t const size = StringPrint(&buffer[0], 0, format, args ...);
     if (size > 0)
     {
-        buffer.resize(size);
-        StringPrint(&buffer[0], buffer.size() + 1, format, args ...);
+        buffer.resize(size + 1); /// extra for null
+        StringPrint(&buffer[0], buffer.size(), format, args ...);
     }
 
     return buffer;
@@ -189,7 +189,7 @@ inline bool powerOf2(uint32_t val)
     return (val & (val - 1)) == 0;
 }
 
-template <uint32_t const kELemSize, typename T>
+template <typename T, size_t const kELemSize=sizeof(T)>
 class BSDLFQ
 {
 public:
@@ -218,7 +218,7 @@ public:
     }
 
     template <typename F, typename ...Args>
-    void push(F &&doPush, Args &&...elems)
+    void push(F &&doPush, Args&&...elems)
     {
         uint32_t prod_head = prod_head_.load(std::memory_order_relaxed);
         for(;;)
@@ -304,7 +304,7 @@ public:
         return buffer_[kELemSize * wrap(index)];
     }
 
-    inline uint32_t elemSize() const
+    inline size_t elemSize() const
     {
         return kELemSize;
     }

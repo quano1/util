@@ -36,11 +36,11 @@ enum class LogType : uint8_t
     kFatal,
 };
 
-template <uint32_t const kElemSize, uint32_t num_of_elems, uint32_t const kDelay>
+template <size_t const kLogSize, uint32_t max_log_queue, uint32_t const kDelay>
 class Logger
 {
 public:
-    Logger() : lf_queue_(num_of_elems), is_running_(true), is_dirty_(false)
+    Logger() : lf_queue_(max_log_queue), is_running_(true), is_dirty_(false)
     {
         writer_ = std::thread([this]()
         {
@@ -94,13 +94,13 @@ public:
     template <typename... Args>
     void log(const char *format, Args &&...args)
     {
-        std::string log_msg = utils::Format(kElemSize, format, std::forward<Args>(args)...);
+        // std::string log_msg = utils::Format(kLogSize, format, std::forward<Args>(args)...);
         // lf_queue_.push(log_msg.data());
-        lf_queue_.push([](std::string &buff, uint32_t, std::string &elem)
+        lf_queue_.push([](std::string &buff, uint32_t, std::string &&elem)
         {
             // memcpy(buff, elem, size);
             buff = std::move(elem);
-        }, log_msg);
+        }, utils::Format(kLogSize, format, std::forward<Args>(args)...));
     }
 
     // template <typename ... Fds>
@@ -131,7 +131,7 @@ public:
         is_dirty_ = true;
     }
 
-    utils::BSDLFQ<kElemSize, std::string> lf_queue_;
+    utils::BSDLFQ<std::string> lf_queue_;
     bool is_dirty_;
     bool is_running_;
     std::thread writer_;
