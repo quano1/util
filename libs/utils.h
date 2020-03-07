@@ -195,8 +195,8 @@ class BSDLFQ
 public:
     BSDLFQ(uint32_t queue_size) : prod_tail_(0), prod_head_(0), cons_tail_(0), cons_head_(0)
     {
-        queue_size_ = powerOf2(queue_size) ? queue_size : nextPowerOf2(queue_size);
-        buffer_.resize(queue_size_ * kELemSize);
+        capacity_ = powerOf2(queue_size) ? queue_size : nextPowerOf2(queue_size);
+        buffer_.resize(capacity_ * kELemSize);
     }
 
     template <typename F, typename ...Args>
@@ -223,7 +223,7 @@ public:
         uint32_t prod_head = prod_head_.load(std::memory_order_relaxed);
         for(;;)
         {
-            if (prod_head == (cons_tail_.load(std::memory_order_acquire) + queue_size_))
+            if (prod_head == (cons_tail_.load(std::memory_order_acquire) + capacity_))
                 continue;
 
             if(prod_head_.compare_exchange_weak(prod_head, prod_head + 1, std::memory_order_relaxed))
@@ -265,7 +265,7 @@ public:
 
         for(;;)
         {
-            if (prod_head == (cons_tail_.load(std::memory_order_acquire) + queue_size_))
+            if (prod_head == (cons_tail_.load(std::memory_order_acquire) + capacity_))
                 return false;
 
             if(prod_head_.compare_exchange_weak(prod_head, prod_head + 1, std::memory_order_relaxed))
@@ -282,17 +282,19 @@ public:
         return true;
     }
 
-    inline uint32_t available() const
+    inline bool empty() const { return size() == 0; }
+
+    inline uint32_t size() const
     {
         return prod_tail_.load(std::memory_order_relaxed) - cons_tail_.load(std::memory_order_relaxed);
     }
 
     inline uint32_t wrap(uint32_t index) const
     {
-        return index & (queue_size_ - 1);
+        return index & (capacity_ - 1);
     }
 
-    inline uint32_t queue_size() const { return queue_size_; }
+    inline uint32_t capacity() const { return capacity_; }
 
     inline T &elemAt(uint32_t index)
     {
@@ -312,7 +314,7 @@ public:
 private:
 
     std::atomic<uint32_t> prod_tail_, prod_head_, cons_tail_, cons_head_;
-    uint32_t queue_size_;
+    uint32_t capacity_;
     std::vector<T> buffer_;
 };
 
