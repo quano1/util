@@ -189,14 +189,14 @@ inline bool powerOf2(uint32_t val)
     return (val & (val - 1)) == 0;
 }
 
-template <uint32_t elem_size>
+template <uint32_t const kELemSize>
 class BSDLFQ
 {
 public:
     BSDLFQ(uint32_t queue_size) : prod_tail_(0), prod_head_(0), cons_tail_(0), cons_head_(0)
     {
         queue_size_ = powerOf2(queue_size) ? queue_size : nextPowerOf2(queue_size);
-        buff_.resize(queue_size_ * elem_size);
+        buff_.resize(queue_size_ * kELemSize);
     }
 
     void pop(char *elem)
@@ -207,12 +207,10 @@ public:
             if (cons_head == prod_tail_.load(std::memory_order_acquire))
                 continue;
 
-            if(cons_head_.compare_exchange_strong(cons_head, cons_head + 1, std::memory_order_relaxed))
+            if(cons_head_.compare_exchange_weak(cons_head, cons_head + 1, std::memory_order_relaxed))
                 break;
         }
-        memcpy(elem, &buff_[elem_size * wrap(cons_head)], elem_size);
-        // elem = buff_[wrap(cons_head)];
-
+        memcpy(elem, &buff_[kELemSize * wrap(cons_head)], kELemSize);
         while (cons_tail_.load(std::memory_order_relaxed) != cons_head);
 
         cons_tail_.fetch_add(1, std::memory_order_release);
@@ -226,11 +224,10 @@ public:
             if (prod_head == (cons_tail_.load(std::memory_order_acquire) + queue_size_))
                 continue;
 
-            if(prod_head_.compare_exchange_strong(prod_head, prod_head + 1, std::memory_order_relaxed))
+            if(prod_head_.compare_exchange_weak(prod_head, prod_head + 1, std::memory_order_relaxed))
                 break;
         }
-        memcpy(&buff_[elem_size * wrap(prod_head)], elem, elem_size);
-        // buff_[wrap(prod_head)] = elem;
+        memcpy(&buff_[kELemSize * wrap(prod_head)], elem, kELemSize);
         while (prod_tail_.load(std::memory_order_relaxed) != prod_head);
 
         prod_tail_.fetch_add(1, std::memory_order_release);
@@ -245,7 +242,7 @@ public:
             if (cons_head == prod_tail_.load(std::memory_order_acquire))
                 return false;
 
-            if(cons_head_.compare_exchange_strong(cons_head, cons_head + 1, std::memory_order_relaxed))
+            if(cons_head_.compare_exchange_weak(cons_head, cons_head + 1, std::memory_order_relaxed))
                 return true;
         }
 
@@ -255,7 +252,7 @@ public:
     inline bool completePop(uint32_t cons_head)
     {
         while (cons_tail_.load(std::memory_order_relaxed) != cons_head);
-        
+
         cons_tail_.fetch_add(1, std::memory_order_release);
         return true;
     }
@@ -263,13 +260,13 @@ public:
     inline bool tryPush(uint32_t &prod_head)
     {
         prod_head = prod_head_.load(std::memory_order_relaxed);
-    
+
         for(;;)
         {
             if (prod_head == (cons_tail_.load(std::memory_order_acquire) + queue_size_))
                 return false;
 
-            if(prod_head_.compare_exchange_strong(prod_head, prod_head + 1, std::memory_order_relaxed))
+            if(prod_head_.compare_exchange_weak(prod_head, prod_head + 1, std::memory_order_relaxed))
                 return true;
         }
         return false;
@@ -295,36 +292,25 @@ public:
 
     inline uint32_t queue_size() const { return queue_size_; }
 
-    // inline void *&buff()
-    // {
-    //     return buff_;
-    // }
-
     inline char *buff(uint32_t index)
     {
-        return &buff_[elem_size * wrap(index)];
+        return &buff_[kELemSize * wrap(index)];
     }
 
     inline char const *buff(uint32_t index) const
     {
-        return &buff_[elem_size * wrap(index)];
+        return &buff_[kELemSize * wrap(index)];
     }
-
-    // inline size_t &elemSize()
-    // {
-    //     return elem_size;
-    // }
 
     inline uint32_t elemSize() const
     {
-        return elem_size;
+        return kELemSize;
     }
 
 private:
 
     std::atomic<uint32_t> prod_tail_, prod_head_, cons_tail_, cons_head_;
     uint32_t queue_size_;
-    // size_t elem_size;
     std::vector<char> buff_;
 };
 
