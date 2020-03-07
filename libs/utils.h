@@ -199,8 +199,8 @@ public:
         buffer_.resize(queue_size_ * kELemSize);
     }
 
-    template <typename F>
-    void pop(F &&doPop, T *elem=nullptr)
+    template <typename F, typename ...Args>
+    void pop(F &&doPop, Args &&...elems)
     {
         uint32_t cons_head = cons_head_.load(std::memory_order_relaxed);
         for(;;)
@@ -211,15 +211,14 @@ public:
             if(cons_head_.compare_exchange_weak(cons_head, cons_head + 1, std::memory_order_relaxed))
                 break;
         }
-        // memcpy(elem, data(cons_head), kELemSize);
-        std::forward<F>(doPop)(elem, data(cons_head), kELemSize);
+        std::forward<F>(doPop)(elemAt(cons_head), kELemSize, std::forward<Args>(elems)...);
         while (cons_tail_.load(std::memory_order_relaxed) != cons_head);
 
         cons_tail_.fetch_add(1, std::memory_order_release);
     }
 
-    template <typename F>
-    void push(F &&doPush, T const *elem=nullptr)
+    template <typename F, typename ...Args>
+    void push(F &&doPush, Args &&...elems)
     {
         uint32_t prod_head = prod_head_.load(std::memory_order_relaxed);
         for(;;)
@@ -230,8 +229,7 @@ public:
             if(prod_head_.compare_exchange_weak(prod_head, prod_head + 1, std::memory_order_relaxed))
                 break;
         }
-        // memcpy(data(prod_head), elem, kELemSize);
-        std::forward<F>(doPush)(elem, data(prod_head), kELemSize);
+        std::forward<F>(doPush)(elemAt(prod_head), kELemSize, std::forward<Args>(elems)...);
         while (prod_tail_.load(std::memory_order_relaxed) != prod_head);
 
         prod_tail_.fetch_add(1, std::memory_order_release);
@@ -296,14 +294,14 @@ public:
 
     inline uint32_t queue_size() const { return queue_size_; }
 
-    inline T *data(uint32_t index)
+    inline T &elemAt(uint32_t index)
     {
-        return &buffer_[kELemSize * wrap(index)];
+        return buffer_[kELemSize * wrap(index)];
     }
 
-    inline T const *data(uint32_t index) const
+    inline T const &elemAt(uint32_t index) const
     {
-        return &buffer_[kELemSize * wrap(index)];
+        return buffer_[kELemSize * wrap(index)];
     }
 
     inline uint32_t elemSize() const

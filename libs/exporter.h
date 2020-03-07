@@ -36,11 +36,11 @@ enum class LogType : uint8_t
     kFatal,
 };
 
-template <uint32_t elem_size, uint32_t num_of_elem, uint32_t delay>
+template <uint32_t const kElemSize, uint32_t num_of_elems, uint32_t const kDelay>
 class Logger
 {
 public:
-    Logger() : lf_queue_(num_of_elem), is_running_(true), is_dirty_(false)
+    Logger() : lf_queue_(num_of_elems), is_running_(true), is_dirty_(false)
     {
         writer_ = std::thread([this]()
         {
@@ -49,7 +49,7 @@ public:
                 using namespace std;
                 // uint32_t head;
                 // while(!lf_queue_.tryPop(head) && is_running_)
-                //     std::this_thread::sleep_for(std::chrono::microseconds(delay));
+                //     std::this_thread::sleep_for(std::chrono::microseconds(kDelay));
 
                 // if(!is_running_) break;
 
@@ -57,9 +57,9 @@ public:
                 // lf_queue_.completePop(head);
 
                 std::string log_message;
-                lf_queue_.pop([&log_message](char *, char const *buff, uint32_t)
+                lf_queue_.pop([&log_message](std::string &buff, uint32_t)
                 {
-                    log_message = std::string(buff);
+                    log_message = std::move(buff);
                 });
                 if(is_dirty_)
                 {
@@ -88,18 +88,19 @@ public:
     inline void join()
     {
         while(lf_queue_.available())
-            std::this_thread::sleep_for(std::chrono::microseconds(delay));
+            std::this_thread::sleep_for(std::chrono::microseconds(kDelay));
     }
 
     template <typename... Args>
     void log(const char *format, Args &&...args)
     {
-        std::string log_msg = utils::Format(elem_size, format, std::forward<Args>(args)...);
+        std::string log_msg = utils::Format(kElemSize, format, std::forward<Args>(args)...);
         // lf_queue_.push(log_msg.data());
-        lf_queue_.push([](char const *elem, char *buff, uint32_t size)
+        lf_queue_.push([](std::string &buff, uint32_t, std::string &elem)
         {
-            memcpy(buff, elem, size);
-        }, log_msg.data());
+            // memcpy(buff, elem, size);
+            buff = std::move(elem);
+        }, log_msg);
     }
 
     // template <typename ... Fds>
@@ -130,7 +131,7 @@ public:
         is_dirty_ = true;
     }
 
-    utils::BSDLFQ<elem_size, char> lf_queue_;
+    utils::BSDLFQ<kElemSize, std::string> lf_queue_;
     bool is_dirty_;
     bool is_running_;
     std::thread writer_;
