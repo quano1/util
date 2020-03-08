@@ -22,42 +22,43 @@
 #include <omp.h>
 
 #ifndef STATIC_LIB
-#define UTIL_INLINE
+#define TLL_INLINE
 #else
-#define UTIL_INLINE inline
+#define TLL_INLINE inline
 #endif
 
 
-namespace llt {
+namespace tll {
 
-union LogFlag {
-    struct
-    {
-        uint32_t trace : 1;
-        uint32_t info : 1;
-        uint32_t fatal : 1;
-        uint32_t reserve : 28;
-        uint32_t debug : 1;
-    };
-    uint32_t flag;
-};
+// union LogFlag {
+//     struct
+//     {
+//         uint32_t debug : 1;
+//         uint32_t trace : 1;
+//         uint32_t info : 1;
+//         uint32_t fatal : 1;
+//         uint32_t reserve;
+//     };
+//     uint32_t flag;
+// };
 
-enum class LogType : uint32_t
-{
-    kTrace=(1U << 0),
-    kInfo=(1U << 1),
-    kFatal=(1U << 2),
-    kDebug=(1U << 31)
-};
+typedef uint32_t _LogType;
 
-typedef std::pair<LogType, std::string> LogInfo;
-typedef std::pair<int, LogFlag> LogFd;
+namespace LogType {
+static const _LogType D=(1U << 0);
+static const _LogType T=(1U << 1);
+static const _LogType I=(1U << 2);
+static const _LogType F=(1U << 3);
+}
 
-template <size_t const kLogSize, uint32_t max_log_queue, uint32_t const kDelay>
+typedef std::pair<_LogType, std::string> LogInfo;
+typedef std::pair<_LogType, int> LogFd;
+
+template <size_t const kLogSize, uint32_t max_log_in_queue, uint32_t const kDelayMicro>
 class Logger
 {
 public:
-    Logger() : lf_queue_(max_log_queue), is_running_(false)
+    Logger() : ring_queue_(max_log_in_queue), is_running_(false)
     {
         
     }
@@ -65,29 +66,31 @@ public:
     ~Logger() 
     {
         is_running_ = false;
-        if(broadcast_thread.joinable()) broadcast_thread.join();
+        if(broadcast_.joinable()) broadcast_.join();
         for(auto lfd : lfds_)
         {
-            close(lfd.first);
+            close(lfd.second);
         }
     }
 
-    UTIL_INLINE void start()
+    TLL_INLINE void start()
     {
+        if(is_running_) return;
+
         is_running_ = true;
-        broadcast_thread = std::thread([this]()
+        broadcast_ = std::thread([this]()
         {
             while(is_running_)
             {
                 using namespace std;
-                if(lf_queue_.empty())
+                if(ring_queue_.empty())
                 {
-                    std::this_thread::sleep_for(std::chrono::microseconds(kDelay));
+                    std::this_thread::sleep_for(std::chrono::microseconds(kDelayMicro));
                     continue;
                 }
 
                 LogInfo log_message;
-                lf_queue_.pop([&log_message](LogInfo &elem, uint32_t)
+                ring_queue_.pop([&log_message](LogInfo &elem, uint32_t)
                 {
                     log_message = std::move(elem);
                 });
@@ -95,29 +98,29 @@ public:
                 // for(auto fd : fds_)
                 // omp_set_num_threads(fds_.size());
                 // #pragma omp parallel
-                #pragma omp parallel for
+                // #pragma omp parallel for
                 for(int i=0; i<lfds_.size(); i++)
                 {
                     LogFd &lfd = lfds_[i];
-                    if((uint32_t)lfd.second.flag & (uint32_t)log_message.first)
+                    if(lfd.first & log_message.first)
                     {
-                        auto size = write(lfd.first, log_message.second.data(), log_message.second.size());
+                        auto size = write(lfd.second, log_message.second.data(), log_message.second.size());
                     }
                 }
             }
         });
     }
 
-    UTIL_INLINE void join()
+    TLL_INLINE void join()
     {
-        while(is_running_ && !lf_queue_.empty())
-            std::this_thread::sleep_for(std::chrono::microseconds(kDelay));
+        while(is_running_ && !ring_queue_.empty())
+            std::this_thread::sleep_for(std::chrono::microseconds(kDelayMicro));
     }
 
-    template <LogType type, typename... Args>
+    template <_LogType type, typename... Args>
     void log(const char *format, Args &&...args)
     {
-        lf_queue_.push([](LogInfo &elem, uint32_t, LogInfo &&log_msg)
+        ring_queue_.push([](LogInfo &elem, uint32_t size, LogInfo &&log_msg)
         {
             elem = std::move(log_msg);
         }, LogInfo{type, utils::Format(kLogSize, format, std::forward<Args>(args)...)});
@@ -140,15 +143,14 @@ private:
         _addFd(lfds...);
     }
 
-    UTIL_INLINE void _addFd(LogFd lfd)
+    TLL_INLINE void _addFd(LogFd lfd)
     {
         lfds_.push_back(lfd);
     }
 
-    utils::BSDLFQ<LogInfo> lf_queue_;
+    utils::BSDLFQ<LogInfo> ring_queue_;
     bool is_running_;
-    std::thread broadcast_thread;
-    // std::unordered_map<int, LogFlag> fds_;
+    std::thread broadcast_;
     std::vector<LogFd> lfds_;
 };
 

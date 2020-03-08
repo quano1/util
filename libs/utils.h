@@ -9,12 +9,12 @@
 #include <atomic>
 #include <cstring>
 
-#define LOGPD(format, ...) printf("[D](%ld)%s(%s:%d)(%s):" format "\n", ::utils::timestamp<std::chrono::high_resolution_clock, std::milli>(std::chrono::high_resolution_clock::now()), __FILE__, __PRETTY_FUNCTION__, __LINE__, ::utils::tid().data(), ##__VA_ARGS__)
-#define LOGD(format, ...) printf("[D](%ld)%s(%s:%d)(%s):" format "\n", ::utils::timestamp<std::chrono::high_resolution_clock, std::milli>(std::chrono::high_resolution_clock::now()), __FILE__, __FUNCTION__, __LINE__, ::utils::tid().data(), ##__VA_ARGS__)
-#define LOGE(format, ...) printf("[E](%ld)%s(%s:%d)(%s):" format "%s\n", ::utils::timestamp<std::chrono::high_resolution_clock, std::milli>(std::chrono::high_resolution_clock::now()), __FILE__, __FUNCTION__, __LINE__, ::utils::tid().data(), ##__VA_ARGS__, strerror(errno))
+#define LOGPD(format, ...) printf("[D](%.6f)%s(%s:%d)(%s):" format "\n", utils::timestamp<double>(), __FILE__, __PRETTY_FUNCTION__, __LINE__, utils::tid().data(), ##__VA_ARGS__)
+#define LOGD(format, ...) printf("[D](%.6f)%s(%s:%d)(%s):" format "\n", utils::timestamp<double>(), __FILE__, __FUNCTION__, __LINE__, utils::tid().data(), ##__VA_ARGS__)
+#define LOGE(format, ...) printf("[E](%.6f)%s(%s:%d)(%s):" format "%s\n", utils::timestamp<double>(), __FILE__, __FUNCTION__, __LINE__, utils::tid().data(), ##__VA_ARGS__, strerror(errno))
 
-#define TIMER(ID) ::utils::Timer __timer_##ID(#ID)
-#define TRACE() ::utils::Timer __tracer(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + ::utils::tid() + ")")
+#define TIMER(ID) utils::Timer __timer_##ID(#ID)
+#define TRACE() utils::Timer __tracer(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + utils::tid() + ")")
 
 template<typename T>
 struct Trait
@@ -56,22 +56,26 @@ inline std::string tid()
 //     return std::chrono::duration_cast<std::chrono::duration<size_t,D>>(C::now().time_since_epoch()).count();
 // }
 
-template <typename C=std::chrono::high_resolution_clock, typename D=std::ratio<1,1>>
-size_t timestamp(typename C::time_point &&t = C::now())
+template <typename T=size_t, typename D=std::ratio<1,1>, typename C=std::chrono::high_resolution_clock>
+T timestamp(typename C::time_point &&t = C::now())
 {
-    return std::chrono::duration_cast<std::chrono::duration<size_t,D>>(std::forward<typename C::time_point>(t).time_since_epoch()).count();
+    return std::chrono::duration_cast<std::chrono::duration<T,D>>(std::forward<typename C::time_point>(t).time_since_epoch()).count();
 }
 
 struct Timer
 {
     using _clock = std::chrono::high_resolution_clock;
 
-    Timer() : id_(""), begin_(_clock::now()) {}
-    Timer(std::string id) : id_(std::move(id)), begin_(_clock::now()) {printf(" (%ld)%s\n", ::utils::timestamp<_clock, std::milli>(), id_.data());}
+    Timer() : name_(""), begin_(_clock::now()) {}
+    Timer(std::string id) : name_(std::move(id)), begin_(_clock::now()) 
+    {
+        printf(" (%.6f)%s\n", utils::timestamp<double>(), name_.data());
+    }
+
     ~Timer()
     {
-        if(!id_.empty())
-            printf(" (%ld)~%s: %.3f (ms)\n", ::utils::timestamp<_clock, std::milli>(), id_.data(), elapse<double,std::milli>());
+        if(!name_.empty())
+            printf(" (%.6f)~%s: %.3f (ms)\n", utils::timestamp<double>(), name_.data(), elapse<double,std::milli>());
     }
 
     template <typename T=double, typename D=std::milli>
@@ -98,7 +102,7 @@ struct Timer
     }
 
     _clock::time_point begin_;
-    std::string id_;
+    std::string name_;
 };
 
 /// format
@@ -193,9 +197,9 @@ template <typename T, size_t const kELemSize=sizeof(T)>
 class BSDLFQ
 {
 public:
-    BSDLFQ(uint32_t queue_size) : prod_tail_(0), prod_head_(0), cons_tail_(0), cons_head_(0)
+    BSDLFQ(uint32_t num_of_elem) : prod_tail_(0), prod_head_(0), cons_tail_(0), cons_head_(0)
     {
-        capacity_ = powerOf2(queue_size) ? queue_size : nextPowerOf2(queue_size);
+        capacity_ = powerOf2(num_of_elem) ? num_of_elem : nextPowerOf2(num_of_elem);
         buffer_.resize(capacity_ * kELemSize);
     }
 
