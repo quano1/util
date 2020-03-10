@@ -7,8 +7,6 @@
 #include <vector>
 #include <algorithm>
 
-#include <ThreadPool.hpp>
-
 namespace Simple {
 
 namespace Lib {
@@ -60,12 +58,6 @@ struct CollectorInvocation<Collector, void (Args...)> {
   invoke (Collector &collector, const std::function<void (Args...)> &cbf, Args... args) const
   {
     cbf (args...); return collector();
-  }
-
-  inline bool
-  invoke_async (ThreadPool &pool, Collector &collector, const std::function<void (Args...)> &cbf, Args... args) const
-  {
-    pool.enqueue([cbf, args...]{ cbf (args...); }); return collector();
   }
 };
 
@@ -131,26 +123,14 @@ public:
     }
     return collector.result();
   }
-
-  CollectorResult
-  emit_async (ThreadPool &pool, Args... args) const
-  {
-    Collector collector;
-    for (auto &slot : callback_list_) {
-        if (slot) {
-            const bool continue_emission = this->invoke_async (pool, collector, *slot, args...);
-            if (!continue_emission)
-              break;
-        }
-    }
-    return collector.result();
-  }
   // Number of connected slots.
   std::size_t
-  size ()
+  size () const
   {
     return callback_list_.size();
   }
+
+  operator bool() const {return size() > 0;}
 };
 
 } // Lib

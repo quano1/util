@@ -9,14 +9,16 @@
 #include <atomic>
 #include <cstring>
 
-#define LOGPD(format, ...) printf("[D](%.6f)%s(%s:%d)(%s):" format "\n", utils::timestamp<double>(), __FILE__, __PRETTY_FUNCTION__, __LINE__, utils::tid().data(), ##__VA_ARGS__)
-#define LOGD(format, ...) printf("[D](%.6f)%s(%s:%d)(%s):" format "\n", utils::timestamp<double>(), __FILE__, __FUNCTION__, __LINE__, utils::tid().data(), ##__VA_ARGS__)
-#define LOGE(format, ...) printf("[E](%.6f)%s(%s:%d)(%s):" format "%s\n", utils::timestamp<double>(), __FILE__, __FUNCTION__, __LINE__, utils::tid().data(), ##__VA_ARGS__, strerror(errno))
+#include "SimpleSignal.hpp"
+
+#define LOGPD(format, ...) printf("[D](%.6f)%s:%s:%d[%s]:" format "\n", utils::timestamp<double>(), __FILE__, __PRETTY_FUNCTION__, __LINE__, utils::tid().data(), ##__VA_ARGS__)
+#define LOGD(format, ...) printf("[D](%.6f)%s:%s:%d[%s]:" format "\n", utils::timestamp<double>(), __FILE__, __FUNCTION__, __LINE__, utils::tid().data(), ##__VA_ARGS__)
+#define LOGE(format, ...) printf("[E](%.6f)%s:%s:%d[%s]:" format "%s\n", utils::timestamp<double>(), __FILE__, __FUNCTION__, __LINE__, utils::tid().data(), ##__VA_ARGS__, strerror(errno))
 
 #define TIMER(ID) utils::Timer __timer_##ID(#ID)
 #define TRACE() utils::Timer __tracer(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + utils::tid() + ")")
 
-template<typename T>
+template<typename T, class...>
 struct Trait
 {
     using template_type = T;
@@ -34,7 +36,7 @@ struct crtp
     T& underlying() { return static_cast<T&>(*this); }
     T const& underlying() const { return static_cast<T const&>(*this); }
 
-    using template_type = typename Trait<T>::template_type;
+    // using template_type = typename Trait<T>::template_type;
 private:
     crtp(){}
     friend crtpType<T>;
@@ -42,68 +44,6 @@ private:
 
 
 namespace utils {
-
-inline std::string tid()
-{
-    std::stringstream ss;
-    ss << std::this_thread::get_id();
-    return ss.str();
-}
-
-// template <typename C=std::chrono::high_resolution_clock, typename D=std::ratio<1,1>>
-// size_t timestamp()
-// {
-//     return std::chrono::duration_cast<std::chrono::duration<size_t,D>>(C::now().time_since_epoch()).count();
-// }
-
-template <typename T=size_t, typename D=std::ratio<1,1>, typename C=std::chrono::high_resolution_clock>
-T timestamp(typename C::time_point &&t = C::now())
-{
-    return std::chrono::duration_cast<std::chrono::duration<T,D>>(std::forward<typename C::time_point>(t).time_since_epoch()).count();
-}
-
-struct Timer
-{
-    using _clock = std::chrono::high_resolution_clock;
-
-    Timer() : name_(""), begin_(_clock::now()) {}
-    Timer(std::string id) : name_(std::move(id)), begin_(_clock::now()) 
-    {
-        printf(" (%.6f)%s\n", utils::timestamp<double>(), name_.data());
-    }
-
-    ~Timer()
-    {
-        if(!name_.empty())
-            printf(" (%.6f)~%s: %.3f (ms)\n", utils::timestamp<double>(), name_.data(), elapse<double,std::milli>());
-    }
-
-    template <typename T=double, typename D=std::milli>
-    T reset()
-    {
-        T ret = elapse<T,D>();
-        begin_ = _clock::now();
-        return ret;
-    }
-
-    template <typename T=double, typename D=std::milli>
-    T elapse() const
-    {
-        using namespace std::chrono;
-        return duration_cast<std::chrono::duration<T,D>>(_clock::now() - begin_).count();
-    }
-
-    template <typename T=double, typename D=std::milli>
-    std::chrono::duration<T,D> duration() const
-    {
-        using namespace std::chrono;
-        auto ret = duration_cast<std::chrono::duration<T,D>>(_clock::now() - begin_);
-        return ret;
-    }
-
-    _clock::time_point begin_;
-    std::string name_;
-};
 
 /// format
 template <typename T>
@@ -320,6 +260,73 @@ private:
     std::atomic<uint32_t> prod_tail_, prod_head_, cons_tail_, cons_head_;
     uint32_t capacity_;
     std::vector<T> buffer_;
+};
+
+
+inline std::string tid()
+{
+    std::stringstream ss;
+    ss << std::this_thread::get_id();
+    return ss.str();
+}
+
+template <typename T=size_t, typename D=std::ratio<1,1>, typename C=std::chrono::high_resolution_clock>
+T timestamp(typename C::time_point &&t = C::now())
+{
+    return std::chrono::duration_cast<std::chrono::duration<T,D>>(std::forward<typename C::time_point>(t).time_since_epoch()).count();
+}
+
+struct Timer
+{
+    using clock__= std::chrono::high_resolution_clock;
+
+    Timer() : name_(""), begin_(clock__::now()) {}
+    Timer(std::string id) : name_(std::move(id)), begin_(clock__::now()) 
+    {
+        printf(" (%.6f)%s\n", utils::timestamp<double>(), name_.data());
+    }
+
+    Timer(std::function<void(std::string const&)> logf, std::string id="") : name_(std::move(id)), begin_(clock__::now()) 
+    {
+        sig_log_.connect(logf);
+        sig_log_.emit(Format("(%s)\n", utils::timestamp<double>(), name_.data()));
+    }
+
+    ~Timer()
+    {
+        if(sig_log_)
+            sig_log_.emit(Format("   (%.6f)[%s](~%s) %.3f (ms)\n", utils::timestamp<double>(), utils::tid(), name_.data(), elapse<double,std::milli>()));
+        else if(!name_.empty())
+            printf(" (%.6f)~%s: %.3f (ms)\n", utils::timestamp<double>(), name_.data(), elapse<double,std::milli>());
+    }
+
+    template <typename T=double, typename D=std::milli>
+    T reset()
+    {
+        T ret = elapse<T,D>();
+        begin_ = clock__::now();
+        return ret;
+    }
+
+    template <typename T=double, typename D=std::milli>
+    T elapse() const
+    {
+        using namespace std::chrono;
+        return duration_cast<std::chrono::duration<T,D>>(clock__::now() - begin_).count();
+    }
+
+    template <typename T=double, typename D=std::milli>
+    std::chrono::duration<T,D> duration() const
+    {
+        using namespace std::chrono;
+        auto ret = duration_cast<std::chrono::duration<T,D>>(clock__::now() - begin_);
+        return ret;
+    }
+
+    clock__::time_point begin_;
+    std::string name_;
+
+    Simple::Signal<void(std::string const&)> sig_log_;
 };
 
 } /// utils
