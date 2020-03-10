@@ -30,18 +30,6 @@
 
 namespace tll {
 
-// union LogFlag {
-//     struct
-//     {
-//         uint32_t debug : 1;
-//         uint32_t trace : 1;
-//         uint32_t info : 1;
-//         uint32_t fatal : 1;
-//         uint32_t reserve;
-//     };
-//     uint32_t flag;
-// };
-
 typedef uint32_t LogType;
 
 namespace logtype { /// logtype
@@ -106,9 +94,6 @@ public:
                     log_message = std::move(elem);
                 });
 
-                // for(auto fd : fds_)
-                // omp_set_num_threads(fds_.size());
-                // #pragma omp parallel
                 // #pragma omp parallel for
                 for(int i=0; i<lfds_.size(); i++)
                 {
@@ -169,5 +154,5 @@ private:
 #define TLL_LOGF(logger, format, ...) (logger).log<tll::logtype::kFatal>("[F]%s(" format ")\n", LOG_HEADER__ , ##__VA_ARGS__)
 
 #ifndef STATIC_LIB
-#include "exporter.cc"
+#include "logger.cc"
 #endif

@@ -18,30 +18,6 @@
 #define TIMER(ID) utils::Timer __timer_##ID(#ID)
 #define TRACE() utils::Timer __tracer(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + utils::tid() + ")")
 
-template<typename T, class...>
-struct Trait
-{
-    using template_type = T;
-};
-
-template <template <class, class...> class G, class V, class ...Ts>
-struct Trait<G<V,Ts...>>
-{
-    using template_type = V;
-};
-
-template <typename T, template<typename ...> class crtpType>
-struct crtp
-{
-    T& underlying() { return static_cast<T&>(*this); }
-    T const& underlying() const { return static_cast<T const&>(*this); }
-
-    // using template_type = typename Trait<T>::template_type;
-private:
-    crtp(){}
-    friend crtpType<T>;
-};
-
 
 namespace utils {
 
