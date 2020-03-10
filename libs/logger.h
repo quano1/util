@@ -94,6 +94,7 @@ public:
                     log_message = std::move(elem);
                 });
 
+                // FIXME: parallel is 10 times slower???
                 // #pragma omp parallel for
                 for(int i=0; i<lfds_.size(); i++)
                 {
