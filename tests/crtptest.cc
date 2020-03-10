@@ -8,17 +8,7 @@
 #include "../libs/exporter.h"
 // #include "../libs/exporterudp.h"
 
-#define LOG_HEADER utils::Format("(%.6f)%s:%s:%d[%s]", utils::timestamp<double>(), __FILE__, __FUNCTION__, __LINE__, utils::tid())
 
-#define TLL_LOGD(logger, format, ...) (logger).log<tll::logtype::kDebug>("[D]%s(" format ")\n", LOG_HEADER , ##__VA_ARGS__)
-
-#define TLL_LOGTF(logger) (logger).log<tll::logtype::kTrace>("[T]%s", LOG_HEADER); utils::Timer timer__([&logger](std::string const &str){logger.log<tll::logtype::kTrace>("%s", str.data());}, __FUNCTION__)
-
-#define TLL_LOGT(logger, ID) (logger).log<tll::logtype::kTrace>("[T]%s", LOG_HEADER); utils::Timer timer_##ID__([&logger](std::string const &str){logger.log<tll::logtype::kTrace>("%s", str.data());}, #ID)
-
-#define TLL_LOGI(logger, format, ...) (logger).log<tll::logtype::kInfo>("[I]%s(" format ")\n", LOG_HEADER , ##__VA_ARGS__)
-
-#define TLL_LOGF(logger, format, ...) (logger).log<tll::logtype::kFatal>("[F]%s(" format ")\n", LOG_HEADER , ##__VA_ARGS__)
 
 namespace {
     int const fd = 0;

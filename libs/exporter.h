@@ -61,7 +61,7 @@ public:
     template < typename ... LFds>
     Logger(LFds ...lfds) : ring_queue_(max_log_in_queue), is_running_(false)
     {
-        _addFd(lfds...);
+        addFd__(lfds...);
     }
 
     ~Logger() 
@@ -72,6 +72,17 @@ public:
         {
             close(lfd.second);
         }
+    }
+
+    template <LogType type, typename... Args>
+    void log(const char *format, Args &&...args)
+    {
+        ring_queue_.push([](LogInfo &elem, uint32_t size, LogInfo &&log_msg)
+        {
+            elem = std::move(log_msg);
+        }, LogInfo{type, utils::Format(kLogSize, format, std::forward<Args>(args)...)});
+
+        if(!is_running_.load(std::memory_order_relaxed)) start();
     }
 
     TLL_INLINE void start()
@@ -117,26 +128,22 @@ public:
             std::this_thread::sleep_for(std::chrono::microseconds(kDelayMicro));
     }
 
-    template <LogType type, typename... Args>
-    void log(const char *format, Args &&...args)
+    template < typename ... LFds>
+    void addFd(LFds ...lfds)
     {
-        ring_queue_.push([](LogInfo &elem, uint32_t size, LogInfo &&log_msg)
-        {
-            elem = std::move(log_msg);
-        }, LogInfo{type, utils::Format(kLogSize, format, std::forward<Args>(args)...)});
-
-        if(!is_running_.load(std::memory_order_relaxed)) start();
+        if(is_running_.load(std::memory_order_relaxed)) return;
+        addFd__(lfds...);
     }
 
 private:
     template <typename ... LFds>
-    void _addFd(LogFd lfd, LFds ...lfds)
+    void addFd__(LogFd lfd, LFds ...lfds)
     {
         lfds_.push_back(lfd);
-        _addFd(lfds...);
+        addFd__(lfds...);
     }
 
-    TLL_INLINE void _addFd(LogFd lfd)
+    TLL_INLINE void addFd__(LogFd lfd)
     {
         lfds_.push_back(lfd);
     }
@@ -149,6 +156,17 @@ private:
 
 } // llt
 
+#define LOG_HEADER__ utils::Format("(%.6f)%s:%s:%d[%s]", utils::timestamp<double>(), __FILE__, __FUNCTION__, __LINE__, utils::tid())
+
+#define TLL_LOGD(logger, format, ...) (logger).log<tll::logtype::kDebug>("[D]%s(" format ")\n", LOG_HEADER__ , ##__VA_ARGS__)
+
+#define TLL_LOGTF(logger) (logger).log<tll::logtype::kTrace>("[T]%s", LOG_HEADER__); utils::Timer timer__([&logger](std::string const &str){logger.log<tll::logtype::kTrace>("%s", str.data());}, __FUNCTION__)
+
+#define TLL_LOGT(logger, ID) (logger).log<tll::logtype::kTrace>("[T]%s", LOG_HEADER__); utils::Timer timer_##ID__([&logger](std::string const &str){logger.log<tll::logtype::kTrace>("%s", str.data());}, #ID)
+
+#define TLL_LOGI(logger, format, ...) (logger).log<tll::logtype::kInfo>("[I]%s(" format ")\n", LOG_HEADER__ , ##__VA_ARGS__)
+
+#define TLL_LOGF(logger, format, ...) (logger).log<tll::logtype::kFatal>("[F]%s(" format ")\n", LOG_HEADER__ , ##__VA_ARGS__)
 
 #ifndef STATIC_LIB
 #include "exporter.cc"
