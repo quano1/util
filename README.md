@@ -13,6 +13,7 @@ Utilities & Logging Library
 
 ### next
  - Configure receiving log type at runtime.
+ - log parser/viewer tool.
 
 License
 ----
