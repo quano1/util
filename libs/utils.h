@@ -149,10 +149,10 @@ public:
         uint32_t cons_head = cons_head_.load(std::memory_order_relaxed);
         for(;;)
         {
-            if (cons_head == prod_tail_.load(std::memory_order_acquire))
+            if (cons_head == prod_tail_.load(std::memory_order_relaxed))
                 continue;
 
-            if(cons_head_.compare_exchange_weak(cons_head, cons_head + 1, std::memory_order_relaxed))
+            if(cons_head_.compare_exchange_weak(cons_head, cons_head + 1, std::memory_order_acquire, std::memory_order_relaxed))
                 break;
         }
         std::forward<F>(doPop)(elemAt(cons_head), kELemSize, std::forward<Args>(elems)...);
@@ -167,10 +167,10 @@ public:
         uint32_t prod_head = prod_head_.load(std::memory_order_relaxed);
         for(;;)
         {
-            if (prod_head == (cons_tail_.load(std::memory_order_acquire) + capacity_))
+            if (prod_head == (cons_tail_.load(std::memory_order_relaxed) + capacity_))
                 continue;
 
-            if(prod_head_.compare_exchange_weak(prod_head, prod_head + 1, std::memory_order_relaxed))
+            if(prod_head_.compare_exchange_weak(prod_head, prod_head + 1, std::memory_order_acquire, std::memory_order_relaxed))
                 break;
         }
         std::forward<F>(doPush)(elemAt(prod_head), kELemSize, std::forward<Args>(elems)...);
@@ -185,10 +185,10 @@ public:
     
         for(;;)
         {
-            if (cons_head == prod_tail_.load(std::memory_order_acquire))
+            if (cons_head == prod_tail_.load(std::memory_order_relaxed))
                 return false;
 
-            if(cons_head_.compare_exchange_weak(cons_head, cons_head + 1, std::memory_order_relaxed))
+            if(cons_head_.compare_exchange_weak(cons_head, cons_head + 1, std::memory_order_acquire, std::memory_order_relaxed))
                 return true;
         }
 
@@ -209,10 +209,10 @@ public:
 
         for(;;)
         {
-            if (prod_head == (cons_tail_.load(std::memory_order_acquire) + capacity_))
+            if (prod_head == (cons_tail_.load(std::memory_order_relaxed) + capacity_))
                 return false;
 
-            if(prod_head_.compare_exchange_weak(prod_head, prod_head + 1, std::memory_order_relaxed))
+            if(prod_head_.compare_exchange_weak(prod_head, prod_head + 1, std::memory_order_acquire, std::memory_order_relaxed))
                 return true;
         }
         return false;

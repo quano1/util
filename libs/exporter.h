@@ -42,30 +42,31 @@ namespace tll {
 //     uint32_t flag;
 // };
 
-typedef uint32_t _LogType;
+typedef uint32_t LogType;
 
-namespace LogType {
-static const _LogType D=(1U << 0);
-static const _LogType T=(1U << 1);
-static const _LogType I=(1U << 2);
-static const _LogType F=(1U << 3);
+namespace logtype { /// logtype
+static const LogType kDebug=(1U << 0);
+static const LogType kTrace=(1U << 1);
+static const LogType kInfo=(1U << 2);
+static const LogType kFatal=(1U << 3);
 }
 
-typedef std::pair<_LogType, std::string> LogInfo;
-typedef std::pair<_LogType, int> LogFd;
+typedef std::pair<LogType, std::string> LogInfo;
+typedef std::pair<LogType, int> LogFd;
 
 template <size_t const kLogSize, uint32_t max_log_in_queue, uint32_t const kDelayMicro>
 class Logger
 {
 public:
-    Logger() : ring_queue_(max_log_in_queue), is_running_(false)
+    template < typename ... LFds>
+    Logger(LFds ...lfds) : ring_queue_(max_log_in_queue), is_running_(false)
     {
-        
+        _addFd(lfds...);
     }
 
     ~Logger() 
     {
-        is_running_ = false;
+        is_running_.store(false, std::memory_order_relaxed);
         if(broadcast_.joinable()) broadcast_.join();
         for(auto lfd : lfds_)
         {
@@ -75,14 +76,13 @@ public:
 
     TLL_INLINE void start()
     {
-        if(is_running_) return;
+        bool val = false;
+        if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed)) return;
 
-        is_running_ = true;
         broadcast_ = std::thread([this]()
         {
-            while(is_running_)
+            while(is_running_.load(std::memory_order_relaxed))
             {
-                using namespace std;
                 if(ring_queue_.empty())
                 {
                     std::this_thread::sleep_for(std::chrono::microseconds(kDelayMicro));
@@ -113,11 +113,11 @@ public:
 
     TLL_INLINE void join()
     {
-        while(is_running_ && !ring_queue_.empty())
+        while(is_running_.load(std::memory_order_relaxed) && !ring_queue_.empty())
             std::this_thread::sleep_for(std::chrono::microseconds(kDelayMicro));
     }
 
-    template <_LogType type, typename... Args>
+    template <LogType type, typename... Args>
     void log(const char *format, Args &&...args)
     {
         ring_queue_.push([](LogInfo &elem, uint32_t size, LogInfo &&log_msg)
@@ -125,14 +125,7 @@ public:
             elem = std::move(log_msg);
         }, LogInfo{type, utils::Format(kLogSize, format, std::forward<Args>(args)...)});
 
-        if(!is_running_) start();
-    }
-
-    template <typename ... LFds>
-    void addFd(LFds ...lfds)
-    {
-        if(is_running_) return;
-        _addFd(lfds...);
+        if(!is_running_.load(std::memory_order_relaxed)) start();
     }
 
 private:
@@ -149,7 +142,7 @@ private:
     }
 
     utils::BSDLFQ<LogInfo> ring_queue_;
-    bool is_running_;
+    std::atomic<bool> is_running_;
     std::thread broadcast_;
     std::vector<LogFd> lfds_;
 };
