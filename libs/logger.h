@@ -27,20 +27,40 @@
 #define TLL_INLINE inline
 #endif
 
-
 namespace tll {
 
-typedef uint32_t LogType;
+typedef uint32_t LogFlag;
 
-namespace logtype { /// logtype
-static const LogType kDebug=(1U << 0);
-static const LogType kTrace=(1U << 1);
-static const LogType kInfo=(1U << 2);
-static const LogType kFatal=(1U << 3);
+enum class LogType /// logtype
+{
+    kDebug=0,
+    kTrace,
+    kInfo,
+    kFatal,
+};
+
+char const kLogTypeString[]="DTIF";
+
+TLL_INLINE LogFlag toFlag(LogType type)
+{
+    return 1U << static_cast<LogFlag>(type);
 }
 
+template <typename... Args>
+LogFlag toFlag(tll::LogType type, Args ...args)
+{
+    return toFlag(type) | toFlag(args...);
+}
+
+// namespace logtype { /// logtype
+// static const LogType kDebug=(1U << 0);
+// static const LogType kTrace=(1U << 1);
+// static const LogType kInfo=(1U << 2);
+// static const LogType kFatal=(1U << 3);
+// }
+
 typedef std::pair<LogType, std::string> LogInfo;
-typedef std::pair<LogType, int> LogFd;
+typedef std::pair<LogFlag, int> LogFd;
 
 template <size_t const kLogSize, uint32_t max_log_in_queue, uint32_t const kDelayMicro>
 class Logger
@@ -54,6 +74,7 @@ public:
 
     ~Logger() 
     {
+        join();
         is_running_.store(false, std::memory_order_relaxed);
         if(broadcast_.joinable()) broadcast_.join();
         for(auto lfd : lfds_)
@@ -68,7 +89,7 @@ public:
         ring_queue_.push([](LogInfo &elem, uint32_t size, LogInfo &&log_msg)
         {
             elem = std::move(log_msg);
-        }, LogInfo{type, utils::Format(kLogSize, format, std::forward<Args>(args)...)});
+        }, LogInfo{type, utils::stringFormat(kLogSize, format, std::forward<Args>(args)...)});
 
         if(!is_running_.load(std::memory_order_relaxed)) start();
     }
@@ -99,9 +120,12 @@ public:
                 for(int i=0; i<lfds_.size(); i++)
                 {
                     LogFd &lfd = lfds_[i];
-                    if(lfd.first & log_message.first)
+                    if(lfd.first & tll::toFlag(log_message.first))
                     {
-                        auto size = write(lfd.second, log_message.second.data(), log_message.second.size());
+                        int fd = lfd.second;
+                        // std::string &msg = log_message.second;
+                        std::string msg = utils::stringFormat(kLogSize, "[%c]%s", kLogTypeString[(uint32_t)(log_message.first)], log_message.second);
+                        auto size = write(fd, msg.data(), msg.size());
                     }
                 }
             }
@@ -142,17 +166,17 @@ private:
 
 } // llt
 
-#define LOG_HEADER__ utils::Format("(%.6f)%s:%s:%d[%s]", utils::timestamp<double>(), __FILE__, __FUNCTION__, __LINE__, utils::tid())
+#define LOG_HEADER__ utils::stringFormat("(%.6f)%s:%s:%d[%s]", utils::timestamp<double>(), __FILE__, __FUNCTION__, __LINE__, utils::tid())
 
-#define TLL_LOGD(logger, format, ...) (logger).log<tll::logtype::kDebug>("[D]%s(" format ")\n", LOG_HEADER__ , ##__VA_ARGS__)
+#define TLL_LOGD(logger, format, ...) (logger).log<tll::LogType::kDebug>("%s(" format ")\n", LOG_HEADER__ , ##__VA_ARGS__)
 
-#define TLL_LOGTF(logger) (logger).log<tll::logtype::kTrace>("[T]%s", LOG_HEADER__); utils::Timer timer__([&logger](std::string const &str){logger.log<tll::logtype::kTrace>("%s", str.data());}, __FUNCTION__)
+#define TLL_LOGTF(logger) (logger).log<tll::LogType::kTrace>("%s", LOG_HEADER__); utils::Timer timer__([&logger](std::string const &str){logger.log<tll::LogType::kTrace>("%s", str.data());}, __FUNCTION__)
 
-#define TLL_LOGT(logger, ID) (logger).log<tll::logtype::kTrace>("[T]%s", LOG_HEADER__); utils::Timer timer_##ID__([&logger](std::string const &str){logger.log<tll::logtype::kTrace>("%s", str.data());}, #ID)
+#define TLL_LOGT(logger, ID) (logger).log<tll::LogType::kTrace>("%s", LOG_HEADER__); utils::Timer timer_##ID__([&logger](std::string const &str){logger.log<tll::LogType::kTrace>("%s", str.data());}, #ID)
 
-#define TLL_LOGI(logger, format, ...) (logger).log<tll::logtype::kInfo>("[I]%s(" format ")\n", LOG_HEADER__ , ##__VA_ARGS__)
+#define TLL_LOGI(logger, format, ...) (logger).log<tll::LogType::kInfo>("%s(" format ")\n", LOG_HEADER__ , ##__VA_ARGS__)
 
-#define TLL_LOGF(logger, format, ...) (logger).log<tll::logtype::kFatal>("[F]%s(" format ")\n", LOG_HEADER__ , ##__VA_ARGS__)
+#define TLL_LOGF(logger, format, ...) (logger).log<tll::LogType::kFatal>("%s(" format ")\n", LOG_HEADER__ , ##__VA_ARGS__)
 
 #ifndef STATIC_LIB
 #include "logger.cc"

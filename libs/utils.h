@@ -11,9 +11,9 @@
 
 #include "SimpleSignal.hpp"
 
-#define LOGPD(format, ...) printf("[D](%.6f)%s:%s:%d[%s]:" format "\n", utils::timestamp<double>(), __FILE__, __PRETTY_FUNCTION__, __LINE__, utils::tid().data(), ##__VA_ARGS__)
-#define LOGD(format, ...) printf("[D](%.6f)%s:%s:%d[%s]:" format "\n", utils::timestamp<double>(), __FILE__, __FUNCTION__, __LINE__, utils::tid().data(), ##__VA_ARGS__)
-#define LOGE(format, ...) printf("[E](%.6f)%s:%s:%d[%s]:" format "%s\n", utils::timestamp<double>(), __FILE__, __FUNCTION__, __LINE__, utils::tid().data(), ##__VA_ARGS__, strerror(errno))
+#define LOGPD(format, ...) printf("[D](%.6f)%s:%s:%d[%s]:" format "\n", utils::timestamp(), __FILE__, __PRETTY_FUNCTION__, __LINE__, utils::tid().data(), ##__VA_ARGS__)
+#define LOGD(format, ...) printf("[D](%.6f)%s:%s:%d[%s]:" format "\n", utils::timestamp(), __FILE__, __FUNCTION__, __LINE__, utils::tid().data(), ##__VA_ARGS__)
+#define LOGE(format, ...) printf("[E](%.6f)%s:%s:%d[%s]:" format "%s\n", utils::timestamp(), __FILE__, __FUNCTION__, __LINE__, utils::tid().data(), ##__VA_ARGS__, strerror(errno))
 
 #define TIMER(ID) utils::Timer __timer_##ID(#ID)
 #define TRACE() utils::Timer __tracer(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + utils::tid() + ")")
@@ -23,19 +23,19 @@ namespace utils {
 
 /// format
 template <typename T>
-T Argument(T value) noexcept
+T argument(T value) noexcept
 {
     return value;
 }
 
 template <typename T>
-T const * Argument(std::basic_string<T> const & value) noexcept
+T const * argument(std::basic_string<T> const & value) noexcept
 {
     return value.data();
 }
 
 template <typename ... Args>
-int StringPrint(char * const buffer,
+int stringPrint(char * const buffer,
                 size_t const bufferCount,
                 char const * const format,
                 Args const & ... args) noexcept
@@ -43,50 +43,34 @@ int StringPrint(char * const buffer,
     int const result = snprintf(buffer,
                               bufferCount,
                               format,
-                              Argument(args) ...);
-    // assert(-1 != result);
-    return result;
-}
-
-template <typename ... Args>
-int StringPrint(wchar_t * const buffer,
-                size_t const bufferCount,
-                wchar_t const * const format,
-                Args const & ... args) noexcept
-{
-    int const result = swprintf(buffer,
-                              bufferCount,
-                              format,
-                              Argument(args) ...);
-    // assert(-1 != result);
+                              argument(args) ...);
     return result;
 }
 
 template <typename T, typename ... Args>
-std::basic_string<T> Format(
+std::basic_string<T> stringFormat(
             size_t size,
             T const * const format,
             Args const & ... args)
 {
     std::basic_string<T> buffer;
     buffer.resize(size);
-    int len = StringPrint(&buffer[0], buffer.size(), format, args ...);
+    int len = stringPrint(&buffer[0], buffer.size(), format, args ...);
     buffer.resize(len);
     return buffer;
 }
 
 template <typename T, typename ... Args>
-std::basic_string<T> Format(
+std::basic_string<T> stringFormat(
             T const * const format,
             Args const & ... args)
 {
     std::basic_string<T> buffer;
-    // size_t const size = 0x100;
-    size_t const size = StringPrint(&buffer[0], 0, format, args ...);
+    size_t const size = stringPrint(&buffer[0], 0, format, args ...);
     if (size > 0)
     {
         buffer.resize(size + 1); /// extra for null
-        StringPrint(&buffer[0], buffer.size(), format, args ...);
+        stringPrint(&buffer[0], buffer.size(), format, args ...);
     }
 
     return buffer;
@@ -120,7 +104,7 @@ public:
     }
 
     template <typename F, typename ...Args>
-    void pop(F &&doPop, Args &&...elems)
+    void pop(F &&doPop, Args &&...args)
     {
         uint32_t cons_head = cons_head_.load(std::memory_order_relaxed);
         for(;;)
@@ -131,14 +115,14 @@ public:
             if(cons_head_.compare_exchange_weak(cons_head, cons_head + 1, std::memory_order_acquire, std::memory_order_relaxed))
                 break;
         }
-        std::forward<F>(doPop)(elemAt(cons_head), kELemSize, std::forward<Args>(elems)...);
+        std::forward<F>(doPop)(elemAt(cons_head), kELemSize, std::forward<Args>(args)...);
         while (cons_tail_.load(std::memory_order_relaxed) != cons_head);
 
         cons_tail_.fetch_add(1, std::memory_order_release);
     }
 
     template <typename F, typename ...Args>
-    void push(F &&doPush, Args&&...elems)
+    void push(F &&doPush, Args&&...args)
     {
         uint32_t prod_head = prod_head_.load(std::memory_order_relaxed);
         for(;;)
@@ -149,7 +133,7 @@ public:
             if(prod_head_.compare_exchange_weak(prod_head, prod_head + 1, std::memory_order_acquire, std::memory_order_relaxed))
                 break;
         }
-        std::forward<F>(doPush)(elemAt(prod_head), kELemSize, std::forward<Args>(elems)...);
+        std::forward<F>(doPush)(elemAt(prod_head), kELemSize, std::forward<Args>(args)...);
         while (prod_tail_.load(std::memory_order_relaxed) != prod_head);
 
         prod_tail_.fetch_add(1, std::memory_order_release);
@@ -246,7 +230,7 @@ inline std::string tid()
     return ss.str();
 }
 
-template <typename T=size_t, typename D=std::ratio<1,1>, typename C=std::chrono::high_resolution_clock>
+template <typename T=double, typename D=std::ratio<1,1>, typename C=std::chrono::high_resolution_clock>
 T timestamp(typename C::time_point &&t = C::now())
 {
     return std::chrono::duration_cast<std::chrono::duration<T,D>>(std::forward<typename C::time_point>(t).time_since_epoch()).count();
@@ -259,24 +243,24 @@ struct Timer
     Timer() : name_(""), begin_(clock__::now()) {}
     Timer(std::string id) : name_(std::move(id)), begin_(clock__::now()) 
     {
-        printf(" (%.6f)%s\n", utils::timestamp<double>(), name_.data());
+        printf(" (%.6f)%s\n", utils::timestamp(), name_.data());
     }
 
     Timer(std::function<void(std::string const&)> logf, std::string id="") : name_(std::move(id)), begin_(clock__::now()) 
     {
         sig_log_.connect(logf);
-        sig_log_.emit(Format("(%s)\n", utils::timestamp<double>(), name_.data()));
+        sig_log_.emit(stringFormat("(%s)\n", name_));
     }
 
     ~Timer()
     {
         if(sig_log_)
-            sig_log_.emit(Format("   (%.6f)[%s](~%s) %.3f (ms)\n", utils::timestamp<double>(), utils::tid(), name_.data(), elapse<double,std::milli>()));
+            sig_log_.emit(stringFormat("   (%.6f)[%s](~%s) %.6f (s)\n", utils::timestamp(), utils::tid(), name_, elapse()));
         else if(!name_.empty())
-            printf(" (%.6f)~%s: %.3f (ms)\n", utils::timestamp<double>(), name_.data(), elapse<double,std::milli>());
+            printf(" (%.6f)~%s: %.6f (s)\n", utils::timestamp(), name_.data(), elapse());
     }
 
-    template <typename T=double, typename D=std::milli>
+    template <typename T=double, typename D=std::ratio<1,1>>
     T reset()
     {
         T ret = elapse<T,D>();
@@ -284,14 +268,14 @@ struct Timer
         return ret;
     }
 
-    template <typename T=double, typename D=std::milli>
+    template <typename T=double, typename D=std::ratio<1,1>>
     T elapse() const
     {
         using namespace std::chrono;
         return duration_cast<std::chrono::duration<T,D>>(clock__::now() - begin_).count();
     }
 
-    template <typename T=double, typename D=std::milli>
+    template <typename T=double, typename D=std::ratio<1,1>>
     std::chrono::duration<T,D> duration() const
     {
         using namespace std::chrono;
