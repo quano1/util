@@ -103,40 +103,47 @@ public:
         buffer_.resize(capacity_ * kELemSize);
     }
 
-    template <typename F, typename ...Args>
-    void pop(F &&doPop, Args &&...args)
+    template <typename D, typename F, typename ...Args>
+    void pop(D &&delay, F &&doPop, Args &&...args)
     {
-        uint32_t cons_head = cons_head_.load(std::memory_order_relaxed);
-        for(;;)
-        {
-            if (cons_head == prod_tail_.load(std::memory_order_relaxed))
-                continue;
+        uint32_t cons_head;
+        //  = cons_head_.load(std::memory_order_relaxed);
+        // for(;;)
+        // {
+        //     if (cons_head == prod_tail_.load(std::memory_order_relaxed))
+        //         continue;
 
-            if(cons_head_.compare_exchange_weak(cons_head, cons_head + 1, std::memory_order_acquire, std::memory_order_relaxed))
-                break;
-        }
+        //     if(cons_head_.compare_exchange_weak(cons_head, cons_head + 1, std::memory_order_acquire, std::memory_order_relaxed))
+        //         break;
+        // }
+        while(!tryPop(cons_head)){std::forward<D>(delay)();}
+
         std::forward<F>(doPop)(elemAt(cons_head), kELemSize, std::forward<Args>(args)...);
-        while (cons_tail_.load(std::memory_order_relaxed) != cons_head);
+        // while (cons_tail_.load(std::memory_order_relaxed) != cons_head);
 
-        cons_tail_.fetch_add(1, std::memory_order_release);
+        // cons_tail_.fetch_add(1, std::memory_order_release);
+        while(!completePop(cons_head)){std::forward<D>(delay)();}
     }
 
-    template <typename F, typename ...Args>
-    void push(F &&doPush, Args&&...args)
+    template <typename D, typename F, typename ...Args>
+    void push(D &&delay, F &&doPush, Args&&...args)
     {
-        uint32_t prod_head = prod_head_.load(std::memory_order_relaxed);
-        for(;;)
-        {
-            if (prod_head == (cons_tail_.load(std::memory_order_relaxed) + capacity_))
-                continue;
+        uint32_t prod_head;
+        //  = prod_head_.load(std::memory_order_relaxed);
+        // for(;;)
+        // {
+        //     if (prod_head == (cons_tail_.load(std::memory_order_relaxed) + capacity_))
+        //         continue;
 
-            if(prod_head_.compare_exchange_weak(prod_head, prod_head + 1, std::memory_order_acquire, std::memory_order_relaxed))
-                break;
-        }
+        //     if(prod_head_.compare_exchange_weak(prod_head, prod_head + 1, std::memory_order_acquire, std::memory_order_relaxed))
+        //         break;
+        // }
+        while(!tryPush(prod_head)){std::forward<D>(delay)();}
         std::forward<F>(doPush)(elemAt(prod_head), kELemSize, std::forward<Args>(args)...);
-        while (prod_tail_.load(std::memory_order_relaxed) != prod_head);
+        // while (prod_tail_.load(std::memory_order_relaxed) != prod_head);
 
-        prod_tail_.fetch_add(1, std::memory_order_release);
+        // prod_tail_.fetch_add(1, std::memory_order_release);
+        while(!completePush(prod_head)){std::forward<D>(delay)();}
     }
 
     inline bool tryPop(uint32_t &cons_head)
@@ -157,7 +164,8 @@ public:
 
     inline bool completePop(uint32_t cons_head)
     {
-        while (cons_tail_.load(std::memory_order_relaxed) != cons_head);
+        if (cons_tail_.load(std::memory_order_relaxed) != cons_head) 
+            return false;
 
         cons_tail_.fetch_add(1, std::memory_order_release);
         return true;
@@ -180,7 +188,8 @@ public:
 
     inline bool completePush(uint32_t prod_head)
     {
-        while (prod_tail_.load(std::memory_order_relaxed) != prod_head);
+        if (prod_tail_.load(std::memory_order_relaxed) != prod_head)
+            return false;
 
         prod_tail_.fetch_add(1, std::memory_order_release);
         return true;
@@ -238,33 +247,33 @@ T timestamp(typename C::time_point &&t = C::now())
 
 struct Timer
 {
-    using clock__= std::chrono::high_resolution_clock;
+    using _clock= std::chrono::high_resolution_clock;
 
-    Timer() : name_(""), begin_(clock__::now()) {}
-    Timer(std::string id) : name_(std::move(id)), begin_(clock__::now()) 
+    Timer() : name(""), begin(_clock::now()) {}
+    Timer(std::string id) : name(std::move(id)), begin(_clock::now()) 
     {
-        printf(" (%.6f)%s\n", utils::timestamp(), name_.data());
+        printf(" (%.6f)%s\n", utils::timestamp(), name.data());
     }
 
-    Timer(std::function<void(std::string const&)> logf, std::string id="") : name_(std::move(id)), begin_(clock__::now()) 
+    Timer(std::function<void(std::string const&)> logf, std::string id="") : name(std::move(id)), begin(_clock::now()) 
     {
-        sig_log_.connect(logf);
-        sig_log_.emit(stringFormat("(%s)\n", name_));
+        sig_log.connect(logf);
+        // sig_log.emit(stringFormat("{%s}\n", name));
     }
 
     ~Timer()
     {
-        if(sig_log_)
-            sig_log_.emit(stringFormat("   (%.6f)[%s](~%s) %.6f (s)\n", utils::timestamp(), utils::tid(), name_, elapse()));
-        else if(!name_.empty())
-            printf(" (%.6f)~%s: %.6f (s)\n", utils::timestamp(), name_.data(), elapse());
+        if(sig_log)
+            sig_log.emit(stringFormat("{%.6f}{%s}{%s}{%.6f(s)}\n", utils::timestamp(), utils::tid(), name, elapse()));
+        else if(!name.empty())
+            printf(" (%.6f)~%s: %.6f (s)\n", utils::timestamp(), name.data(), elapse());
     }
 
     template <typename T=double, typename D=std::ratio<1,1>>
     T reset()
     {
         T ret = elapse<T,D>();
-        begin_ = clock__::now();
+        begin = _clock::now();
         return ret;
     }
 
@@ -272,21 +281,21 @@ struct Timer
     T elapse() const
     {
         using namespace std::chrono;
-        return duration_cast<std::chrono::duration<T,D>>(clock__::now() - begin_).count();
+        return duration_cast<std::chrono::duration<T,D>>(_clock::now() - begin).count();
     }
 
     template <typename T=double, typename D=std::ratio<1,1>>
     std::chrono::duration<T,D> duration() const
     {
         using namespace std::chrono;
-        auto ret = duration_cast<std::chrono::duration<T,D>>(clock__::now() - begin_);
+        auto ret = duration_cast<std::chrono::duration<T,D>>(_clock::now() - begin);
         return ret;
     }
 
-    clock__::time_point begin_;
-    std::string name_;
+    _clock::time_point begin;
+    std::string name;
 
-    Simple::Signal<void(std::string const&)> sig_log_;
+    Simple::Signal<void(std::string const&)> sig_log;
 };
 
 } /// utils

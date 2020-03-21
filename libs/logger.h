@@ -31,20 +31,25 @@ namespace tll {
 
 typedef uint32_t LogFlag;
 
-enum class LogType /// logtype
+enum class LogType /// LogType
 {
-    kDebug=0,
-    kTrace,
-    kInfo,
-    kFatal,
+    debug=0,
+    info,
+    fatal,
+    trace,
 };
 
-char const kLogTypeString[]="DTIF";
+char const kLogTypeString[]="DIFT";
 
-TLL_INLINE LogFlag toFlag(LogType type)
+TLL_INLINE constexpr LogFlag toFlag(LogType type)
 {
     return 1U << static_cast<LogFlag>(type);
 }
+
+constexpr LogFlag lf_d = toFlag(LogType::debug);
+constexpr LogFlag lf_t = toFlag(LogType::trace);
+constexpr LogFlag lf_i = toFlag(LogType::info);
+constexpr LogFlag lf_f = toFlag(LogType::fatal);
 
 template <typename... Args>
 LogFlag toFlag(tll::LogType type, Args ...args)
@@ -52,24 +57,24 @@ LogFlag toFlag(tll::LogType type, Args ...args)
     return toFlag(type) | toFlag(args...);
 }
 
-// namespace logtype { /// logtype
-// static const LogType kDebug=(1U << 0);
-// static const LogType kTrace=(1U << 1);
-// static const LogType kInfo=(1U << 2);
-// static const LogType kFatal=(1U << 3);
+// namespace LogType { /// LogType
+// static const LogType debug=(1U << 0);
+// static const LogType trace=(1U << 1);
+// static const LogType info=(1U << 2);
+// static const LogType fatal=(1U << 3);
 // }
 
 typedef std::pair<LogType, std::string> LogInfo;
 typedef std::pair<LogFlag, int> LogFd;
 
-template <size_t const kLogSize, uint32_t max_log_in_queue, uint32_t const kDelayMicro>
+template <size_t kLogSize, uint32_t max_log_in_queue, uint32_t kDelayUs>
 class Logger
 {
 public:
     template < typename ... LFds>
     Logger(LFds ...lfds) : ring_queue_(max_log_in_queue), is_running_(false)
     {
-        addFd__(lfds...);
+        _addFd(lfds...);
     }
 
     ~Logger() 
@@ -83,13 +88,20 @@ public:
         }
     }
 
+    Logger(const Logger&) = delete;
+    Logger& operator=(const Logger&) = delete;
+    Logger(Logger&&) = delete;
+    Logger& operator=(Logger&&) = delete;
+
     template <LogType type, typename... Args>
     void log(const char *format, Args &&...args)
     {
-        ring_queue_.push([](LogInfo &elem, uint32_t size, LogInfo &&log_msg)
-        {
-            elem = std::move(log_msg);
-        }, LogInfo{type, utils::stringFormat(kLogSize, format, std::forward<Args>(args)...)});
+        ring_queue_.push(
+            [](){std::this_thread::sleep_for(std::chrono::microseconds(kDelayUs));},
+            [](LogInfo &elem, uint32_t size, LogInfo &&log_msg)
+            {
+                elem = std::move(log_msg);
+            }, LogInfo{type, utils::stringFormat(kLogSize, format, std::forward<Args>(args)...)});
 
         if(!is_running_.load(std::memory_order_relaxed)) start();
     }
@@ -105,27 +117,30 @@ public:
             {
                 if(ring_queue_.empty())
                 {
-                    std::this_thread::sleep_for(std::chrono::microseconds(kDelayMicro));
+                    std::this_thread::sleep_for(std::chrono::microseconds(kDelayUs));
                     continue;
                 }
 
-                LogInfo log_message;
-                ring_queue_.pop([&log_message](LogInfo &elem, uint32_t)
-                {
-                    log_message = std::move(elem);
-                });
+                LogInfo log_msg;
+                ring_queue_.pop(
+                    [](){std::this_thread::sleep_for(std::chrono::microseconds(kDelayUs));},
+                    [&log_msg](LogInfo &elem, uint32_t)
+                    {
+                        log_msg = std::move(elem);
+                    });
 
                 // FIXME: parallel is 10 times slower???
                 // #pragma omp parallel for
                 for(int i=0; i<lfds_.size(); i++)
                 {
                     LogFd &lfd = lfds_[i];
-                    if(lfd.first & tll::toFlag(log_message.first))
+                    LogType const kLogt = log_msg.first;
+                    if(lfd.first & tll::toFlag(kLogt))
                     {
-                        int fd = lfd.second;
-                        // std::string &msg = log_message.second;
-                        std::string msg = utils::stringFormat(kLogSize, "[%c]%s", kLogTypeString[(uint32_t)(log_message.first)], log_message.second);
-                        auto size = write(fd, msg.data(), msg.size());
+                        int const kFd = lfd.second;
+                        // std::string &msg = log_msg.second;
+                        std::string msg = utils::stringFormat(kLogSize, "{%c}%s", kLogTypeString[(uint32_t)(kLogt)], log_msg.second);
+                        auto size = write(kFd, msg.data(), msg.size());
                     }
                 }
             }
@@ -135,25 +150,25 @@ public:
     TLL_INLINE void join()
     {
         while(is_running_.load(std::memory_order_relaxed) && !ring_queue_.empty())
-            std::this_thread::sleep_for(std::chrono::microseconds(kDelayMicro));
+            std::this_thread::sleep_for(std::chrono::microseconds(kDelayUs));
     }
 
     template < typename ... LFds>
     void addFd(LFds ...lfds)
     {
         if(is_running_.load(std::memory_order_relaxed)) return;
-        addFd__(lfds...);
+        _addFd(lfds...);
     }
 
 private:
     template <typename ... LFds>
-    void addFd__(LogFd lfd, LFds ...lfds)
+    void _addFd(LogFd lfd, LFds ...lfds)
     {
         lfds_.push_back(lfd);
-        addFd__(lfds...);
+        _addFd(lfds...);
     }
 
-    TLL_INLINE void addFd__(LogFd lfd)
+    TLL_INLINE void _addFd(LogFd lfd)
     {
         lfds_.push_back(lfd);
     }
@@ -166,17 +181,17 @@ private:
 
 } // llt
 
-#define LOG_HEADER__ utils::stringFormat("(%.6f)%s:%s:%d[%s]", utils::timestamp<double>(), __FILE__, __FUNCTION__, __LINE__, utils::tid())
+#define _LOG_HEADER utils::stringFormat("{%.6f}{%s}{%s}{%s}{%d}", utils::timestamp<double>(), utils::tid(), __FILE__, __FUNCTION__, __LINE__)
 
-#define TLL_LOGD(logger, format, ...) (logger).log<tll::LogType::kDebug>("%s(" format ")\n", LOG_HEADER__ , ##__VA_ARGS__)
+#define TLL_LOGD(logger, format, ...) (logger).log<tll::LogType::debug>("%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
 
-#define TLL_LOGTF(logger) (logger).log<tll::LogType::kTrace>("%s", LOG_HEADER__); utils::Timer timer__([&logger](std::string const &str){logger.log<tll::LogType::kTrace>("%s", str.data());}, __FUNCTION__)
+#define TLL_LOGTF(logger) (logger).log<tll::LogType::trace>("%s\n", _LOG_HEADER); utils::Timer timer_([&logger](std::string const &log_msg){logger.log<tll::LogType::trace>("%s", log_msg);}, __FUNCTION__)
 
-#define TLL_LOGT(logger, ID) (logger).log<tll::LogType::kTrace>("%s", LOG_HEADER__); utils::Timer timer_##ID__([&logger](std::string const &str){logger.log<tll::LogType::kTrace>("%s", str.data());}, #ID)
+#define TLL_LOGT(logger, ID) (logger).log<tll::LogType::trace>("%s\n", _LOG_HEADER); utils::Timer timer_##ID_([&logger](std::string const &log_msg){logger.log<tll::LogType::trace>("%s", log_msg);}, #ID)
 
-#define TLL_LOGI(logger, format, ...) (logger).log<tll::LogType::kInfo>("%s(" format ")\n", LOG_HEADER__ , ##__VA_ARGS__)
+#define TLL_LOGI(logger, format, ...) (logger).log<tll::LogType::info>("%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
 
-#define TLL_LOGF(logger, format, ...) (logger).log<tll::LogType::kFatal>("%s(" format ")\n", LOG_HEADER__ , ##__VA_ARGS__)
+#define TLL_LOGF(logger, format, ...) (logger).log<tll::LogType::fatal>("%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
 
 #ifndef STATIC_LIB
 #include "logger.cc"
