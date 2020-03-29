@@ -65,16 +65,15 @@ constexpr LogFlag lf_f = toFlag(LogType::kFatal);
 // }
 
 typedef std::pair<LogType, std::string> LogInfo;
-typedef std::pair<LogFlag, int> LogFd;
+// typedef std::pair<LogFlag, int> LogFd;
+typedef std::tuple<LogFlag, int, std::function<void(int, const void*, size_t)>> LogFd;
 
-constexpr size_t kWatermark = 0x400;
-
-template <size_t kLogSize, uint32_t max_log_in_queue, uint32_t kDelayUs>
+template <size_t kLogSize, uint32_t max_log_in_queue, uint32_t kDelayUs, size_t kChunkSize=0>
 class Logger
 {
 public:
     template < typename ... LFds>
-    Logger(LFds ...lfds) : write_count_(0), batch_mode_(true), ring_queue_(max_log_in_queue), is_running_(false)
+    Logger(LFds ...lfds) : write_count_(0), ring_queue_(max_log_in_queue), is_running_(false)
     {
         _addFd(lfds...);
         init();
@@ -82,12 +81,16 @@ public:
 
     ~Logger() 
     {
-        join();
+        this->join();
         is_running_.store(false, std::memory_order_relaxed);
         if(broadcast_.joinable()) broadcast_.join();
+        this->flushAll();
+        LOGD("%d", write_count_);
         for(auto lfd : lfds_)
         {
-            close(lfd.second);
+            const int fd = std::get<1>(lfd);
+            if(fd > 0)
+                close(fd);
         }
     }
 
@@ -138,39 +141,30 @@ public:
                 for(int i=0; i<lfds_.size(); i++)
                 {
                     LogFd &lfd = lfds_[i];
-                    if(!batch_mode_) 
-                        { flush(lfd, log_inf); continue; }
-                    
+                    // if(!kChunkSize) 
+                    //     { flush(lfd, log_inf); continue; }
+
                     LogType const kLogt = log_inf.first;
-                    if(lfd.first & tll::toFlag(kLogt))
+                    LogFlag flag = std::get<0>(lfd);
+                    if(flag & tll::toFlag(kLogt))
                     {
                         // int const kFd = lfd.second;
                         // std::string &msg = log_inf.second;
                         std::string msg = utils::stringFormat(kLogSize, "{%c}%s", kLogTypeString[(uint32_t)(kLogt)], log_inf.second);
                         //     auto size = write(kFd, msg.data(), msg.size());
-                        auto &fdb = fd_buffers_[i];
-                        size_t const old_size = fdb.size();
+                        auto &buff = buffers_[i];
+                        size_t const old_size = buff.size();
                         size_t const new_size = old_size + msg.size();
 
-                        if(new_size < kWatermark)
-                        {
-                            fdb.resize(new_size);
-                            memcpy(fdb.data() + old_size, msg.data(), msg.size());
-                        }
-                        else
+                        buff.resize(new_size);
+                        memcpy(buff.data() + old_size, msg.data(), msg.size());
+
+                        if(new_size >= kChunkSize)
                             this->flush(i);
                     }
                 }
             }
         });
-    }
-
-    TLL_INLINE void join()
-    {
-        while(is_running_.load(std::memory_order_relaxed) && !ring_queue_.empty())
-            std::this_thread::sleep_for(std::chrono::microseconds(kDelayUs));
-
-        this->flushAll();
     }
 
     template < typename ... LFds>
@@ -181,37 +175,44 @@ public:
     }
 
     int write_count_;
-    bool batch_mode_;
+
+    TLL_INLINE void join()
+    {
+        while(is_running_.load(std::memory_order_relaxed) && !ring_queue_.empty())
+            std::this_thread::sleep_for(std::chrono::microseconds(kDelayUs));
+    }
+
 private:
 
     TLL_INLINE void init()
     {
-        fd_buffers_.resize(lfds_.size());
-        for(auto &fdb : fd_buffers_) fdb.reserve(kWatermark*2);
+        buffers_.resize(lfds_.size());
+        if(kChunkSize == 0) return;
+        for(auto &buff : buffers_) buff.reserve(kChunkSize*2);
     }
 
     TLL_INLINE void flush(int idx)
     {
-        auto &fdb = fd_buffers_[idx];
-        if(fdb.size())
-        {
-            write_count_++;
-            auto size = write(lfds_[idx].second, fdb.data(), fdb.size());
-            fdb.resize(0);
-        }
+        int fd = std::get<1>(lfds_[idx]);
+        auto logf = std::get<2>(lfds_[idx]);
+        auto &buff = buffers_[idx];
+        logf(fd, buff.data(), buff.size());
+        buff.resize(0);
+        write_count_++;
     }
 
-    TLL_INLINE void flush(LogFd lfd, LogInfo const &linfo)
-    {
-        LogType const kLogt = linfo.first;
-        if(lfd.first & tll::toFlag(kLogt))
-        {
-            int const kFd = lfd.second;
-            std::string msg = utils::stringFormat(kLogSize, "{%c}%s", kLogTypeString[(uint32_t)(kLogt)], linfo.second);
-            write_count_++;
-            auto size = write(kFd, msg.data(), msg.size());
-        }
-    }
+    // TLL_INLINE void flush(LogFd lfd, LogInfo const &linfo)
+    // {
+    //     LogType const kLogt = linfo.first;
+    //     if(std::get<0>(lfd) & tll::toFlag(kLogt))
+    //     {
+    //         int const kFd = std::get<1>(lfd);
+    //         std::string msg = utils::stringFormat(kLogSize, "{%c}%s", kLogTypeString[(uint32_t)(kLogt)], linfo.second);
+    //         write_count_++;
+    //         // auto size = write(kFd, msg.data(), msg.size());
+    //         std::get<2>(lfd)(std::get<1>(lfd), msg.data(), msg.size());
+    //     }
+    // }
 
     TLL_INLINE void flushAll()
     {
@@ -232,9 +233,10 @@ private:
 
     utils::BSDLFQ<LogInfo> ring_queue_;
     std::atomic<bool> is_running_;
+    std::atomic<bool> is_flushing_;
     std::thread broadcast_;
     std::vector<LogFd> lfds_;
-    std::vector<std::vector<char>> fd_buffers_;
+    std::vector<std::vector<char>> buffers_;
 };
 
 // template <typename T>
