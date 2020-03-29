@@ -96,12 +96,6 @@ public:
     Logger(Logger&&) = delete;
     Logger& operator=(Logger&&) = delete;
 
-    TLL_INLINE void init()
-    {
-        fd_buffers_.resize(lfds_.size());
-        for(auto &fdb : fd_buffers_) fdb.reserve(kWatermark*2);
-    }
-
     template <typename... Args>
     void log(int type, const char *format, Args &&...args)
     {
@@ -114,34 +108,6 @@ public:
         );
 
         if(!is_running_.load(std::memory_order_relaxed)) start();
-    }
-
-    TLL_INLINE void flush(int idx)
-    {
-        auto &fdb = fd_buffers_[idx];
-        if(fdb.size())
-        {
-            write_count_++;
-            auto size = write(lfds_[idx].second, fdb.data(), fdb.size());
-            fdb.resize(0);
-        }
-    }
-
-    TLL_INLINE void flush(LogFd lfd, LogInfo const &linfo)
-    {
-        LogType const kLogt = linfo.first;
-        if(lfd.first & tll::toFlag(kLogt))
-        {
-            int const kFd = lfd.second;
-            std::string msg = utils::stringFormat(kLogSize, "{%c}%s", kLogTypeString[(uint32_t)(kLogt)], linfo.second);
-            write_count_++;
-            auto size = write(kFd, msg.data(), msg.size());
-        }
-    }
-
-    TLL_INLINE void flushAll()
-    {
-        for(int i=0; i<lfds_.size(); i++) this->flush(i);
     }
 
     TLL_INLINE void start()
@@ -171,9 +137,9 @@ public:
                 // #pragma omp parallel for
                 for(int i=0; i<lfds_.size(); i++)
                 {
-
                     LogFd &lfd = lfds_[i];
-                    if(!batch_mode_) { flush(lfd, log_inf); continue; }
+                    if(!batch_mode_) 
+                        { flush(lfd, log_inf); continue; }
                     
                     LogType const kLogt = log_inf.first;
                     if(lfd.first & tll::toFlag(kLogt))
@@ -217,6 +183,41 @@ public:
     int write_count_;
     bool batch_mode_;
 private:
+
+    TLL_INLINE void init()
+    {
+        fd_buffers_.resize(lfds_.size());
+        for(auto &fdb : fd_buffers_) fdb.reserve(kWatermark*2);
+    }
+
+    TLL_INLINE void flush(int idx)
+    {
+        auto &fdb = fd_buffers_[idx];
+        if(fdb.size())
+        {
+            write_count_++;
+            auto size = write(lfds_[idx].second, fdb.data(), fdb.size());
+            fdb.resize(0);
+        }
+    }
+
+    TLL_INLINE void flush(LogFd lfd, LogInfo const &linfo)
+    {
+        LogType const kLogt = linfo.first;
+        if(lfd.first & tll::toFlag(kLogt))
+        {
+            int const kFd = lfd.second;
+            std::string msg = utils::stringFormat(kLogSize, "{%c}%s", kLogTypeString[(uint32_t)(kLogt)], linfo.second);
+            write_count_++;
+            auto size = write(kFd, msg.data(), msg.size());
+        }
+    }
+
+    TLL_INLINE void flushAll()
+    {
+        for(int i=0; i<lfds_.size(); i++) this->flush(i);
+    }
+
     template <typename ... LFds>
     void _addFd(LogFd lfd, LFds ...lfds)
     {
@@ -248,9 +249,9 @@ private:
 
 #define TLL_LOGD(logger, format, ...) (logger).log(static_cast<int>(tll::LogType::kDebug), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
 
-#define TLL_LOGTF(logger) utils::Timer timer_([&logger](std::string const &log_msg){logger.log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, ((logger).log(static_cast<int>(tll::LogType::kTrace), "%s\n", _LOG_HEADER), __FUNCTION__))
+#define TLL_LOGTF(logger) utils::Timer timer_([&logger](std::string const &log_msg){logger.log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, _LOG_HEADER, (/*(logger).log(static_cast<int>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ __FUNCTION__))
 
-#define TLL_LOGT(logger, ID) utils::Timer timer_##ID_([&logger](std::string const &log_msg){logger.log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, ((logger).log(static_cast<int>(tll::LogType::kTrace), "%s\n", _LOG_HEADER), #ID))
+#define TLL_LOGT(logger, ID) utils::Timer timer_##ID_([&logger](std::string const &log_msg){logger.log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, _LOG_HEADER, (/*(logger).log(static_cast<int>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ #ID))
 
 #define TLL_LOGI(logger, format, ...) (logger).log(static_cast<int>(tll::LogType::kInfo), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
 

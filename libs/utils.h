@@ -255,10 +255,10 @@ struct Timer
         printf(" (%.6f)%s\n", utils::timestamp(), name.data());
     }
 
-    Timer(std::function<void(std::string const&)> logf, std::string id="") : name(std::move(id)), begin(_clock::now()) 
+    Timer(std::function<void(std::string const&)> logf, std::string start_log, std::string id="") : name(std::move(id)), begin(_clock::now()) 
     {
         sig_log.connect(logf);
-        // sig_log.emit(stringFormat("{%s}\n", name));
+        sig_log.emit(stringFormat("%s\n", start_log));
     }
 
     ~Timer()

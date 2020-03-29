@@ -9,26 +9,24 @@
 #include "../libs/logger.h"
 // #include "../libs/exporterudp.h"
 
-template <typename L>
+// template <typename L>
 struct A
 {
-    A(std::function<void(int, std::string const&)> logf)
+    A(std::function<void(int, std::string const&)> logf) : life_(std::bind(logf,static_cast<int>(tll::LogType::kInfo), std::placeholders::_1), _LOG_HEADER, __FUNCTION__)
     {
         sig_log.connect(logf);
-        // sig_log.connect(log, L::*method);
-        // sig_log.connect(Simple::slot (logger, &L::log));
-        sig_log.emit(static_cast<int>(tll::LogType::kInfo), utils::stringFormat("%s\n", _LOG_HEADER));
+        // sig_log.emit(static_cast<int>(tll::LogType::kInfo), utils::stringFormat("%s\n", _LOG_HEADER));
     }
 
     ~A()
     {
-        // logger_.log(tll::LogType::debug, utils::stringFormat("{%.6f}{%s}{%s}{%.6f(s)}\n", utils::timestamp(), utils::tid(), name, elapse()));
-        sig_log.emit(static_cast<int>(tll::LogType::kInfo), utils::stringFormat("%s\n", _LOG_HEADER));
+        // sig_log.emit(static_cast<int>(tll::LogType::kInfo), utils::stringFormat("%s\n", _LOG_HEADER));
     }
 
     // L &logger_;
     // L sig_log_;
     Simple::Signal<void(int, std::string const&)> sig_log;
+    utils::Timer life_;
 };
 
 namespace {
@@ -45,10 +43,12 @@ int main(int argc, char const *argv[])
             // ,tll::LogFd{tll::toFlag(tll::LogType::kInfo, tll::LogType::kDebug), open("fd_i.log", O_WRONLY | O_TRUNC | O_CREAT , 0644)}
             // ,tll::LogFd{tll::toFlag(tll::LogType::kFatal), open("fd_f.log", O_WRONLY | O_TRUNC | O_CREAT , 0644)}
         );
-    // A<Logger > a(lg);
-    A<Logger> a([&lg](int type, std::string const &log_msg){lg.log(type, "%s", log_msg);});
 
+    auto logf = [&lg](int type, std::string const &log_msg){lg.log(type, "%s", log_msg);};
     TLL_LOGTF(lg);
+
+    A a(logf);
+
     // if(argc > 1)
     {
         TLL_LOGT(lg, single);
@@ -61,10 +61,10 @@ int main(int argc, char const *argv[])
                 TLL_LOGF(lg, "%d %s", 10, "oi troi oi");
             }
         }
-        lg.join();
     }
+    lg.join();
     LOGD("%d", lg.write_count_);
-    
+
     lg.write_count_=0;
     lg.batch_mode_=false;
     {
@@ -78,8 +78,8 @@ int main(int argc, char const *argv[])
                 TLL_LOGF(lg, "%d %s", 10, "oi troi oi");
             }
         }
-        lg.join();
     }
+    lg.join();
     LOGD("%d", lg.write_count_);
 
     // {
