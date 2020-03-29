@@ -67,14 +67,17 @@ constexpr LogFlag lf_f = toFlag(LogType::kFatal);
 typedef std::pair<LogType, std::string> LogInfo;
 typedef std::pair<LogFlag, int> LogFd;
 
+constexpr size_t kWatermark = 0x400;
+
 template <size_t kLogSize, uint32_t max_log_in_queue, uint32_t kDelayUs>
 class Logger
 {
 public:
     template < typename ... LFds>
-    Logger(LFds ...lfds) : ring_queue_(max_log_in_queue), is_running_(false)
+    Logger(LFds ...lfds) : write_count_(0), batch_mode_(true), ring_queue_(max_log_in_queue), is_running_(false)
     {
         _addFd(lfds...);
+        init();
     }
 
     ~Logger() 
@@ -93,6 +96,12 @@ public:
     Logger(Logger&&) = delete;
     Logger& operator=(Logger&&) = delete;
 
+    TLL_INLINE void init()
+    {
+        fd_buffers_.resize(lfds_.size());
+        for(auto &fdb : fd_buffers_) fdb.reserve(kWatermark*2);
+    }
+
     template <typename... Args>
     void log(int type, const char *format, Args &&...args)
     {
@@ -105,6 +114,34 @@ public:
         );
 
         if(!is_running_.load(std::memory_order_relaxed)) start();
+    }
+
+    TLL_INLINE void flush(int idx)
+    {
+        auto &fdb = fd_buffers_[idx];
+        if(fdb.size())
+        {
+            write_count_++;
+            auto size = write(lfds_[idx].second, fdb.data(), fdb.size());
+            fdb.resize(0);
+        }
+    }
+
+    TLL_INLINE void flush(LogFd lfd, LogInfo const &linfo)
+    {
+        LogType const kLogt = linfo.first;
+        if(lfd.first & tll::toFlag(kLogt))
+        {
+            int const kFd = lfd.second;
+            std::string msg = utils::stringFormat(kLogSize, "{%c}%s", kLogTypeString[(uint32_t)(kLogt)], linfo.second);
+            write_count_++;
+            auto size = write(kFd, msg.data(), msg.size());
+        }
+    }
+
+    TLL_INLINE void flushAll()
+    {
+        for(int i=0; i<lfds_.size(); i++) this->flush(i);
     }
 
     TLL_INLINE void start()
@@ -122,26 +159,40 @@ public:
                     continue;
                 }
 
-                LogInfo log_msg;
+                LogInfo log_inf;
                 ring_queue_.pop(
                     [](){std::this_thread::sleep_for(std::chrono::microseconds(kDelayUs));},
-                    [&log_msg](LogInfo &elem, uint32_t)
+                    [&log_inf](LogInfo &elem, uint32_t)
                     {
-                        log_msg = std::move(elem);
+                        log_inf = std::move(elem);
                     });
 
                 // FIXME: parallel is 10 times slower???
                 // #pragma omp parallel for
                 for(int i=0; i<lfds_.size(); i++)
                 {
+
                     LogFd &lfd = lfds_[i];
-                    LogType const kLogt = log_msg.first;
+                    if(!batch_mode_) { flush(lfd, log_inf); continue; }
+                    
+                    LogType const kLogt = log_inf.first;
                     if(lfd.first & tll::toFlag(kLogt))
                     {
-                        int const kFd = lfd.second;
-                        // std::string &msg = log_msg.second;
-                        std::string msg = utils::stringFormat(kLogSize, "{%c}%s", kLogTypeString[(uint32_t)(kLogt)], log_msg.second);
-                        auto size = write(kFd, msg.data(), msg.size());
+                        // int const kFd = lfd.second;
+                        // std::string &msg = log_inf.second;
+                        std::string msg = utils::stringFormat(kLogSize, "{%c}%s", kLogTypeString[(uint32_t)(kLogt)], log_inf.second);
+                        //     auto size = write(kFd, msg.data(), msg.size());
+                        auto &fdb = fd_buffers_[i];
+                        size_t const old_size = fdb.size();
+                        size_t const new_size = old_size + msg.size();
+
+                        if(new_size < kWatermark)
+                        {
+                            fdb.resize(new_size);
+                            memcpy(fdb.data() + old_size, msg.data(), msg.size());
+                        }
+                        else
+                            this->flush(i);
                     }
                 }
             }
@@ -152,6 +203,8 @@ public:
     {
         while(is_running_.load(std::memory_order_relaxed) && !ring_queue_.empty())
             std::this_thread::sleep_for(std::chrono::microseconds(kDelayUs));
+
+        this->flushAll();
     }
 
     template < typename ... LFds>
@@ -161,6 +214,8 @@ public:
         _addFd(lfds...);
     }
 
+    int write_count_;
+    bool batch_mode_;
 private:
     template <typename ... LFds>
     void _addFd(LogFd lfd, LFds ...lfds)
@@ -178,7 +233,7 @@ private:
     std::atomic<bool> is_running_;
     std::thread broadcast_;
     std::vector<LogFd> lfds_;
-    // std::vector<char> fd_buffers_;
+    std::vector<std::vector<char>> fd_buffers_;
 };
 
 // template <typename T>

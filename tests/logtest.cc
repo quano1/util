@@ -17,13 +17,13 @@ struct A
         sig_log.connect(logf);
         // sig_log.connect(log, L::*method);
         // sig_log.connect(Simple::slot (logger, &L::log));
-        sig_log.emit(static_cast<int>(tll::LogType::kDebug), utils::stringFormat("%s\n", _LOG_HEADER));
+        sig_log.emit(static_cast<int>(tll::LogType::kInfo), utils::stringFormat("%s\n", _LOG_HEADER));
     }
 
     ~A()
     {
         // logger_.log(tll::LogType::debug, utils::stringFormat("{%.6f}{%s}{%s}{%.6f(s)}\n", utils::timestamp(), utils::tid(), name, elapse()));
-        sig_log.emit(static_cast<int>(tll::LogType::kDebug), utils::stringFormat("%s\n", _LOG_HEADER));
+        sig_log.emit(static_cast<int>(tll::LogType::kInfo), utils::stringFormat("%s\n", _LOG_HEADER));
     }
 
     // L &logger_;
@@ -55,7 +55,7 @@ int main(int argc, char const *argv[])
         {
             TLL_LOGT(lg, single_inner);
             // #pragma omp parallel for
-            for(int i=0; i < 1000; i++)
+            for(int i=0; i < 100000; i++)
             {
                 TLL_LOGD(lg, "%d %s", 10, "oi troi oi");
                 TLL_LOGF(lg, "%d %s", 10, "oi troi oi");
@@ -63,26 +63,44 @@ int main(int argc, char const *argv[])
         }
         lg.join();
     }
-
+    LOGD("%d", lg.write_count_);
+    
+    lg.write_count_=0;
+    lg.batch_mode_=false;
     {
-        TLL_LOGT(lg, multi);
+        TLL_LOGT(lg, single);
         {
-            TLL_LOGT(lg, multi_inner);
+            TLL_LOGT(lg, single_inner);
             // #pragma omp parallel for
-            std::future<void> futs[2];
-            for(auto &fut : futs)
-                fut = std::async(std::launch::async, [&lg](){
-                    for(int i=0; i < (1000 / 2); i++)
-                    {
-                        TLL_LOGD(lg, "%d %s", 10, "oi troi oi");
-                        TLL_LOGF(lg, "%d %s", 10, "oi troi oi");
-                    }
-                });
-
-            for(auto &fut : futs) fut.get();
+            for(int i=0; i < 100000; i++)
+            {
+                TLL_LOGD(lg, "%d %s", 10, "oi troi oi");
+                TLL_LOGF(lg, "%d %s", 10, "oi troi oi");
+            }
         }
         lg.join();
     }
+    LOGD("%d", lg.write_count_);
+
+    // {
+    //     TLL_LOGT(lg, multi);
+    //     {
+    //         TLL_LOGT(lg, multi_inner);
+    //         // #pragma omp parallel for
+    //         std::future<void> futs[2];
+    //         for(auto &fut : futs)
+    //             fut = std::async(std::launch::async, [&lg](){
+    //                 for(int i=0; i < (1000 / 2); i++)
+    //                 {
+    //                     TLL_LOGD(lg, "%d %s", 10, "oi troi oi");
+    //                     TLL_LOGF(lg, "%d %s", 10, "oi troi oi");
+    //                 }
+    //             });
+
+    //         for(auto &fut : futs) fut.get();
+    //     }
+    //     lg.join();
+    // }
 
     return 0;
 }
