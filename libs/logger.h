@@ -33,10 +33,10 @@ typedef uint32_t LogFlag;
 
 enum class LogType /// LogType
 {
-    debug=0,
-    info,
-    fatal,
-    trace,
+    kDebug=0,
+    kInfo,
+    kFatal,
+    kTrace,
 };
 
 char const kLogTypeString[]="DIFT";
@@ -46,16 +46,16 @@ TLL_INLINE constexpr LogFlag toFlag(LogType type)
     return 1U << static_cast<LogFlag>(type);
 }
 
-constexpr LogFlag lf_d = toFlag(LogType::debug);
-constexpr LogFlag lf_t = toFlag(LogType::trace);
-constexpr LogFlag lf_i = toFlag(LogType::info);
-constexpr LogFlag lf_f = toFlag(LogType::fatal);
-
 template <typename... Args>
-LogFlag toFlag(tll::LogType type, Args ...args)
+constexpr LogFlag toFlag(tll::LogType type, Args ...args)
 {
     return toFlag(type) | toFlag(args...);
 }
+
+constexpr LogFlag lf_d = toFlag(LogType::kDebug);
+constexpr LogFlag lf_t = toFlag(LogType::kTrace);
+constexpr LogFlag lf_i = toFlag(LogType::kInfo);
+constexpr LogFlag lf_f = toFlag(LogType::kFatal);
 
 // namespace LogType { /// LogType
 // static const LogType debug=(1U << 0);
@@ -93,15 +93,16 @@ public:
     Logger(Logger&&) = delete;
     Logger& operator=(Logger&&) = delete;
 
-    template <LogType type, typename... Args>
-    void log(const char *format, Args &&...args)
+    template <typename... Args>
+    void log(int type, const char *format, Args &&...args)
     {
         ring_queue_.push(
             [](){std::this_thread::sleep_for(std::chrono::microseconds(kDelayUs));},
             [](LogInfo &elem, uint32_t size, LogInfo &&log_msg)
             {
                 elem = std::move(log_msg);
-            }, LogInfo{type, utils::stringFormat(kLogSize, format, std::forward<Args>(args)...)});
+            }, LogInfo{static_cast<LogType>(type), utils::stringFormat(kLogSize, format, std::forward<Args>(args)...)}
+        );
 
         if(!is_running_.load(std::memory_order_relaxed)) start();
     }
@@ -177,21 +178,28 @@ private:
     std::atomic<bool> is_running_;
     std::thread broadcast_;
     std::vector<LogFd> lfds_;
+    // std::vector<char> fd_buffers_;
 };
+
+// template <typename T>
+// struct Tracer
+// {
+//     Tracer()
+// };
 
 } // llt
 
 #define _LOG_HEADER utils::stringFormat("{%.6f}{%s}{%s}{%s}{%d}", utils::timestamp<double>(), utils::tid(), __FILE__, __FUNCTION__, __LINE__)
 
-#define TLL_LOGD(logger, format, ...) (logger).log<tll::LogType::debug>("%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
+#define TLL_LOGD(logger, format, ...) (logger).log(static_cast<int>(tll::LogType::kDebug), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
 
-#define TLL_LOGTF(logger) (logger).log<tll::LogType::trace>("%s\n", _LOG_HEADER); utils::Timer timer_([&logger](std::string const &log_msg){logger.log<tll::LogType::trace>("%s", log_msg);}, __FUNCTION__)
+#define TLL_LOGTF(logger) utils::Timer timer_([&logger](std::string const &log_msg){logger.log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, ((logger).log(static_cast<int>(tll::LogType::kTrace), "%s\n", _LOG_HEADER), __FUNCTION__))
 
-#define TLL_LOGT(logger, ID) (logger).log<tll::LogType::trace>("%s\n", _LOG_HEADER); utils::Timer timer_##ID_([&logger](std::string const &log_msg){logger.log<tll::LogType::trace>("%s", log_msg);}, #ID)
+#define TLL_LOGT(logger, ID) utils::Timer timer_##ID_([&logger](std::string const &log_msg){logger.log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, ((logger).log(static_cast<int>(tll::LogType::kTrace), "%s\n", _LOG_HEADER), #ID))
 
-#define TLL_LOGI(logger, format, ...) (logger).log<tll::LogType::info>("%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
+#define TLL_LOGI(logger, format, ...) (logger).log(static_cast<int>(tll::LogType::kInfo), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
 
-#define TLL_LOGF(logger, format, ...) (logger).log<tll::LogType::fatal>("%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
+#define TLL_LOGF(logger, format, ...) (logger).log(static_cast<int>(tll::LogType::kFatal), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
 
 #ifndef STATIC_LIB
 #include "logger.cc"
