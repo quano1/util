@@ -8,8 +8,8 @@
 #include<arpa/inet.h> //inet_addr
 #include<netdb.h> //hostent
 
-#include "../libs/SimpleSignal.hpp"
-#include "../libs/utils.h"
+// #include "../libs/SimpleSignal.hpp"
+// #include "../libs/utils.h"
 #include "../libs/logger.h"
 // #include "../libs/exporterudp.h"
 
@@ -70,17 +70,18 @@ int main(int argc, char const *argv[])
 
     auto logf = [&lg](int type, std::string const &log_msg){lg.log(type, "%s", log_msg);};
     // auto myprinf = std::bind(std::printf, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3 );
-    // auto logf = std::bind(&Logger::log, &lg, std::placeholders::_1, std::placeholders::_2);
+    // auto logf = std::bind(&Logger::log<Args...>, &lg, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
     TLL_LOGTF(lg);
 
-    A a(logf);
+    // A a(logf);
     // if(argc > 1)
+    #pragma omp parallel num_threads ( 4 )
     {
         TLL_LOGT(lg, single);
         {
             TLL_LOGT(lg, single_inner);
             // #pragma omp parallel for
-            for(int i=0; i < 10000; i++)
+            for(int i=0; i < std::stoi(argv[1]); i++)
             {
                 TLL_LOGD(lg, "%d %s", 10, "oi troi oi");
                 TLL_LOGF(lg, "%d %s", 10, "oi troi oi");

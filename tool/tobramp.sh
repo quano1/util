@@ -2,69 +2,75 @@
 
 # head -n 9 test_lmngr.log | \
 
-dd if=big.log iflag=skip_bytes,count_bytes,fullblock bs=$((4096)) skip=$((4096*80)) count=$((4096*256)) 2> /tmp/null | \
-sort -t \; -k1 | \
-sed 's#/home/helloworld/workspace/util/tests/##g' | \
-awk -F  ";" '
-BEGIN{
-}
+# A->B: Normal line
+# B-->C: Dashed line
+# C->>D: Open arrow
+# D-->>A: Dashed open arrow
+# Note over A: Note over A
+
+dd if=../tests/fd_t.log iflag=skip_bytes,count_bytes,fullblock bs=$((4096)) skip=$((0)) count=$((4096*1024)) 2> /tmp/null | \
+sort -t "}" -k2 | \
+sed -e 's#^.\(.*\).$#\1#g' | \
+awk -F  "}{" '
+BEGIN{}
 {
-	if (NF==10)
+	type_=$1
+	time_=$2
+	thread_=$3
+
+	invoke_="->"
+	return_="-->"
+	self_call_="Note over "
+
+	if(NF > 5)
 	{
-		time_=$1; pid_=$2; tid_=$3; obj_addr_=$4;
-		log_type_=$5; indent_=$6;
-		file_=$7;
-		func_=$8;
-		line_=$9;
-		log_content_=$10;
-		log_msg=func_" "line_" "log_content_
+		file_=$4;
+		func_=$5;
+		line_=$6;
+		msg_=$7;
 
-		if(obj_addr_ == "0x0")
-			key = file_;
-		else
-			key = file_"\\n"obj_addr_;
-
-		if (line_ != -1)
+		if (type_ == "T")
 		{
-			if(obj_lst[key] == "")
+			if (curr_[thread_]=="")
 			{
-				obj_lst[key] = log_content_;
+				curr_[thread_]=file_;
 			}
-
-			stack_obj[tid_][indent_] = key;
-			if(ctx_current[tid_] == "")
+			
+			if (curr_[thread_] == file_)
 			{
-				# START
-				ctx_current[tid_] = key;
-				print "Note over " key ": "log_content_" START";
-			}
-			else if(ctx_current[tid_] == key)
-			{
-				# SELF CALL
-				print key "->" key ":" log_msg;
+				# self call
+				printf "Note over %s: +%s\n", file_, msg_;
 			}
 			else
 			{
-				# DISPATCH
-				print ctx_current[tid_] "->" key ":" log_msg;
-				ctx_current[tid_] = key;
+				# invoke
+				prev_[thread_] = curr_[thread_];
+				printf "%s->%s: %s\n", curr_[thread_], file_, msg_;
+				curr_[thread_] = file_;
 			}
 		}
 		else
 		{
-			# RETURN
-			if(indent_ > 0)
-			{
-				print ctx_current[tid_] "-->" stack_obj[tid_][indent_ - 1] ":" log_msg;
-				ctx_current[tid_] = stack_obj[tid_][indent_ - 1];
-			}
-			else
-			{
-				# print "\t\t"ctx_current[tid_] "-->" ctx_current[tid_] ":" log_msg;
-				print "Note over " ctx_current[tid_] ": "obj_lst[ctx_current[tid_]]" END";
-			}
+			# D I F
+			printf "Note right of %s: %s\n", file_, msg_;
 		}
 	}
+	else
+	{
+		msg_=$4
+		# return
+		if (curr_[thread_] == file_)
+		{
+			# self call return
+			printf "Note over %s: -%s\n", file_, msg_;
+		}
+		else
+		{
+			printf "%s-->%s: %s\n", curr_[thread_], prev_[thread_], msg_;
+			curr_[thread_] = prev_[thread_];
+		}
+	}
+
 }
 END {
 	# for (key in obj_lst)
