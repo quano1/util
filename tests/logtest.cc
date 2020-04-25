@@ -37,12 +37,15 @@ namespace {
     int const console = 1;
 }
 
+inline uint16_t myhtons(uint16_t port) {return htons(port);}
+
+tll::Logger<0x400, 0x1000, 0x1000, 10000> *plg;
+        
+
 int main(int argc, char const *argv[])
 {
-    using Logger = tll::Logger<0x400, 0x1000, 0x400, 10000>;
-
-    Logger lg
-        (
+    using Logger = tll::Logger<0x400, 0x1000, 0x1000, 10000>;
+    plg = new Logger(
             // tll::LogEntity{tll::lf_t | tll::lf_i | tll::lf_w | tll::lf_f, nullptr, nullptr, std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2), nullptr}
 
             tll::LogEntity{tll::lf_a, 
@@ -51,13 +54,13 @@ int main(int argc, char const *argv[])
                 [](void *handle, const char *buff, size_t size){static_cast<std::ofstream*>(handle)->write((const char *)buff, size);}, nullptr}
 
             ,tll::LogEntity{tll::lf_a,
-                [argv](){
+                []()->void*{
                     int sock_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
                     struct hostent *host;
-                    host = gethostbyname(argv[2]);
+                    host = gethostbyname("localhost");
                     sockaddr_in svr_addr;
                     svr_addr.sin_family = AF_INET;
-                    svr_addr.sin_port = htons( std::stoi(argv[3]) );
+                    svr_addr.sin_port = myhtons(65501);
                     bcopy((char *)host->h_addr, (char *)&svr_addr.sin_addr.s_addr, host->h_length);
 
                     // set non-blocking io
@@ -86,34 +89,38 @@ int main(int argc, char const *argv[])
                     }
                 }, nullptr}
         );
-
+    auto &lg = *plg;
     // lg.init();
     // lg.start();
 
     auto logf = [&lg](int type, std::string const &log_msg){lg.log(type, "%s", log_msg);};
     // auto myprinf = std::bind(std::printf, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3 );
     // auto logf = std::bind(&Logger::log<Args...>, &lg, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-    TLL_LOGTF(lg);
-
-    // A a(logf);
-    // if(argc > 1)
-    #pragma omp parallel num_threads ( 4 )
     {
-        TLL_LOGT(lg, single);
+        TLL_LOGTF(&lg);
+
+        // A a(logf);
+        // if(argc > 1)
+        #pragma omp parallel num_threads ( 4 )
         {
-            TLL_LOGT(lg, single_inner);
-            // #pragma omp parallel for
-            for(int i=0; i < std::stoi(argv[1]); i++)
+            TLL_LOGT(&lg, single);
             {
-                TLL_LOGD(lg, "%d %s", 10, "debug");
-                TLL_LOGI(lg, "%d %s", 10, "info");
-                TLL_LOGW(lg, "%d %s", 10, "warning");
-                TLL_LOGF(lg, "%d %s", 10, "fatal");
+                TLL_LOGT(&lg, single_inner);
+                // #pragma omp parallel for
+                for(int i=0; i < std::stoi(argv[1]); i++)
+                {
+                    TLL_LOGD(&lg, "%d %s", 10, "debug");
+                    TLL_LOGI(&lg, "%d %s", 10, "info");
+                    TLL_LOGW(&lg, "%d %s", 10, "warning");
+                    TLL_LOGF(&lg, "%d %s", 10, "fatal");
+                }
             }
         }
     }
     lg.join();
-    // LOGD("%d", lg.write_count_);
+    LOGD("%d", lg.write_count_);
+    // delete plg;
+    // LOGD("");
 
     // lg.write_count_=0;
     // // lg.batch_mode_=false;
