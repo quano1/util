@@ -19,18 +19,18 @@ BEGIN{}
 		msg_=$7;
 		if (type_ == "T")
 		{
-			printf "{%s}{%s}%2d%*s{%s}{+%s}{%s %s %s}\n", time_, thread_, stack_lvl_[thread_]/2, stack_lvl_[thread_]+1, " ", type_, msg_, line_, func_, file_;
+			printf "{%s}{%s}{%s}%2d%*s{%s %s %s}{+%s}\n", time_, thread_, type_, stack_lvl_[thread_]/2, stack_lvl_[thread_]+1, " ", line_, func_, file_, msg_;
 			stack_lvl_[thread_]=stack_lvl_[thread_]+2;
 		}
 		else
 		{
-			printf "{%s}{%s}%2d%*s{%s %s %s}{%s}{%s}\n", time_, thread_, stack_lvl_[thread_]/2, stack_lvl_[thread_]+1, " ", line_, func_, file_, type_, msg_;
+			printf "{%s}{%s}{%s}%2d%*s{%s %s %s}{%s}\n", time_, thread_, type_, stack_lvl_[thread_]/2, stack_lvl_[thread_]+1, " ", line_, func_, file_, msg_;
 		}
 	}
 	else
 	{
 		stack_lvl_[thread_]=stack_lvl_[thread_]-2;
-		printf "{%s}{%s}%2d%*s{%s}{-%s}\n", time_, thread_, stack_lvl_[thread_]/2, stack_lvl_[thread_]+1, " ", type_, $4;
+		printf "{%s}{%s}{%s}%2d%*s{-%s}\n", time_, thread_, type_, stack_lvl_[thread_]/2, stack_lvl_[thread_]+1, " ", $4;
 	}
 
 }
