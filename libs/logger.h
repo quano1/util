@@ -10,12 +10,6 @@
 #include <unordered_set>
 
 #include <cstdarg>
-#include <iomanip>
-
-#include <netinet/in.h>
-#include <unistd.h> // close
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <functional>
 
 #include <unordered_map>
@@ -544,13 +538,14 @@ typedef uint32_t LogFlag;
 
 enum class LogType /// LogType
 {
-    kDebug=0,
+    kTrace=0,
+    kDebug,
     kInfo,
+    kWarn,
     kFatal,
-    kTrace,
 };
 
-char const kLogTypeString[]="DIFT";
+char const kLogTypeString[]="TDIWF";
 
 TLL_INLINE constexpr LogFlag toFlag(LogType type)
 {
@@ -565,8 +560,10 @@ constexpr LogFlag toFlag(tll::LogType type, Args ...args)
 
 constexpr LogFlag lf_d = toFlag(LogType::kDebug);
 constexpr LogFlag lf_t = toFlag(LogType::kTrace);
+constexpr LogFlag lf_w = toFlag(LogType::kWarn);
 constexpr LogFlag lf_i = toFlag(LogType::kInfo);
 constexpr LogFlag lf_f = toFlag(LogType::kFatal);
+constexpr LogFlag lf_a = lf_d | lf_t | lf_i | lf_w | lf_f;
 
 // namespace LogType { /// LogType
 // static const LogType debug=(1U << 0);
@@ -575,18 +572,22 @@ constexpr LogFlag lf_f = toFlag(LogType::kFatal);
 // static const LogType fatal=(1U << 3);
 // }
 
-typedef std::pair<LogType, std::string> LogInfo;
-// typedef std::pair<LogFlag, int> LogFd;
-typedef std::tuple<LogFlag, void *, std::function<void(void *,const void*, size_t)>, std::function<void(void *)>> LogFd;
+typedef std::function<void *()> LogEntOpen;
+typedef std::function<void(void *,const char*, size_t)> LogEntFunc;
+typedef std::function<void(void *)> LogEntClose;
 
-template <size_t kLogSize, uint32_t max_log_in_queue, uint32_t kDelayUs, size_t kChunkSize=0>
+typedef std::pair<LogType, std::string> LogInfo;
+// typedef std::pair<LogFlag, int> LogEntity;
+typedef std::tuple<LogFlag, LogEntOpen, LogEntClose, LogEntFunc, void *> LogEntity;
+
+template <size_t kLogSize, uint32_t max_log_in_queue, size_t kChunkSize, uint32_t kDelayUs>
 class Logger
 {
 public:
-    template < typename ... LFds>
-    Logger(LFds ...lfds) : ring_queue_(max_log_in_queue), is_running_(false), write_count_(0)
+    template < typename ... LogEnts>
+    Logger(LogEnts ...logEnts) : ring_queue_(max_log_in_queue), is_running_(false), write_count_(0)
     {
-        _addFd(lfds...);
+        _addLogEnt(logEnts...);
         init();
     }
 
@@ -597,7 +598,12 @@ public:
         if(broadcast_.joinable()) broadcast_.join();
 
         this->flushAll();
-        for(auto lfd : lfds_) std::get<3>(lfd)(std::get<1>(lfd));
+        for(auto &logEnt : logEnts_)
+        { 
+            auto &logEntClose = std::get<2>(logEnt); 
+            if(logEntClose) 
+                logEntClose(std::get<4>(logEnt)); 
+        }
     }
 
     Logger(const Logger&) = delete;
@@ -645,17 +651,17 @@ public:
 
                 // FIXME: parallel is 10 times slower???
                 // #pragma omp parallel for
-                for(auto i=0u; i<lfds_.size(); i++)
+                for(auto i=0u; i<logEnts_.size(); i++)
                 {
-                    LogFd &lfd = lfds_[i];
+                    LogEntity &logEnt = logEnts_[i];
                     // if(!kChunkSize) 
-                    //     { flush(lfd, log_inf); continue; }
+                    //     { flush(logEnt, log_inf); continue; }
 
                     LogType const kLogt = log_inf.first;
-                    LogFlag flag = std::get<0>(lfd);
+                    LogFlag flag = std::get<0>(logEnt);
                     if(flag & tll::toFlag(kLogt))
                     {
-                        // int const kFd = lfd.second;
+                        // int const kFd = logEnt.second;
                         // std::string &msg = log_inf.second;
                         std::string msg = utils::stringFormat(kLogSize, "{%c}%s", kLogTypeString[(uint32_t)(kLogt)], log_inf.second);
                         //     auto size = write(kFd, msg.data(), msg.size());
@@ -674,11 +680,13 @@ public:
         });
     }
 
-    template < typename ... LFds>
-    void addFd(LFds ...lfds)
+    template < typename ... LogEnts>
+    void addLogEnt(LogEnts ...logEnts)
     {
-        if(is_running_.load(std::memory_order_relaxed)) return;
-        _addFd(lfds...);
+        if(is_running_.load(std::memory_order_relaxed)) 
+            return;
+
+        _addLogEnt(logEnts...);
     }
 
 
@@ -692,58 +700,63 @@ private:
 
     TLL_INLINE void init()
     {
-        buffers_.resize(lfds_.size());
+        buffers_.resize(logEnts_.size());
         if(kChunkSize == 0) return;
         for(auto &buff : buffers_) buff.reserve(kChunkSize*2);
 
-        // for(auto &lfd : lfds_) std::get<1>(lfd)();
+        for(auto &logEnt : logEnts_)
+        {
+            auto &logEntOpen = std::get<1>(logEnt);
+            if(logEntOpen && std::get<4>(logEnt) == nullptr)
+                std::get<4>(logEnt) = logEntOpen();
+        }
     }
 
     TLL_INLINE void flush(int idx)
     {
-        // int fd = std::get<1>(lfds_[idx]);
-        auto &logf = std::get<2>(lfds_[idx]);
+        // int fd = std::get<1>(logEnts_[idx]);
+        auto &logf = std::get<3>(logEnts_[idx]);
         auto &buff = buffers_[idx];
-        logf(std::get<1>(lfds_[idx]), buff.data(), buff.size());
+        logf(std::get<4>(logEnts_[idx]), buff.data(), buff.size());
         buff.resize(0);
         write_count_++;
     }
 
-    // TLL_INLINE void flush(LogFd lfd, LogInfo const &linfo)
+    // TLL_INLINE void flush(LogEntity logEnt, LogInfo const &linfo)
     // {
     //     LogType const kLogt = linfo.first;
-    //     if(std::get<0>(lfd) & tll::toFlag(kLogt))
+    //     if(std::get<0>(logEnt) & tll::toFlag(kLogt))
     //     {
-    //         int const kFd = std::get<1>(lfd);
+    //         int const kFd = std::get<1>(logEnt);
     //         std::string msg = utils::stringFormat(kLogSize, "{%c}%s", kLogTypeString[(uint32_t)(kLogt)], linfo.second);
     //         write_count_++;
     //         // auto size = write(kFd, msg.data(), msg.size());
-    //         std::get<2>(lfd)(std::get<1>(lfd), msg.data(), msg.size());
+    //         std::get<2>(logEnt)(std::get<1>(logEnt), msg.data(), msg.size());
     //     }
     // }
 
     TLL_INLINE void flushAll()
     {
-        for(auto i=0u; i<lfds_.size(); i++) this->flush(i);
+        for(auto i=0u; i<logEnts_.size(); i++) this->flush(i);
     }
 
-    template <typename ... LFds>
-    void _addFd(LogFd lfd, LFds ...lfds)
+    template <typename ... LogEnts>
+    void _addLogEnt(LogEntity logEnt, LogEnts ...logEnts)
     {
-        lfds_.push_back(lfd);
-        _addFd(lfds...);
+        logEnts_.push_back(logEnt);
+        _addLogEnt(logEnts...);
     }
 
-    TLL_INLINE void _addFd(LogFd lfd)
+    TLL_INLINE void _addLogEnt(LogEntity logEnt)
     {
-        lfds_.push_back(lfd);
+        logEnts_.push_back(logEnt);
     }
 
     utils::BSDLFQ<LogInfo> ring_queue_;
     std::atomic<bool> is_running_;
     int write_count_;
     std::thread broadcast_;
-    std::vector<LogFd> lfds_;
+    std::vector<LogEntity> logEnts_;
     std::vector<std::vector<char>> buffers_;
 };
 
@@ -759,13 +772,15 @@ private:
 
 #define TLL_LOGD(logger, format, ...) (logger).log(static_cast<int>(tll::LogType::kDebug), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
 
+#define TLL_LOGI(logger, format, ...) (logger).log(static_cast<int>(tll::LogType::kInfo), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
+
+#define TLL_LOGW(logger, format, ...) (logger).log(static_cast<int>(tll::LogType::kWarn), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
+
+#define TLL_LOGF(logger, format, ...) (logger).log(static_cast<int>(tll::LogType::kFatal), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
+
 #define TLL_LOGTF(logger) utils::Timer timer_([&logger](std::string const &log_msg){logger.log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, _LOG_HEADER, (/*(logger).log(static_cast<int>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ __FUNCTION__))
 
 #define TLL_LOGT(logger, ID) utils::Timer timer_##ID_([&logger](std::string const &log_msg){logger.log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, _LOG_HEADER, (/*(logger).log(static_cast<int>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ #ID))
-
-#define TLL_LOGI(logger, format, ...) (logger).log(static_cast<int>(tll::LogType::kInfo), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
-
-#define TLL_LOGF(logger, format, ...) (logger).log(static_cast<int>(tll::LogType::kFatal), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
 
 #ifndef STATIC_LIB
 #include "logger.cc"

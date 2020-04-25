@@ -39,42 +39,56 @@ namespace {
 
 int main(int argc, char const *argv[])
 {
-    using Logger = tll::Logger<0x400, 0x1000, 10, 0x400>;
-    int sock_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    struct hostent *host;
-    host = gethostbyname("localhost");
-    sockaddr_in svr_addr;
-    svr_addr.sin_family = AF_INET;
-    svr_addr.sin_port = htons( 65501 );
-    bcopy((char *)host->h_addr, (char *)&svr_addr.sin_addr.s_addr, host->h_length);
-
-    // set non-blocking io
-    if ( fcntl( sock_fd, F_SETFL, O_NONBLOCK, 1 ) == -1 )
-    {
-        LOGD( "failed to make socket non-blocking" );
-        return 1;
-    }
-
-    if (connect(sock_fd, (const sockaddr*)&svr_addr, sizeof(svr_addr)) < 0)
-        LOGE("ERROR connecting");
+    using Logger = tll::Logger<0x400, 0x1000, 0x400, 10000>;
 
     Logger lg
         (
-            tll::LogFd{tll::lf_t | tll::lf_d, 0, std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2), [](void *){}}
+            // tll::LogEntity{tll::lf_t | tll::lf_i | tll::lf_w | tll::lf_f, nullptr, nullptr, std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2), nullptr}
 
-            ,tll::LogFd{tll::lf_d | tll::lf_i | tll::lf_f | tll::lf_t, 
-                static_cast<void*>(new std::ofstream("ofs_write.log", std::ios::out | std::ios::binary)), 
-                [](void *handle, const void *buff, size_t size){static_cast<std::ofstream*>(handle)->write((const char *)buff, size);},
-                [](void *handle){ delete static_cast<std::ofstream*>(handle);}}
+            tll::LogEntity{tll::lf_a, 
+                [](){return static_cast<void*>(new std::ofstream("ofs_write.log", std::ios::out | std::ios::binary));}, 
+                [](void *handle){delete static_cast<std::ofstream*>(handle);},
+                [](void *handle, const char *buff, size_t size){static_cast<std::ofstream*>(handle)->write((const char *)buff, size);}, nullptr}
 
-            ,tll::LogFd{tll::lf_d | tll::lf_i | tll::lf_f | tll::lf_t,
-                reinterpret_cast<void*>(open("fd_t.log", O_WRONLY | O_TRUNC | O_CREAT , 0644)), 
-                [](void *handle, const void *buff, size_t size){write(reinterpret_cast<int64_t>(handle), buff, size);},
-                [](void *handle){close(reinterpret_cast<int64_t>(handle));}}
+            ,tll::LogEntity{tll::lf_a,
+                [argv](){
+                    int sock_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+                    struct hostent *host;
+                    host = gethostbyname(argv[2]);
+                    sockaddr_in svr_addr;
+                    svr_addr.sin_family = AF_INET;
+                    svr_addr.sin_port = htons( std::stoi(argv[3]) );
+                    bcopy((char *)host->h_addr, (char *)&svr_addr.sin_addr.s_addr, host->h_length);
 
-            // ,tll::LogFd{tll::lf_d | tll::lf_i | tll::lf_f | tll::lf_t, sock_fd, [](int, const void*, size_t){}}
-            // ,tll::LogFd{tll::toFlag(tll::LogType::kFatal), open("fd_f.log", O_WRONLY | O_TRUNC | O_CREAT , 0644)}
+                    // set non-blocking io
+                    if ( fcntl( sock_fd, F_SETFL, O_NONBLOCK, 1 ) == -1 )
+                    {
+                        LOGD( "failed to make socket non-blocking" );
+                        return reinterpret_cast<void*>(-1);
+                    }
+
+                    if (connect(sock_fd, (const sockaddr*)&svr_addr, sizeof(svr_addr)) < 0)
+                        LOGE("ERROR connecting");
+
+                    return reinterpret_cast<void*>(sock_fd);
+                },
+                [](void *handle){
+                    int64_t sock_fd = reinterpret_cast<int64_t>(handle);
+                    if(sock_fd>-1) 
+                        close(sock_fd);
+                },
+                [](void *handle, const char *buff, size_t size){
+                    int64_t sock_fd = reinterpret_cast<int64_t>(handle);
+                    if(sock_fd>-1)
+                    {
+                        LOGD("%ld", size);
+                        (void)write(sock_fd, buff, size);
+                    }
+                }, nullptr}
         );
+
+    // lg.init();
+    // lg.start();
 
     auto logf = [&lg](int type, std::string const &log_msg){lg.log(type, "%s", log_msg);};
     // auto myprinf = std::bind(std::printf, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3 );
@@ -93,6 +107,7 @@ int main(int argc, char const *argv[])
             {
                 TLL_LOGD(lg, "%d %s", 10, "debug");
                 TLL_LOGI(lg, "%d %s", 10, "info");
+                TLL_LOGW(lg, "%d %s", 10, "warning");
                 TLL_LOGF(lg, "%d %s", 10, "fatal");
             }
         }
