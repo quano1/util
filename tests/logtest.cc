@@ -58,12 +58,13 @@ int main(int argc, char const *argv[])
     if (connect(sock_fd, (const sockaddr*)&svr_addr, sizeof(svr_addr)) < 0)
         LOGE("ERROR connecting");
 
+    std::ofstream ofs("ofs_write.log", std::ios::out | std::ios::binary);
 
     Logger lg
         (
-            tll::LogFd{tll::lf_t | tll::lf_d, -1, std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)}
-            // tll::LogFd{tll::lf_t | tll::lf_i, console, write}
-            ,tll::LogFd{tll::lf_d | tll::lf_i | tll::lf_f | tll::lf_t, open("fd_t.log", O_WRONLY | O_TRUNC | O_CREAT , 0644), write}
+            tll::LogFd{tll::lf_t | tll::lf_d, -1, std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2), [](int){}}
+            ,tll::LogFd{tll::lf_d | tll::lf_i | tll::lf_f | tll::lf_t, 0, [&ofs](int, const void *buff, size_t size){ofs.write((const char *)buff, size);}, [&ofs](int){ ofs.close();}}
+            ,tll::LogFd{tll::lf_d | tll::lf_i | tll::lf_f | tll::lf_t, open("fd_t.log", O_WRONLY | O_TRUNC | O_CREAT , 0644), write, [](int fd){close(fd);}}
             // ,tll::LogFd{tll::lf_d | tll::lf_i | tll::lf_f | tll::lf_t, sock_fd, [](int, const void*, size_t){}}
             // ,tll::LogFd{tll::toFlag(tll::LogType::kFatal), open("fd_f.log", O_WRONLY | O_TRUNC | O_CREAT , 0644)}
         );
@@ -83,8 +84,9 @@ int main(int argc, char const *argv[])
             // #pragma omp parallel for
             for(int i=0; i < std::stoi(argv[1]); i++)
             {
-                TLL_LOGD(lg, "%d %s", 10, "oi troi oi");
-                TLL_LOGF(lg, "%d %s", 10, "oi troi oi");
+                TLL_LOGD(lg, "%d %s", 10, "debug");
+                TLL_LOGI(lg, "%d %s", 10, "info");
+                TLL_LOGF(lg, "%d %s", 10, "fatal");
             }
         }
     }

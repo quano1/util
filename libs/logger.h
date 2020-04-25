@@ -577,7 +577,7 @@ constexpr LogFlag lf_f = toFlag(LogType::kFatal);
 
 typedef std::pair<LogType, std::string> LogInfo;
 // typedef std::pair<LogFlag, int> LogFd;
-typedef std::tuple<LogFlag, int, std::function<void(int, const void*, size_t)>> LogFd;
+typedef std::tuple<LogFlag, int, std::function<void(int, const void*, size_t)>, std::function<void(int)>> LogFd;
 
 template <size_t kLogSize, uint32_t max_log_in_queue, uint32_t kDelayUs, size_t kChunkSize=0>
 class Logger
@@ -595,13 +595,9 @@ public:
         this->join();
         is_running_.store(false, std::memory_order_relaxed);
         if(broadcast_.joinable()) broadcast_.join();
+        
         this->flushAll();
-        for(auto lfd : lfds_)
-        {
-            const int fd = std::get<1>(lfd);
-            if(fd > 0)
-                close(fd);
-        }
+        for(auto lfd : lfds_) std::get<3>(lfd)(std::get<1>(lfd));
     }
 
     Logger(const Logger&) = delete;
@@ -704,7 +700,7 @@ private:
     TLL_INLINE void flush(int idx)
     {
         int fd = std::get<1>(lfds_[idx]);
-        auto logf = std::get<2>(lfds_[idx]);
+        auto &logf = std::get<2>(lfds_[idx]);
         auto &buff = buffers_[idx];
         logf(fd, buff.data(), buff.size());
         buff.resize(0);
