@@ -695,6 +695,12 @@ public:
         while(is_running_.load(std::memory_order_relaxed) && !ring_queue_.empty())
             std::this_thread::sleep_for(std::chrono::microseconds(kDelayUs));
     }
+
+    TLL_INLINE void flushAll()
+    {
+        for(auto i=0u; i<logEnts_.size(); i++) this->flush(i);
+    }
+
     int write_count_;
 
 private:
@@ -736,10 +742,6 @@ private:
     //     }
     // }
 
-    TLL_INLINE void flushAll()
-    {
-        for(auto i=0u; i<logEnts_.size(); i++) this->flush(i);
-    }
 
     template <typename ... LogEnts>
     void _addLogEnt(LogEntity logEnt, LogEnts ...logEnts)

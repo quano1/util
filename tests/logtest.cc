@@ -46,12 +46,13 @@ int main(int argc, char const *argv[])
 {
     using Logger = tll::Logger<0x400, 0x1000, 0x1000, 10000>;
     plg = new Logger(
-            // tll::LogEntity{tll::lf_t | tll::lf_i | tll::lf_w | tll::lf_f, nullptr, nullptr, std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2), nullptr}
+            tll::LogEntity{tll::lf_t, nullptr, nullptr, std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2), nullptr},
 
             tll::LogEntity{tll::lf_a, 
                 [](){return static_cast<void*>(new std::ofstream("ofs_write.log", std::ios::out | std::ios::binary));}, 
                 [](void *handle){delete static_cast<std::ofstream*>(handle);},
-                [](void *handle, const char *buff, size_t size){static_cast<std::ofstream*>(handle)->write((const char *)buff, size);}, nullptr}
+                [](void *handle, const char *buff, size_t size){static_cast<std::ofstream*>(handle)->write((const char *)buff, size);
+                    static_cast<std::ofstream*>(handle)->flush();}, nullptr}
 
             ,tll::LogEntity{tll::lf_a,
                 []()->void*{
@@ -84,7 +85,6 @@ int main(int argc, char const *argv[])
                     int64_t sock_fd = reinterpret_cast<int64_t>(handle);
                     if(sock_fd>-1)
                     {
-                        LOGD("%ld", size);
                         (void)write(sock_fd, buff, size);
                     }
                 }, nullptr}
@@ -118,6 +118,7 @@ int main(int argc, char const *argv[])
         }
     }
     lg.join();
+    lg.flushAll();
     LOGD("%d", lg.write_count_);
     // delete plg;
     // LOGD("");
