@@ -43,20 +43,21 @@ svrBC.on('listening', () => {
 svrBC.on('message', (buff, remote) => {
 
     // console.log(` ${__file} [${__line}] ${remote.address} : ${remote.port} - ${buff}`);
-    var date = new Date();
-    var myip = require('quick-local-ip');
-    var IPserver = myip.getLocalIP4();
-    try {
-        var obj = JSON.parse(buff);
-        console.log(obj);
-    }
-    catch(err) {
-        // console.error(err)
-    }
+    // var date = new Date();
+    // var myip = require('quick-local-ip');
+    // var IPserver = myip.getLocalIP4();
+    // try {
+    //     var obj = JSON.parse(buff);
+    //     console.log(obj);
+    // }
+    // catch(err) {
+    //     // console.error(err)
+    // }
 
-    if(!obj)
+    // if(!obj)
+    if(buff.length > 0)
     {
-        console.log(buff.toString('utf8'));
+        console.log(`'${buff.toString()}'`);
     }
 
     // buff = Buffer.allocUnsafe(1);
@@ -73,7 +74,7 @@ svrBC.on('message', (buff, remote) => {
 
 var buff = Buffer.from("C");
 
-svrBC.send(buff, 0, buff.length, 65500, "localhost", (err, bytes) => {
+svrBC.send(buff, 0, buff.length, 65501, "localhost", (err, bytes) => {
     if (err) throw err;
 });
 
