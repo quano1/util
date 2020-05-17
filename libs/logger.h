@@ -575,12 +575,12 @@ typedef std::pair<LogType, std::string> LogInfo;
 // typedef std::pair<LogMask, int> LogEntity;
 typedef std::tuple<LogMask, OpenLog, CloseLog, DoLog, size_t, void *> LogEntity;
 
-template <size_t kLogSize, uint32_t max_log_in_queue, uint32_t kWaitMs>
+template <size_t kLogSize, uint32_t kMaxLogInQueue, uint32_t kWaitMs>
 class Logger
 {
 public:
     template < typename ... LogEnts>
-    Logger(LogEnts ...log_ents) : ring_queue_(max_log_in_queue), is_running_(false)
+    Logger(LogEnts ...log_ents) : ring_queue_(kMaxLogInQueue), is_running_(false)
     {
         _addLogEnt(log_ents...);
         init();
