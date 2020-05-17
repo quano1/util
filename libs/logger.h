@@ -558,12 +558,12 @@ constexpr LogMask toMask(tll::LogType type, Args ...args)
     return toMask(type) | toMask(args...);
 }
 
-constexpr LogMask lmd = toMask(LogType::kDebug);
-constexpr LogMask lmt = toMask(LogType::kTrace);
-constexpr LogMask lmw = toMask(LogType::kWarn);
-constexpr LogMask lmi = toMask(LogType::kInfo);
-constexpr LogMask lmf = toMask(LogType::kFatal);
-constexpr LogMask lma = lmd | lmt | lmi | lmw | lmf;
+constexpr LogMask debug = toMask(LogType::kDebug);
+constexpr LogMask trace = toMask(LogType::kTrace);
+constexpr LogMask warn = toMask(LogType::kWarn);
+constexpr LogMask info = toMask(LogType::kInfo);
+constexpr LogMask fatal = toMask(LogType::kFatal);
+constexpr LogMask all = debug | trace | info | warn | fatal;
 
 // namespace LogType { /// LogType
 // static const LogType debug=(1U << 0);
@@ -573,12 +573,12 @@ constexpr LogMask lma = lmd | lmt | lmi | lmw | lmf;
 // }
 
 typedef std::function<void *()> LogEntOpen;
-typedef std::function<void(void *,const char*, size_t)> LogEntFunc;
 typedef std::function<void(void *)> LogEntClose;
+typedef std::function<void(void *,const char*, size_t)> LogEntDo;
 
 typedef std::pair<LogType, std::string> LogInfo;
 // typedef std::pair<LogMask, int> LogEntity;
-typedef std::tuple<LogMask, LogEntOpen, LogEntClose, LogEntFunc,size_t, void *> LogEntity;
+typedef std::tuple<LogMask, LogEntOpen, LogEntClose, LogEntDo,size_t, void *> LogEntity;
 
 template <size_t kLogSize, uint32_t max_log_in_queue, uint32_t kWaitMs>
 class Logger
@@ -600,9 +600,10 @@ public:
         this->flushAll();
         for(auto &log_ent : log_ents_)
         { 
-            auto &ent_close = std::get<2>(log_ent); 
-            if(ent_close) 
-                ent_close(std::get<5>(log_ent)); 
+            auto &close_ent = std::get<2>(log_ent);
+            auto &handle = std::get<5>(log_ent);
+            if(close_ent) 
+                close_ent(handle); 
         }
     }
 
@@ -734,21 +735,23 @@ private:
         for(int i=0; i<log_ents_.size(); i++)
         {
             auto &log_ent = log_ents_[i];
-            size_t const kChunkSize = std::get<4>(log_ent);
-            if(kChunkSize > 0) buffers_[i].reserve(kChunkSize*2);
+            size_t chunk_size = std::get<4>(log_ent);
+            if(chunk_size > 0) buffers_[i].reserve(chunk_size*2);
 
-            auto &ent_open = std::get<1>(log_ent);
-            if(ent_open && std::get<5>(log_ent) == nullptr)
-                std::get<5>(log_ent) = ent_open();
+            auto &open_ent = std::get<1>(log_ent);
+            auto &handle = std::get<5>(log_ent);
+            if(open_ent && handle == nullptr)
+                handle = open_ent();
         }
     }
 
     TLL_INLINE void flush(int idx)
     {
         // int fd = std::get<1>(log_ents_[idx]);
-        auto &ent_log = std::get<3>(log_ents_[idx]);
+        auto &do_ent = std::get<3>(log_ents_[idx]);
+        auto &handle = std::get<5>(log_ents_[idx]);
         auto &buff = buffers_[idx];
-        ent_log(std::get<5>(log_ents_[idx]), buff.data(), buff.size());
+        do_ent(handle, buff.data(), buff.size());
         buff.resize(0);
     }
 

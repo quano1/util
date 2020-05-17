@@ -48,15 +48,15 @@ int main(int argc, char const *argv[])
     LOGD("");
     int write_count = 0;
     plogger = new Logger(
-            tll::LogEntity{tll::lmt, nullptr, nullptr, std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2), 0x1000, nullptr},
+            tll::LogEntity{tll::trace, nullptr, nullptr, std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2), 0x1000, nullptr},
 
-            tll::LogEntity{tll::lma, 
+            tll::LogEntity{tll::all, 
                 [](){return static_cast<void*>(new std::ofstream("ofs_write.log", std::ios::out | std::ios::binary));}, 
                 [](void *handle){delete static_cast<std::ofstream*>(handle);},
                 [&](void *handle, const char *buff, size_t size){static_cast<std::ofstream*>(handle)->write((const char *)buff, size);
                     static_cast<std::ofstream*>(handle)->flush(); write_count++;}, 0x100000, nullptr}
 
-            ,tll::LogEntity{tll::lma,
+            ,tll::LogEntity{tll::all,
                 []()->void*{
                     int sock_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
                     struct hostent *host;
