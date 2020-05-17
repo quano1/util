@@ -39,7 +39,7 @@ namespace {
 
 inline uint16_t myhtons(uint16_t port) {return htons(port);}
 
-using Logger = tll::Logger<0x400, 0x1000, 100000>;
+using Logger = tll::Logger<0x400, 0x1000, 1000>;
 Logger *plogger;
         
 

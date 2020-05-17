@@ -593,7 +593,7 @@ public:
         is_running_.store(false, std::memory_order_relaxed);
         pop_wait_.notify_all();
         if(broadcast_.joinable()) broadcast_.join();
-        this->flushAll();
+        this->flush();
         for(auto &log_ent : log_ents_)
         { 
             auto &close_log = std::get<2>(log_ent);
@@ -644,7 +644,7 @@ public:
                     /// wait timeout or running == false
                     if( !wait_status || !is_running_.load(std::memory_order_relaxed))
                     {
-                        this->flushAll();
+                        this->flush();
                         continue;
                     }
                 }
@@ -696,19 +696,7 @@ public:
         _addLogEnt(log_ents...);
     }
 
-    TLL_INLINE void join()
-    {
-        // while(is_running_.load(std::memory_order_relaxed) && !ring_queue_.empty())
-        while(is_running_.load(std::memory_order_relaxed) && !ring_queue_.empty())
-        {
-            pop_wait_.notify_one();
-            std::mutex mtx;
-            std::unique_lock<std::mutex> lock(mtx);
-            join_wait_.wait(lock, [this]{return !is_running_.load(std::memory_order_relaxed) || ring_queue_.empty();});
-        }
-    }
-
-    TLL_INLINE void flushAll()
+    TLL_INLINE void flush()
     {
         for(auto i=0u; i<log_ents_.size(); i++) this->flush(i);
     }
@@ -718,14 +706,7 @@ private:
     TLL_INLINE void init()
     {
         buffers_.resize(log_ents_.size());
-        // if(kChunkSize == 0) return;
-        // for(auto &buff : buffers_)
-        // {
-        //     size_t chunk_size = std::get<4>(log_ent);
-        //     buff.reserve(std::get<4>(log_ent)*2);
-        // }
 
-        // for(auto &log_ent : log_ents_)
         for(int i=0; i<log_ents_.size(); i++)
         {
             auto &log_ent = log_ents_[i];
@@ -749,19 +730,16 @@ private:
         buff.resize(0);
     }
 
-    // TLL_INLINE void flush(LogEntity log_ent, LogInfo const &linfo)
-    // {
-    //     LogType const kLogt = linfo.first;
-    //     if(std::get<0>(log_ent) & tll::toMask(kLogt))
-    //     {
-    //         int const kFd = std::get<1>(log_ent);
-    //         std::string msg = utils::stringFormat(kLogSize, "{%c}%s", kLogTypeString[(uint32_t)(kLogt)], linfo.second);
-    //         write_count_++;
-    //         // auto size = write(kFd, msg.data(), msg.size());
-    //         std::get<2>(log_ent)(std::get<1>(log_ent), msg.data(), msg.size());
-    //     }
-    // }
-
+    TLL_INLINE void join()
+    {
+        while(is_running_.load(std::memory_order_relaxed) && !ring_queue_.empty())
+        {
+            pop_wait_.notify_one();
+            std::mutex mtx;
+            std::unique_lock<std::mutex> lock(mtx);
+            join_wait_.wait(lock, [this]{return !is_running_.load(std::memory_order_relaxed) || ring_queue_.empty();});
+        }
+    }
 
     template <typename ... LogEnts>
     void _addLogEnt(LogEntity log_ent, LogEnts ...log_ents)
