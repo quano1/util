@@ -6,7 +6,7 @@ eof_=0
 
 while [[ eof_ -eq 0 ]]; do
 
-dd if=$1 iflag=skip_bytes,count_bytes,nonblock bs=4K skip=0K count=32K 2> /tmp/null | \
+dd if=$1 iflag=skip_bytes,count_bytes,nonblock bs=4K skip=32K count=32K 2> /tmp/null | \
 sort -t "}" -k2 | \
 sed -e 's#^.\(.*\).$#\1#g' | \
 awk -F  "}{" '
@@ -21,11 +21,18 @@ BEGIN {
     B_YELLOW="\033[0;43m"
     B_BLUE="\033[0;44m"
 
-    # while ((getline line < "/tmp/thread_*.txt") > 0) {
-    #     print line;
-    # }
-    # close("/tmp/thread_*.txt")
-    # print "somevar=10" | "bash"
+    command = ("ls -a /tmp/.t_*")
+    while ((command | getline thread_) > 0) {
+        thread_=gensub(/^.*.t_(.*)/, "\\1", "g", thread_);
+
+        subcommand = ("cat /tmp/.t_"thread_)
+        if ((subcommand | getline lvl_) > 0) {
+            stack_lvl_[thread_] = lvl_*2;
+        }
+        close(subcommand)
+        printf "%s: %d\n", thread_, stack_lvl_[thread_];
+    }
+    close(command)
 }
 {
     type_=$1
@@ -69,7 +76,8 @@ BEGIN {
 }
 END {
     for (key in stack_lvl_) {
-        printf "%s %d\n", key, stack_lvl_[key]/2 > "/tmp/thread_"key".txt";
+        printf "%d\n", stack_lvl_[key]/2 > "/tmp/.t_"key;
+        close("/tmp/.t_"key)
     }
 }
 ' | less -r
