@@ -5,6 +5,7 @@
 eof_=0
 
 while [[ eof_ -eq 0 ]]; do
+
 dd if=$1 iflag=skip_bytes,count_bytes,nonblock bs=4K skip=0K count=32K 2> /tmp/null | \
 sort -t "}" -k2 | \
 sed -e 's#^.\(.*\).$#\1#g' | \
@@ -39,8 +40,6 @@ BEGIN {
         if (type_ == "T") {
             printf "%s{%s}{%s}{%s}%2d%*s{%s %s %s}{+%s}%s\n", T_BLUE, time_, thread_, type_, stack_lvl_[thread_]/2, stack_lvl_[thread_]+1, " ", file_, func_, line_, msg_, RESET;
 
-            # printf "%s %d\n", thread_, stack_lvl_[thread_]/2 > "/tmp/thread_"thread_".txt";
-            
             stack_lvl_[thread_]=stack_lvl_[thread_]+2;
         }
         else {
@@ -69,8 +68,9 @@ BEGIN {
 
 }
 END {
-    # for (key in obj_lst)
-    #   print key "\t\t" obj_lst[key];
+    for (key in stack_lvl_) {
+        printf "%s %d\n", key, stack_lvl_[key]/2 > "/tmp/thread_"key".txt";
+    }
 }
 ' | less -r
 
