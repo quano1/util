@@ -572,7 +572,6 @@ typedef std::function<void(void *)> CloseLog;
 typedef std::function<void(void *,const char*, size_t)> DoLog;
 
 typedef std::pair<LogType, std::string> LogInfo;
-// typedef std::pair<LogMask, int> LogEntity;
 typedef std::tuple<LogMask, OpenLog, CloseLog, DoLog, size_t, void *> LogEntity;
 
 template <size_t kLogSize, uint32_t kMaxLogInQueue, uint32_t kWaitMs>
