@@ -39,7 +39,7 @@ namespace {
 
 inline uint16_t myhtons(uint16_t port) {return htons(port);}
 
-using Logger = tll::Logger<0x400, 0x1000, 10000>;
+using Logger = tll::Logger<0x400, 0x1000, 100000>;
 Logger *plogger;
         
 
@@ -48,48 +48,48 @@ int main(int argc, char const *argv[])
     LOGD("");
     int write_count = 0;
     plogger = new Logger(
-            tll::LogEntity{tll::trace, nullptr, nullptr, std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2), 0x1000, nullptr},
+            // tll::LogEntity{tll::mask::trace, nullptr, nullptr, std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2), 0x1000, nullptr},
 
-            tll::LogEntity{tll::all, 
+            tll::LogEntity{tll::mask::all, 
                 [](){return static_cast<void*>(new std::ofstream("ofs_write.log", std::ios::out | std::ios::binary));}, 
                 [](void *handle){delete static_cast<std::ofstream*>(handle);},
                 [&](void *handle, const char *buff, size_t size){static_cast<std::ofstream*>(handle)->write((const char *)buff, size);
                     static_cast<std::ofstream*>(handle)->flush(); write_count++;}, 0x100000, nullptr}
 
-            ,tll::LogEntity{tll::all,
-                []()->void*{
-                    int sock_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-                    struct hostent *host;
-                    host = gethostbyname("localhost");
-                    sockaddr_in svr_addr;
-                    svr_addr.sin_family = AF_INET;
-                    svr_addr.sin_port = myhtons(65501);
-                    bcopy((char *)host->h_addr, (char *)&svr_addr.sin_addr.s_addr, host->h_length);
+            // ,tll::LogEntity{tll::mask::all,
+            //     []()->void*{
+            //         int sock_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+            //         struct hostent *host;
+            //         host = gethostbyname("localhost");
+            //         sockaddr_in svr_addr;
+            //         svr_addr.sin_family = AF_INET;
+            //         svr_addr.sin_port = myhtons(65501);
+            //         bcopy((char *)host->h_addr, (char *)&svr_addr.sin_addr.s_addr, host->h_length);
 
-                    // set non-blocking io
-                    if ( fcntl( sock_fd, F_SETFL, O_NONBLOCK, 1 ) == -1 )
-                    {
-                        LOGD( "failed to make socket non-blocking" );
-                        return reinterpret_cast<void*>(-1);
-                    }
+            //         // set non-blocking io
+            //         if ( fcntl( sock_fd, F_SETFL, O_NONBLOCK, 1 ) == -1 )
+            //         {
+            //             LOGD( "failed to make socket non-blocking" );
+            //             return reinterpret_cast<void*>(-1);
+            //         }
 
-                    if (connect(sock_fd, (const sockaddr*)&svr_addr, sizeof(svr_addr)) < 0)
-                        LOGE("ERROR connecting");
+            //         if (connect(sock_fd, (const sockaddr*)&svr_addr, sizeof(svr_addr)) < 0)
+            //             LOGE("ERROR connecting");
 
-                    return reinterpret_cast<void*>(sock_fd);
-                },
-                [](void *handle){
-                    int64_t sock_fd = reinterpret_cast<int64_t>(handle);
-                    if(sock_fd>-1) 
-                        close(sock_fd);
-                },
-                [](void *handle, const char *buff, size_t size){
-                    int64_t sock_fd = reinterpret_cast<int64_t>(handle);
-                    if(sock_fd>-1)
-                    {
-                        (void)write(sock_fd, buff, size);
-                    }
-                }, 0x1000, nullptr}
+            //         return reinterpret_cast<void*>(sock_fd);
+            //     },
+            //     [](void *handle){
+            //         int64_t sock_fd = reinterpret_cast<int64_t>(handle);
+            //         if(sock_fd>-1) 
+            //             close(sock_fd);
+            //     },
+            //     [](void *handle, const char *buff, size_t size){
+            //         int64_t sock_fd = reinterpret_cast<int64_t>(handle);
+            //         if(sock_fd>-1)
+            //         {
+            //             (void)write(sock_fd, buff, size);
+            //         }
+            //     }, 0x1000, nullptr}
         );
     auto &lg = *plogger;
     // lg.init();
@@ -103,7 +103,7 @@ int main(int argc, char const *argv[])
 
         // A a(logf);
         // if(argc > 1)
-        #pragma omp parallel num_threads ( 4 )
+        #pragma omp parallel num_threads ( 2 )
         {
             TLL_LOGT(&lg, single);
             {
@@ -120,8 +120,9 @@ int main(int argc, char const *argv[])
         }
     }
     LOGD("");
-    lg.join();
-    lg.flushAll();
+    delete(plogger);
+    // lg.join();
+    // lg.flushAll();
     LOGD("%d", write_count);
     // delete plg;
     // LOGD("");

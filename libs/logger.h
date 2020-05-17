@@ -558,27 +558,22 @@ constexpr LogMask toMask(tll::LogType type, Args ...args)
     return toMask(type) | toMask(args...);
 }
 
-constexpr LogMask debug = toMask(LogType::kDebug);
+namespace mask {
 constexpr LogMask trace = toMask(LogType::kTrace);
-constexpr LogMask warn = toMask(LogType::kWarn);
+constexpr LogMask debug = toMask(LogType::kDebug);
 constexpr LogMask info = toMask(LogType::kInfo);
+constexpr LogMask warn = toMask(LogType::kWarn);
 constexpr LogMask fatal = toMask(LogType::kFatal);
-constexpr LogMask all = debug | trace | info | warn | fatal;
+constexpr LogMask all = trace | debug | info | warn | fatal;
+}
 
-// namespace LogType { /// LogType
-// static const LogType debug=(1U << 0);
-// static const LogType trace=(1U << 1);
-// static const LogType info=(1U << 2);
-// static const LogType fatal=(1U << 3);
-// }
-
-typedef std::function<void *()> LogEntOpen;
-typedef std::function<void(void *)> LogEntClose;
-typedef std::function<void(void *,const char*, size_t)> LogEntDo;
+typedef std::function<void *()> OpenLog;
+typedef std::function<void(void *)> CloseLog;
+typedef std::function<void(void *,const char*, size_t)> DoLog;
 
 typedef std::pair<LogType, std::string> LogInfo;
 // typedef std::pair<LogMask, int> LogEntity;
-typedef std::tuple<LogMask, LogEntOpen, LogEntClose, LogEntDo,size_t, void *> LogEntity;
+typedef std::tuple<LogMask, OpenLog, CloseLog, DoLog, size_t, void *> LogEntity;
 
 template <size_t kLogSize, uint32_t max_log_in_queue, uint32_t kWaitMs>
 class Logger
@@ -589,21 +584,22 @@ public:
     {
         _addLogEnt(log_ents...);
         init();
+        start();
     }
 
     ~Logger() 
     {
-        this->join();
+        this->join(); /// wait for all log
         is_running_.store(false, std::memory_order_relaxed);
+        pop_wait_.notify_all();
         if(broadcast_.joinable()) broadcast_.join();
-
         this->flushAll();
         for(auto &log_ent : log_ents_)
         { 
-            auto &close_ent = std::get<2>(log_ent);
+            auto &close_log = std::get<2>(log_ent);
             auto &handle = std::get<5>(log_ent);
-            if(close_ent) 
-                close_ent(handle); 
+            if(close_log) 
+                close_log(handle); 
         }
     }
 
@@ -623,7 +619,7 @@ public:
             }, LogInfo{static_cast<LogType>(type), utils::stringFormat(kLogSize, format, std::forward<Args>(args)...)}
         );
 
-        if(!is_running_.load(std::memory_order_relaxed)) start();
+        // if(!is_running_.load(std::memory_order_relaxed)) start();
         pop_wait_.notify_one();
     }
 
@@ -638,11 +634,15 @@ public:
             {
                 if(ring_queue_.empty())
                 {
-                    // std::this_thread::sleep_for(std::chrono::milliseconds(kWaitMs));
+                    join_wait_.notify_one(); /// notify join
                     std::mutex mtx;
                     std::unique_lock<std::mutex> lock(mtx);
-
-                    if(!pop_wait_.wait_for(lock, std::chrono::milliseconds(kWaitMs), [this]{return !this->ring_queue_.empty();}))
+                    /// wait timeout
+                    bool wait_status = pop_wait_.wait_for(lock, std::chrono::milliseconds(kWaitMs), [this]{
+                            return !is_running_.load(std::memory_order_relaxed) || !this->ring_queue_.empty();
+                        });
+                    /// wait timeout or running == false
+                    if( !wait_status || !is_running_.load(std::memory_order_relaxed))
                     {
                         this->flushAll();
                         continue;
@@ -656,36 +656,34 @@ public:
                     {
                         log_inf = std::move(elem);
                     });
-
-                // FIXME: parallel is 10 times slower???
-                // #pragma omp parallel for
-                for(auto i=0u; i<log_ents_.size(); i++)
+                // #pragma omp parallel num_threads(2)
                 {
-                    LogEntity &log_ent = log_ents_[i];
-                    // if(!kChunkSize) 
-                    //     { flush(log_ent, log_inf); continue; }
-
-                    LogType const kLogt = log_inf.first;
-                    LogMask ent_mask = std::get<0>(log_ent);
-                    if(ent_mask & tll::toMask(kLogt))
+                    // FIXME: parallel is 10 times slower???
+                    // #pragma omp parallel for
+                    // #pragma omp for
+                    for(auto i=0u; i<log_ents_.size(); i++)
                     {
-                        // int const kFd = log_ent.second;
-                        // std::string &msg = log_inf.second;
-                        std::string msg = utils::stringFormat(kLogSize, "{%c}%s", kLogTypeString[(uint32_t)(kLogt)], log_inf.second);
-                        //     auto size = write(kFd, msg.data(), msg.size());
-                        auto &buff = buffers_[i];
-                        size_t const old_size = buff.size();
-                        size_t const new_size = old_size + msg.size();
+                        LogEntity &log_ent = log_ents_[i];
+                        LogType const kLogt = log_inf.first;
+                        LogMask ent_mask = std::get<0>(log_ent);
 
-                        buff.resize(new_size);
-                        memcpy(buff.data() + old_size, msg.data(), msg.size());
+                        if(ent_mask & tll::toMask(kLogt))
+                        {
+                            std::string msg = utils::stringFormat(kLogSize, "{%c}%s", kLogTypeString[(uint32_t)(kLogt)], log_inf.second);
+                            auto &buff = buffers_[i];
+                            size_t const old_size = buff.size();
+                            size_t const new_size = old_size + msg.size();
 
-                        if(new_size >= std::get<4>(log_ent))
-                            this->flush(i);
+                            buff.resize(new_size);
+                            memcpy(buff.data() + old_size, msg.data(), msg.size());
+                            if(new_size >= std::get<4>(log_ent))
+                                this->flush(i);
+                        }
                     }
                 }
             }
-            join_wait_.notify_one();
+
+            join_wait_.notify_one(); /// notify join
         });
     }
 
@@ -698,16 +696,14 @@ public:
         _addLogEnt(log_ents...);
     }
 
-
     TLL_INLINE void join()
     {
         // while(is_running_.load(std::memory_order_relaxed) && !ring_queue_.empty())
-        LOGD("");
-        if(is_running_.load(std::memory_order_relaxed) && !ring_queue_.empty())
+        while(is_running_.load(std::memory_order_relaxed) && !ring_queue_.empty())
         {
+            pop_wait_.notify_one();
             std::mutex mtx;
             std::unique_lock<std::mutex> lock(mtx);
-
             join_wait_.wait(lock, [this]{return !is_running_.load(std::memory_order_relaxed) || ring_queue_.empty();});
         }
     }
@@ -715,8 +711,6 @@ public:
     TLL_INLINE void flushAll()
     {
         for(auto i=0u; i<log_ents_.size(); i++) this->flush(i);
-
-        join_wait_.notify_one();
     }
 
 private:
@@ -738,20 +732,20 @@ private:
             size_t chunk_size = std::get<4>(log_ent);
             if(chunk_size > 0) buffers_[i].reserve(chunk_size*2);
 
-            auto &open_ent = std::get<1>(log_ent);
+            auto &open_log = std::get<1>(log_ent);
             auto &handle = std::get<5>(log_ent);
-            if(open_ent && handle == nullptr)
-                handle = open_ent();
+            if(open_log && handle == nullptr)
+                handle = open_log();
         }
     }
 
     TLL_INLINE void flush(int idx)
     {
         // int fd = std::get<1>(log_ents_[idx]);
-        auto &do_ent = std::get<3>(log_ents_[idx]);
+        auto &do_log = std::get<3>(log_ents_[idx]);
         auto &handle = std::get<5>(log_ents_[idx]);
         auto &buff = buffers_[idx];
-        do_ent(handle, buff.data(), buff.size());
+        do_log(handle, buff.data(), buff.size());
         buff.resize(0);
     }
 
@@ -787,6 +781,7 @@ private:
     std::vector<LogEntity> log_ents_;
     std::vector<std::vector<char>> buffers_;
     std::condition_variable pop_wait_, join_wait_;
+                    // std::mutex mtx;
 };
 
 // template <typename T>
