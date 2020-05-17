@@ -534,7 +534,7 @@ struct Timer
 
 namespace tll {
 
-typedef uint32_t LogFlag;
+typedef uint32_t LogMask;
 
 enum class LogType /// LogType
 {
@@ -547,23 +547,23 @@ enum class LogType /// LogType
 
 char const kLogTypeString[]="TDIWF";
 
-TLL_INLINE constexpr LogFlag toFlag(LogType type)
+TLL_INLINE constexpr LogMask toMask(LogType type)
 {
-    return 1U << static_cast<LogFlag>(type);
+    return 1U << static_cast<LogMask>(type);
 }
 
 template <typename... Args>
-constexpr LogFlag toFlag(tll::LogType type, Args ...args)
+constexpr LogMask toMask(tll::LogType type, Args ...args)
 {
-    return toFlag(type) | toFlag(args...);
+    return toMask(type) | toMask(args...);
 }
 
-constexpr LogFlag lf_d = toFlag(LogType::kDebug);
-constexpr LogFlag lf_t = toFlag(LogType::kTrace);
-constexpr LogFlag lf_w = toFlag(LogType::kWarn);
-constexpr LogFlag lf_i = toFlag(LogType::kInfo);
-constexpr LogFlag lf_f = toFlag(LogType::kFatal);
-constexpr LogFlag lf_a = lf_d | lf_t | lf_i | lf_w | lf_f;
+constexpr LogMask lmd = toMask(LogType::kDebug);
+constexpr LogMask lmt = toMask(LogType::kTrace);
+constexpr LogMask lmw = toMask(LogType::kWarn);
+constexpr LogMask lmi = toMask(LogType::kInfo);
+constexpr LogMask lmf = toMask(LogType::kFatal);
+constexpr LogMask lma = lmd | lmt | lmi | lmw | lmf;
 
 // namespace LogType { /// LogType
 // static const LogType debug=(1U << 0);
@@ -577,17 +577,17 @@ typedef std::function<void(void *,const char*, size_t)> LogEntFunc;
 typedef std::function<void(void *)> LogEntClose;
 
 typedef std::pair<LogType, std::string> LogInfo;
-// typedef std::pair<LogFlag, int> LogEntity;
-typedef std::tuple<LogFlag, LogEntOpen, LogEntClose, LogEntFunc, void *> LogEntity;
+// typedef std::pair<LogMask, int> LogEntity;
+typedef std::tuple<LogMask, LogEntOpen, LogEntClose, LogEntFunc,size_t, void *> LogEntity;
 
-template <size_t kLogSize, uint32_t max_log_in_queue, size_t kChunkSize, uint32_t kDelayUs>
+template <size_t kLogSize, uint32_t max_log_in_queue, uint32_t kWaitMs>
 class Logger
 {
 public:
     template < typename ... LogEnts>
-    Logger(LogEnts ...logEnts) : ring_queue_(max_log_in_queue), is_running_(false), write_count_(0)
+    Logger(LogEnts ...log_ents) : ring_queue_(max_log_in_queue), is_running_(false)
     {
-        _addLogEnt(logEnts...);
+        _addLogEnt(log_ents...);
         init();
     }
 
@@ -598,11 +598,11 @@ public:
         if(broadcast_.joinable()) broadcast_.join();
 
         this->flushAll();
-        for(auto &logEnt : logEnts_)
+        for(auto &log_ent : log_ents_)
         { 
-            auto &logEntClose = std::get<2>(logEnt); 
-            if(logEntClose) 
-                logEntClose(std::get<4>(logEnt)); 
+            auto &ent_close = std::get<2>(log_ent); 
+            if(ent_close) 
+                ent_close(std::get<5>(log_ent)); 
         }
     }
 
@@ -615,7 +615,7 @@ public:
     void log(int type, const char *format, Args &&...args)
     {
         ring_queue_.push(
-            [](){std::this_thread::sleep_for(std::chrono::microseconds(kDelayUs));},
+            [](){std::this_thread::yield();},
             [](LogInfo &elem, uint32_t size, LogInfo &&log_msg)
             {
                 elem = std::move(log_msg);
@@ -623,6 +623,7 @@ public:
         );
 
         if(!is_running_.load(std::memory_order_relaxed)) start();
+        pop_wait_.notify_one();
     }
 
     TLL_INLINE void start()
@@ -636,14 +637,20 @@ public:
             {
                 if(ring_queue_.empty())
                 {
-                    std::this_thread::sleep_for(std::chrono::microseconds(kDelayUs));
-                    this->flushAll();
-                    continue;
+                    // std::this_thread::sleep_for(std::chrono::milliseconds(kWaitMs));
+                    std::mutex mtx;
+                    std::unique_lock<std::mutex> lock(mtx);
+
+                    if(!pop_wait_.wait_for(lock, std::chrono::milliseconds(kWaitMs), [this]{return !this->ring_queue_.empty();}))
+                    {
+                        this->flushAll();
+                        continue;
+                    }
                 }
 
                 LogInfo log_inf;
                 ring_queue_.pop(
-                    [](){std::this_thread::sleep_for(std::chrono::microseconds(kDelayUs));},
+                    [](){std::this_thread::yield();},
                     [&log_inf](LogInfo &elem, uint32_t)
                     {
                         log_inf = std::move(elem);
@@ -651,17 +658,17 @@ public:
 
                 // FIXME: parallel is 10 times slower???
                 // #pragma omp parallel for
-                for(auto i=0u; i<logEnts_.size(); i++)
+                for(auto i=0u; i<log_ents_.size(); i++)
                 {
-                    LogEntity &logEnt = logEnts_[i];
+                    LogEntity &log_ent = log_ents_[i];
                     // if(!kChunkSize) 
-                    //     { flush(logEnt, log_inf); continue; }
+                    //     { flush(log_ent, log_inf); continue; }
 
                     LogType const kLogt = log_inf.first;
-                    LogFlag flag = std::get<0>(logEnt);
-                    if(flag & tll::toFlag(kLogt))
+                    LogMask ent_mask = std::get<0>(log_ent);
+                    if(ent_mask & tll::toMask(kLogt))
                     {
-                        // int const kFd = logEnt.second;
+                        // int const kFd = log_ent.second;
                         // std::string &msg = log_inf.second;
                         std::string msg = utils::stringFormat(kLogSize, "{%c}%s", kLogTypeString[(uint32_t)(kLogt)], log_inf.second);
                         //     auto size = write(kFd, msg.data(), msg.size());
@@ -672,94 +679,111 @@ public:
                         buff.resize(new_size);
                         memcpy(buff.data() + old_size, msg.data(), msg.size());
 
-                        if(new_size >= kChunkSize)
+                        if(new_size >= std::get<4>(log_ent))
                             this->flush(i);
                     }
                 }
             }
+            join_wait_.notify_one();
         });
     }
 
     template < typename ... LogEnts>
-    void addLogEnt(LogEnts ...logEnts)
+    void addLogEnt(LogEnts ...log_ents)
     {
         if(is_running_.load(std::memory_order_relaxed)) 
             return;
 
-        _addLogEnt(logEnts...);
+        _addLogEnt(log_ents...);
     }
 
 
     TLL_INLINE void join()
     {
-        while(is_running_.load(std::memory_order_relaxed) && !ring_queue_.empty())
-            std::this_thread::sleep_for(std::chrono::microseconds(kDelayUs));
+        // while(is_running_.load(std::memory_order_relaxed) && !ring_queue_.empty())
+        LOGD("");
+        if(is_running_.load(std::memory_order_relaxed) && !ring_queue_.empty())
+        {
+            std::mutex mtx;
+            std::unique_lock<std::mutex> lock(mtx);
+
+            join_wait_.wait(lock, [this]{return !is_running_.load(std::memory_order_relaxed) || ring_queue_.empty();});
+        }
     }
 
     TLL_INLINE void flushAll()
     {
-        for(auto i=0u; i<logEnts_.size(); i++) this->flush(i);
-    }
+        for(auto i=0u; i<log_ents_.size(); i++) this->flush(i);
 
-    int write_count_;
+        join_wait_.notify_one();
+    }
 
 private:
 
     TLL_INLINE void init()
     {
-        buffers_.resize(logEnts_.size());
-        if(kChunkSize == 0) return;
-        for(auto &buff : buffers_) buff.reserve(kChunkSize*2);
+        buffers_.resize(log_ents_.size());
+        // if(kChunkSize == 0) return;
+        // for(auto &buff : buffers_)
+        // {
+        //     size_t chunk_size = std::get<4>(log_ent);
+        //     buff.reserve(std::get<4>(log_ent)*2);
+        // }
 
-        for(auto &logEnt : logEnts_)
+        // for(auto &log_ent : log_ents_)
+        for(int i=0; i<log_ents_.size(); i++)
         {
-            auto &logEntOpen = std::get<1>(logEnt);
-            if(logEntOpen && std::get<4>(logEnt) == nullptr)
-                std::get<4>(logEnt) = logEntOpen();
+            auto &log_ent = log_ents_[i];
+            size_t const kChunkSize = std::get<4>(log_ent);
+            if(kChunkSize > 0) buffers_[i].reserve(kChunkSize*2);
+
+            auto &ent_open = std::get<1>(log_ent);
+            if(ent_open && std::get<5>(log_ent) == nullptr)
+                std::get<5>(log_ent) = ent_open();
         }
     }
 
     TLL_INLINE void flush(int idx)
     {
-        // int fd = std::get<1>(logEnts_[idx]);
-        auto &logf = std::get<3>(logEnts_[idx]);
+        // int fd = std::get<1>(log_ents_[idx]);
+        auto &ent_log = std::get<3>(log_ents_[idx]);
         auto &buff = buffers_[idx];
-        logf(std::get<4>(logEnts_[idx]), buff.data(), buff.size());
+        ent_log(std::get<5>(log_ents_[idx]), buff.data(), buff.size());
         buff.resize(0);
-        write_count_++;
     }
 
-    // TLL_INLINE void flush(LogEntity logEnt, LogInfo const &linfo)
+    // TLL_INLINE void flush(LogEntity log_ent, LogInfo const &linfo)
     // {
     //     LogType const kLogt = linfo.first;
-    //     if(std::get<0>(logEnt) & tll::toFlag(kLogt))
+    //     if(std::get<0>(log_ent) & tll::toMask(kLogt))
     //     {
-    //         int const kFd = std::get<1>(logEnt);
+    //         int const kFd = std::get<1>(log_ent);
     //         std::string msg = utils::stringFormat(kLogSize, "{%c}%s", kLogTypeString[(uint32_t)(kLogt)], linfo.second);
     //         write_count_++;
     //         // auto size = write(kFd, msg.data(), msg.size());
-    //         std::get<2>(logEnt)(std::get<1>(logEnt), msg.data(), msg.size());
+    //         std::get<2>(log_ent)(std::get<1>(log_ent), msg.data(), msg.size());
     //     }
     // }
 
 
     template <typename ... LogEnts>
-    void _addLogEnt(LogEntity logEnt, LogEnts ...logEnts)
+    void _addLogEnt(LogEntity log_ent, LogEnts ...log_ents)
     {
-        logEnts_.push_back(logEnt);
-        _addLogEnt(logEnts...);
+        log_ents_.push_back(log_ent);
+        _addLogEnt(log_ents...);
     }
 
-    TLL_INLINE void _addLogEnt(LogEntity logEnt)
+    TLL_INLINE void _addLogEnt(LogEntity log_ent)
     {
-        logEnts_.push_back(logEnt);
+        log_ents_.push_back(log_ent);
     }
 
     utils::BSDLFQ<LogInfo> ring_queue_;
     std::atomic<bool> is_running_;
     std::thread broadcast_;
-    std::vector<LogEntity> logEnts_;
+    std::vector<LogEntity> log_ents_;
     std::vector<std::vector<char>> buffers_;
+    std::condition_variable pop_wait_, join_wait_;
 };
 
 // template <typename T>
@@ -780,9 +804,17 @@ private:
 
 #define TLL_LOGF(plog, format, ...) (plog)->log(static_cast<int>(tll::LogType::kFatal), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
 
+#define TLL_LOGT(plog, ID) utils::Timer timer_##ID_([plog](std::string const &log_msg){(plog)->log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, _LOG_HEADER, (/*(logger).log(static_cast<int>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ #ID))
+
 #define TLL_LOGTF(plog) utils::Timer timer_([plog](std::string const &log_msg){(plog)->log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, _LOG_HEADER, (/*(logger).log(static_cast<int>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ __FUNCTION__))
 
-#define TLL_LOGT(plog, ID) utils::Timer timer_##ID_([plog](std::string const &log_msg){(plog)->log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, _LOG_HEADER, (/*(logger).log(static_cast<int>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ #ID))
+
+#define TLL_GLOGD(...) if(plogger) TLL_LOGD(plogger, ##__VA_ARGS__)
+#define TLL_GLOGI(...) if(plogger) TLL_LOGI(plogger, ##__VA_ARGS__)
+#define TLL_GLOGW(...) if(plogger) TLL_LOGW(plogger, ##__VA_ARGS__)
+#define TLL_GLOGF(...) if(plogger) TLL_LOGF(plogger, ##__VA_ARGS__)
+#define TLL_GLOGT(ID) if(plogger) TLL_LOGT(plogger, ID)
+#define TLL_GLOGTF() if(plogger) TLL_LOGTF(plogger)
 
 #ifndef STATIC_LIB
 #include "logger.cc"
