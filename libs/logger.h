@@ -237,14 +237,14 @@ private:
 
 } // Simple
 
-#define LOGPD(format, ...) printf("[D](%.6f)%s:%s:%d[%s]:" format "\n", utils::timestamp(), __FILE__, __PRETTY_FUNCTION__, __LINE__, utils::tid().data(), ##__VA_ARGS__)
-#define LOGD(format, ...) printf("[D](%.6f)%s:%s:%d[%s]:" format "\n", utils::timestamp(), __FILE__, __FUNCTION__, __LINE__, utils::tid().data(), ##__VA_ARGS__)
-#define LOGE(format, ...) printf("[E](%.6f)%s:%s:%d[%s]:" format "%s\n", utils::timestamp(), __FILE__, __FUNCTION__, __LINE__, utils::tid().data(), ##__VA_ARGS__, strerror(errno))
+#define LOGPD(format, ...) printf("[D](%.6f)%s:%s:%d[%s]:" format "\n", tll::utils::timestamp(), __FILE__, __PRETTY_FUNCTION__, __LINE__, tll::utils::tid().data(), ##__VA_ARGS__)
+#define LOGD(format, ...) printf("[D](%.6f)%s:%s:%d[%s]:" format "\n", tll::utils::timestamp(), __FILE__, __FUNCTION__, __LINE__, tll::utils::tid().data(), ##__VA_ARGS__)
+#define LOGE(format, ...) printf("[E](%.6f)%s:%s:%d[%s]:" format "%s\n", tll::utils::timestamp(), __FILE__, __FUNCTION__, __LINE__, tll::utils::tid().data(), ##__VA_ARGS__, strerror(errno))
 
-#define TIMER(ID) utils::Timer __timer_##ID(#ID)
-#define TRACE() utils::Timer __tracer(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + utils::tid() + ")")
+#define TIMER(ID) tll::utils::Timer __timer_##ID(#ID)
+#define TRACE() tll::utils::Timer __tracer(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + tll::utils::tid() + ")")
 
-
+namespace tll {
 namespace utils {
 
 /// format
@@ -526,13 +526,11 @@ struct Timer
 
 } /// utils
 
-#ifndef STATIC_LIB
-#define TLL_INLINE
-#else
+#ifdef STATIC_LIB
 #define TLL_INLINE inline
+#else
+#define TLL_INLINE
 #endif
-
-namespace tll {
 
 typedef uint32_t LogMask;
 
@@ -767,9 +765,9 @@ private:
 //     Tracer()
 // };
 
-} // llt
+} // tll
 
-#define _LOG_HEADER utils::stringFormat("{%.6f}{%s}{%s}{%s}{%d}", utils::timestamp<double>(), utils::tid(), __FILE__, __FUNCTION__, __LINE__)
+#define _LOG_HEADER tll::utils::stringFormat("{%.6f}{%s}{%s}{%s}{%d}", tll::utils::timestamp<double>(), tll::utils::tid(), __FILE__, __FUNCTION__, __LINE__)
 
 #define TLL_LOGD(plog, format, ...) (plog)->log(static_cast<int>(tll::LogType::kDebug), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
 
@@ -779,9 +777,9 @@ private:
 
 #define TLL_LOGF(plog, format, ...) (plog)->log(static_cast<int>(tll::LogType::kFatal), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
 
-#define TLL_LOGT(plog, ID) utils::Timer timer_##ID_([plog](std::string const &log_msg){(plog)->log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, _LOG_HEADER, (/*(logger).log(static_cast<int>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ #ID))
+#define TLL_LOGT(plog, ID) tll::utils::Timer timer_##ID_([plog](std::string const &log_msg){(plog)->log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, _LOG_HEADER, (/*(logger).log(static_cast<int>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ #ID))
 
-#define TLL_LOGTF(plog) utils::Timer timer_([plog](std::string const &log_msg){(plog)->log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, _LOG_HEADER, (/*(logger).log(static_cast<int>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ __FUNCTION__))
+#define TLL_LOGTF(plog) tll::utils::Timer timer_([plog](std::string const &log_msg){(plog)->log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, _LOG_HEADER, (/*(logger).log(static_cast<int>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ __FUNCTION__))
 
 
 #define TLL_GLOGD(...) if(plogger) TLL_LOGD(plogger, ##__VA_ARGS__)
@@ -791,6 +789,6 @@ private:
 #define TLL_GLOGT(ID) if(plogger) TLL_LOGT(plogger, ID)
 #define TLL_GLOGTF() if(plogger) TLL_LOGTF(plogger)
 
-#ifndef STATIC_LIB
+#ifdef STATIC_LIB
 #include "logger.cc"
 #endif

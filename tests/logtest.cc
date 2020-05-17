@@ -30,7 +30,7 @@ struct A
     // L &logger_;
     // L sig_log_;
     Simple::Signal<void(int, std::string const&)> sig_log;
-    utils::Timer life_;
+    tll::utils::Timer life_;
 };
 
 namespace {
