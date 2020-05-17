@@ -3,6 +3,7 @@
 # head -n 9 test_lmngr.log | \
 
 dd if=$1 iflag=skip_bytes,count_bytes,fullblock bs=$((4096)) skip=$((0)) count=$((4096*1024)) 2> /tmp/null | \
+sort -t "}" -k2 | \
 sed -e 's#^.\(.*\).$#\1#g' | \
 awk -F  "}{" '
 BEGIN{}
@@ -27,10 +28,14 @@ BEGIN{}
 			printf "{%s}{%s}{%s}%2d%*s{%s %s %s}{%s}\n", time_, thread_, type_, stack_lvl_[thread_]/2, stack_lvl_[thread_]+1, " ", line_, func_, file_, msg_;
 		}
 	}
-	else
+	else if (NF == 5)
 	{
 		stack_lvl_[thread_]=stack_lvl_[thread_]-2;
-		printf "{%s}{%s}{%s}%2d%*s{-%s}\n", time_, thread_, type_, stack_lvl_[thread_]/2, stack_lvl_[thread_]+1, " ", $4;
+		printf "{%s}{%s}{%s}%2d%*s{-%s}{%s}\n", time_, thread_, type_, stack_lvl_[thread_]/2, stack_lvl_[thread_]+1, " ", $4, $5;
+	}
+	else
+	{
+		print "ERROR"
 	}
 
 }

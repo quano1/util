@@ -10,6 +10,7 @@
 #https://sequencediagram.org/
 
 dd if=$1 iflag=skip_bytes,count_bytes,fullblock bs=$((4096)) skip=$((0)) count=$((4096*1024)) 2> /tmp/null | \
+sort -t "}" -k2 | \
 sed -e 's#^.\(.*\).$#\1#g' | \
 awk -F  "}{" '
 BEGIN{}
