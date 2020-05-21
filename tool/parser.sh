@@ -4,70 +4,69 @@
 
 eof_=0
 
-while [[ eof_ -eq 0 ]]; do
+# while [[ eof_ -eq 0 ]]; do
 
-dd if=$1 iflag=skip_bytes,count_bytes,nonblock bs=4K skip=32K count=32K 2> /tmp/null | \
+dd if=$1 iflag=skip_bytes,count_bytes,nonblock bs=4K skip=0 count=2M 2> /tmp/null | \
 sort -t "}" -k2 | \
 sed -e 's#^.\(.*\).$#\1#g' | \
 awk -F  "}{" '
 BEGIN {
-    T_RED="\033[0;31m"
-    T_GREEN="\033[0;32m"
-    T_YELLOW="\033[0;33m"
-    T_BLUE="\033[0;34m"
     RESET="\033[0m"
-    B_RED="\033[0;41m"
-    B_GREEN="\033[0;42m"
-    B_YELLOW="\033[0;43m"
-    B_BLUE="\033[0;44m"
 
-    command = ("ls -a /tmp/.t_*")
-    while ((command | getline thread_) > 0) {
-        thread_=gensub(/^.*.t_(.*)/, "\\1", "g", thread_);
-
-        subcommand = ("cat /tmp/.t_"thread_)
-        if ((subcommand | getline lvl_) > 0) {
-            stack_lvl_[thread_] = lvl_*2;
-        }
-        close(subcommand)
-        printf "%s: %d\n", thread_, stack_lvl_[thread_];
-    }
-    close(command)
+    split("\033[91m;\033[92m;\033[93m;\033[94m;\033[95m;\033[96m;\033[97m;\033[31m;\033[32m;\033[33m;\033[34m;\033[35m;\033[36m;\033[37m;", colorlist, ";")
+    tcolor = 1;
 }
 {
     type_=$1
     time_=$2
     thread_=$3
+    lvl_=$4
+    obj_=$5
 
-    if(NF > 5) {
-        file_=$4;
-        func_=$5;
-        line_=$6;
-        msg_=$7;
-        if (type_ == "T") {
-            printf "%s{%s}{%s}{%s}%2d%*s{%s %s %s}{+%s}%s\n", T_BLUE, time_, thread_, type_, stack_lvl_[thread_]/2, stack_lvl_[thread_]+1, " ", file_, func_, line_, msg_, RESET;
-
-            stack_lvl_[thread_]=stack_lvl_[thread_]+2;
-        }
-        else {
-            switch (type_) {
-                case "W":
-                    start_color = T_YELLOW;
-                    break;
-                case "F":
-                    start_color = T_RED;
-                    break;
-                default:
-                    start_color = RESET;
-                    break;
-            }
-
-            printf "%s{%s}{%s}{%s}%2d%*s{%s %s %s}{%s}%s\n", start_color, time_, thread_, type_, stack_lvl_[thread_]/2, stack_lvl_[thread_]+1, " ", file_, func_, line_, msg_, RESET;
+    if (thread_color_[thread_] == "") {
+        thread_color_[thread_] = colorlist[tcolor];
+        tcolor+=1;
+        if(tcolor > length(colorlist)) {
+            tcolor = 1;
         }
     }
-    else if (NF == 5) {
-        stack_lvl_[thread_]=stack_lvl_[thread_]-2;
-        printf "%s{%s}{%s}{%s}%2d%*s{-%s}{%s}%s\n", T_YELLOW, time_, thread_, type_, stack_lvl_[thread_]/2, stack_lvl_[thread_]+1, " ", $4, $5, RESET;
+
+    switch (type_) {
+        case "T":
+            type_color_ = "\033[44m";
+            break;
+        case "I":
+            type_color_ = "\033[42m";
+            break;
+        case "W":
+            type_color_ = "\033[43m"
+            break;
+        case "F":
+            type_color_ = "\033[41m"
+            break;
+        default:
+            type_color_ = RESET;
+            break;
+    }
+
+    if(NF > 7) {
+        file_=$6;
+        func_=$7;
+        line_=$8;
+        msg_=$9;
+        # type_color_=sprintf("\033[38;5;%d;42m",FG[thread_]);
+        if (type_ == "T") {
+            printf "{%s}%s{%s}%s%s{%s}%2d%*s{%s %s %s}{%s}%s{+%s}\n", time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, lvl_, " ", file_, func_, line_, obj_, RESET, msg_;
+
+            # stack_lvl_[thread_]=lvl_;
+        }
+        else {
+            printf "{%s}%s{%s}%s%s{%s}%2d%*s{%s %s %s}{%s}%s{%s}\n", time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, lvl_, " ", file_, func_, line_, obj_, RESET, msg_;
+        }
+    }
+    else if (NF == 7) {
+        type_color_ = "\033[46m";
+        printf "{%s}%s{%s}%s%s{%s}%2d%*s{%s}%s{-%s}{%s}\n", time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, lvl_, " ", obj_, RESET, $6, $7;
     }
     # else {
     #   print "ERROR: " $0
@@ -75,12 +74,11 @@ BEGIN {
 
 }
 END {
-    for (key in stack_lvl_) {
-        printf "%d\n", stack_lvl_[key]/2 > "/tmp/.t_"key;
-        close("/tmp/.t_"key)
-    }
+    # for (key in stack_lvl_) {
+    #     printf "%d\n", stack_lvl_[key]/2 > "/tmp/.t_"key;
+    #     close("/tmp/.t_"key)
+    # }
 }
-' | less -r
-
+'
 eof_=1
-done
+# done

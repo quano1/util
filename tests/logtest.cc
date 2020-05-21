@@ -48,7 +48,7 @@ int main(int argc, char const *argv[])
     LOGD("");
     int write_count = 0;
     plogger = new Logger(
-            tll::LogEntity{tll::mask::trace, nullptr, nullptr, std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2), 0x1000, nullptr},
+            // tll::LogEntity{tll::mask::trace, nullptr, nullptr, std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2), 0x1000, nullptr},
 
             tll::LogEntity{tll::mask::all, 
                 [](){return static_cast<void*>(new std::ofstream("ofs_write.log", std::ios::out | std::ios::binary));}, 
@@ -103,7 +103,7 @@ int main(int argc, char const *argv[])
 
         // A a(logf);
         // if(argc > 1)
-        #pragma omp parallel num_threads ( 2 )
+        #pragma omp parallel num_threads ( 8 )
         {
             TLL_LOGT(&lg, single);
             {
