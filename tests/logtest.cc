@@ -103,7 +103,7 @@ int main(int argc, char const *argv[])
 
         // A a(logf);
         // if(argc > 1)
-        #pragma omp parallel num_threads ( 8 )
+        #pragma omp parallel num_threads ( 3 )
         {
             TLL_LOGT(&lg, single);
             {

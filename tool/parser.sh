@@ -6,7 +6,7 @@ eof_=0
 
 # while [[ eof_ -eq 0 ]]; do
 
-dd if=$1 iflag=skip_bytes,count_bytes,nonblock bs=4K skip=0 count=2M 2> /tmp/null | \
+dd if=$1 iflag=skip_bytes,count_bytes,nonblock bs=4K skip=0 count=50M 2> /tmp/null | \
 sort -t "}" -k2 | \
 sed -e 's#^.\(.*\).$#\1#g' | \
 awk -F  "}{" '
@@ -33,19 +33,24 @@ BEGIN {
 
     switch (type_) {
         case "T":
-            type_color_ = "\033[44m";
+            type_color_ = "\033[1;44m";
+            type_text_= RESET;
             break;
         case "I":
-            type_color_ = "\033[42m";
+            type_color_ = "\033[1;42m";
+            type_text_= RESET;
             break;
         case "W":
-            type_color_ = "\033[43m"
+            type_color_ = "\033[1;43m"
+            type_text_= "\033[1m";
             break;
         case "F":
-            type_color_ = "\033[41m"
+            type_color_ = "\033[1;41m"
+            type_text_= "\033[7m";
             break;
         default:
             type_color_ = RESET;
+            type_text_= RESET;
             break;
     }
 
@@ -54,19 +59,19 @@ BEGIN {
         func_=$7;
         line_=$8;
         msg_=$9;
-        # type_color_=sprintf("\033[38;5;%d;42m",FG[thread_]);
+
         if (type_ == "T") {
-            printf "{%s}%s{%s}%s%s{%s}%2d%*s{%s %s %s}{%s}%s{+%s}\n", time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, lvl_, " ", file_, func_, line_, obj_, RESET, msg_;
+            printf "{%s}%s{%s}%s%s{%s}%2d%*s{%s %s %s}{%s}%s%s{+%s}%s\n", time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, lvl_, " ", file_, func_, line_, obj_, RESET, type_text_, msg_, RESET;
 
             # stack_lvl_[thread_]=lvl_;
         }
         else {
-            printf "{%s}%s{%s}%s%s{%s}%2d%*s{%s %s %s}{%s}%s{%s}\n", time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, lvl_, " ", file_, func_, line_, obj_, RESET, msg_;
+            printf "{%s}%s{%s}%s%s{%s}%2d%*s{%s %s %s}{%s}%s%s{%s}%s\n", time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, lvl_, " ", file_, func_, line_, obj_, RESET, type_text_, msg_, RESET;
         }
     }
     else if (NF == 7) {
         type_color_ = "\033[46m";
-        printf "{%s}%s{%s}%s%s{%s}%2d%*s{%s}%s{-%s}{%s}\n", time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, lvl_, " ", obj_, RESET, $6, $7;
+        printf "{%s}%s{%s}%s%s{%s}%2d%*s{%s}%s%s{-%s}{%s}%s\n", time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, lvl_, " ", obj_, RESET, type_text_, $6, $7, RESET;
     }
     # else {
     #   print "ERROR: " $0
