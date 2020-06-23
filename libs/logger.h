@@ -20,6 +20,13 @@
 #include <algorithm>
 #include <omp.h>
 
+#define LOGPD(format, ...) printf("[D](%.6f)%s:%s:%d[%s]:" format "\n", tll::utils::timestamp(), tll::utils::fileName(__FILE__).data(), __PRETTY_FUNCTION__, __LINE__, tll::utils::tid().data(), ##__VA_ARGS__)
+#define LOGD(format, ...) printf("[D](%.6f)%s:%s:%d[%s]:" format "\n", tll::utils::timestamp(), tll::utils::fileName(__FILE__).data(), __FUNCTION__, __LINE__, tll::utils::tid().data(), ##__VA_ARGS__)
+#define LOGE(format, ...) printf("[E](%.6f)%s:%s:%d[%s]:" format "%s\n", tll::utils::timestamp(), tll::utils::fileName(__FILE__).data(), __FUNCTION__, __LINE__, tll::utils::tid().data(), ##__VA_ARGS__, strerror(errno))
+
+#define TIMER(ID) tll::utils::Timer __timer_##ID(#ID)
+#define TRACE() tll::utils::Timer __tracer(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + tll::utils::tid() + ")")
+
 namespace Simple {
 
 namespace Lib {
@@ -236,22 +243,16 @@ private:
 };
 
 } // Simple
+
+namespace tll {
+namespace utils {
 inline std::string fileName(const std::string &path) 
 {
   ssize_t pos = path.find_last_of("/");
   if(pos > 0)
-    return path.substr(pos, path.size() - 1 - pos);
+    return path.substr(pos + 1);
   return path;
 }
-#define LOGPD(format, ...) printf("[D](%.6f)%s:%s:%d[%s]:" format "\n", tll::utils::timestamp(), fileName(__FILE__).data(), __PRETTY_FUNCTION__, __LINE__, tll::utils::tid().data(), ##__VA_ARGS__)
-#define LOGD(format, ...) printf("[D](%.6f)%s:%s:%d[%s]:" format "\n", tll::utils::timestamp(), fileName(__FILE__).data(), __FUNCTION__, __LINE__, tll::utils::tid().data(), ##__VA_ARGS__)
-#define LOGE(format, ...) printf("[E](%.6f)%s:%s:%d[%s]:" format "%s\n", tll::utils::timestamp(), fileName(__FILE__).data(), __FUNCTION__, __LINE__, tll::utils::tid().data(), ##__VA_ARGS__, strerror(errno))
-
-#define TIMER(ID) tll::utils::Timer __timer_##ID(#ID)
-#define TRACE() tll::utils::Timer __tracer(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + tll::utils::tid() + ")")
-
-namespace tll {
-namespace utils {
 
 struct BT 
 {
@@ -540,7 +541,7 @@ struct Timer
         if(sig_log)
         {
             auto id = std::this_thread::get_id();
-            sig_log.emit(stringFormat("{%.6f}{%s}{%ld}{%s}{%s}{%.6f(s)}\n", utils::timestamp(), utils::tid(), BT::instance()[(id)].size(), BT::instance().getBackTrace(id), name, elapse()));
+            sig_log.emit(stringFormat("{%.6f}{%s}{%ld}{%s:%s}{%s}{%.6f(s)}\n", utils::timestamp(), utils::tid(), BT::instance()[(id)].size(), BT::instance()[id].back(), BT::instance().getBackTrace(id), name, elapse()));
             tll::utils::BT::instance()[std::this_thread::get_id()].pop_back();
         }
         else if(!name.empty())
@@ -756,7 +757,7 @@ private:
     {
         buffers_.resize(log_ents_.size());
 
-        for(int i=0; i<log_ents_.size(); i++)
+        for(auto i=0u; i<log_ents_.size(); i++)
         {
             auto &log_ent = log_ents_[i];
             size_t chunk_size = std::get<4>(log_ent);
@@ -813,7 +814,14 @@ private:
 
 } // tll
 
-  #define _LOG_HEADER tll::utils::stringFormat("{%.6f}{%s}{%d}{%s}{%s}{%s}{%d}", tll::utils::timestamp<double>(), tll::utils::tid(), tll::utils::BT::instance()[std::this_thread::get_id()].size(), tll::utils::BT::instance().getBackTrace(std::this_thread::get_id()), __FILE__, __FUNCTION__, __LINE__)
+#define _LOG_HEADER tll::utils::stringFormat("{%.6f}{%s}{%d}{%s:%s}{%s}{%d}",\
+  tll::utils::timestamp<double>(),\
+  tll::utils::tid(),\
+  tll::utils::BT::instance()[std::this_thread::get_id()].size(),\
+  tll::utils::BT::instance().getBackTrace(std::this_thread::get_id()),\
+  tll::utils::fileName(__FILE__),\
+  __FUNCTION__,\
+  __LINE__)
 
 #define TLL_LOGD(plog, format, ...) (plog)->log(static_cast<int>(tll::LogType::kDebug), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
 
@@ -823,17 +831,18 @@ private:
 
 #define TLL_LOGF(plog, format, ...) (plog)->log(static_cast<int>(tll::LogType::kFatal), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
 
-#define TLL_LOGT(plog, ID) tll::utils::Timer timer_##ID_([plog](std::string const &log_msg){(plog)->log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, (tll::utils::BT::instance()[std::this_thread::get_id()].push_back(fileName(__FILE__)), _LOG_HEADER), (/*(logger).log(static_cast<int>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ #ID))
+#define TLL_LOGT(plog, ID) tll::utils::Timer timer_##ID_([plog](std::string const &log_msg){(plog)->log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, (_LOG_HEADER), (/*(logger).log(static_cast<int>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ tll::utils::BT::instance()[std::this_thread::get_id()].push_back(tll::utils::fileName(__FILE__)), #ID))
 
-#define TLL_LOGTF(plog) tll::utils::Timer timer_([plog](std::string const &log_msg){(plog)->log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, (tll::utils::BT::instance()[std::this_thread::get_id()].push_back(fileName(__FILE__)), _LOG_HEADER), (/*(logger).log(static_cast<int>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ __FUNCTION__))
+#define TLL_LOGTF(plog) tll::utils::Timer timer_([plog](std::string const &log_msg){(plog)->log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, (_LOG_HEADER), (/*(logger).log(static_cast<int>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ tll::utils::BT::instance()[std::this_thread::get_id()].push_back(tll::utils::fileName(__FILE__)), __FUNCTION__))
 
+#define TLL_GLOGD(...) TLL_LOGD(plogger_, ##__VA_ARGS__)
+#define TLL_GLOGI(...) TLL_LOGI(plogger_, ##__VA_ARGS__)
+#define TLL_GLOGW(...) TLL_LOGW(plogger_, ##__VA_ARGS__)
+#define TLL_GLOGF(...) TLL_LOGF(plogger_, ##__VA_ARGS__)
+#define TLL_GLOGT(ID) tll::utils::Timer timer_##ID_([](std::string const &log_msg){(plogger_)->log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, (tll::utils::BT::instance()[std::this_thread::get_id()].push_back(tll::utils::fileName(__FILE__)), _LOG_HEADER), (#ID))
 
-#define TLL_GLOGD(...) if(plogger) TLL_LOGD(plogger, ##__VA_ARGS__)
-#define TLL_GLOGI(...) if(plogger) TLL_LOGI(plogger, ##__VA_ARGS__)
-#define TLL_GLOGW(...) if(plogger) TLL_LOGW(plogger, ##__VA_ARGS__)
-#define TLL_GLOGF(...) if(plogger) TLL_LOGF(plogger, ##__VA_ARGS__)
-#define TLL_GLOGT(ID) if(plogger) TLL_LOGT(plogger, ID)
-#define TLL_GLOGTF() if(plogger) TLL_LOGTF(plogger)
+// #define TLL_GLOGTF()
+#define TLL_GLOGTF() tll::utils::Timer timer_([](std::string const &log_msg){(plogger_)->log(static_cast<int>(tll::LogType::kTrace), "%s", log_msg);}, (tll::utils::BT::instance()[std::this_thread::get_id()].push_back(tll::utils::fileName(__FILE__)), _LOG_HEADER), (__FUNCTION__))
 
 #ifdef STATIC_LIB
 #include "logger.cc"
