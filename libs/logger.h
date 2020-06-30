@@ -20,9 +20,9 @@
 #include <algorithm>
 #include <omp.h>
 
-#define LOGPD(format, ...) printf("[D](%.6f)%s:%s:%d[%s]:" format "\n", tll::utils::timestamp(), tll::utils::fileName(__FILE__).data(), __PRETTY_FUNCTION__, __LINE__, tll::utils::tid().data(), ##__VA_ARGS__)
-#define LOGD(format, ...) printf("[D](%.6f)%s:%s:%d[%s]:" format "\n", tll::utils::timestamp(), tll::utils::fileName(__FILE__).data(), __FUNCTION__, __LINE__, tll::utils::tid().data(), ##__VA_ARGS__)
-#define LOGE(format, ...) printf("[E](%.6f)%s:%s:%d[%s]:" format "%s\n", tll::utils::timestamp(), tll::utils::fileName(__FILE__).data(), __FUNCTION__, __LINE__, tll::utils::tid().data(), ##__VA_ARGS__, strerror(errno))
+#define LOGPD(format, ...) printf("[D](%.9f)%s:%s:%d[%s]:" format "\n", tll::utils::timestamp(), tll::utils::fileName(__FILE__).data(), __PRETTY_FUNCTION__, __LINE__, tll::utils::tid().data(), ##__VA_ARGS__)
+#define LOGD(format, ...) printf("[D](%.9f)%s:%s:%d[%s]:" format "\n", tll::utils::timestamp(), tll::utils::fileName(__FILE__).data(), __FUNCTION__, __LINE__, tll::utils::tid().data(), ##__VA_ARGS__)
+#define LOGE(format, ...) printf("[E](%.9f)%s:%s:%d[%s]:" format "%s\n", tll::utils::timestamp(), tll::utils::fileName(__FILE__).data(), __FUNCTION__, __LINE__, tll::utils::tid().data(), ##__VA_ARGS__, strerror(errno))
 
 #define TIMER(ID) tll::utils::Timer __timer_##ID(#ID)
 #define TRACE() tll::utils::Timer __tracer(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + tll::utils::tid() + ")")
@@ -289,8 +289,8 @@ struct BT
   {
     std::lock_guard<std::mutex> lock(mtx_);
     size_t size = bt_.at(id).size();
-    if(size <= 1) return "";
-    return bt_.at(id)[size - 1];
+    if(size < 2) return "";
+    return bt_.at(id)[size - 2];
   }
   std::mutex mtx_;
   std::unordered_map<std::thread::id, std::vector<std::string>> bt_;
@@ -527,7 +527,7 @@ struct Timer
     Timer() : name(""), begin(_clock::now()) {}
     Timer(std::string id) : name(std::move(id)), begin(_clock::now()) 
     {
-        printf(" (%.6f)%s\n", utils::timestamp(), name.data());
+        printf(" (%.9f)%s\n", utils::timestamp(), name.data());
     }
 
     Timer(std::function<void(std::string const&)> logf, std::string start_log, std::string id="") : name(std::move(id)), begin(_clock::now()) 
@@ -541,11 +541,18 @@ struct Timer
         if(sig_log)
         {
             auto id = std::this_thread::get_id();
-            sig_log.emit(stringFormat("{%.6f}{%s}{%ld}{%s:%s}{%s}{%.6f(s)}\n", utils::timestamp(), utils::tid(), BT::instance()[(id)].size(), BT::instance()[id].back(), BT::instance().getBackTrace(id), name, elapse()));
+            sig_log.emit(stringFormat("{%.9f}{%s}{%ld}{%s}{%s}{%s}{%.6f(s)}\n", 
+                utils::timestamp(),
+                utils::tid(),
+                BT::instance()[id].size(),
+                BT::instance()[id].back(),
+                BT::instance().getBackTrace(id),
+                name, 
+                elapse()));
             tll::utils::BT::instance()[std::this_thread::get_id()].pop_back();
         }
         else if(!name.empty())
-            printf(" (%.6f)~%s: %.6f (s)\n", utils::timestamp(), name.data(), elapse());
+            printf(" (%.9f)~%s: %.6f (s)\n", utils::timestamp(), name.data(), elapse());
     }
 
     template <typename T=double, typename D=std::ratio<1,1>>
@@ -814,7 +821,7 @@ private:
 
 } // tll
 
-#define _LOG_HEADER tll::utils::stringFormat("{%.6f}{%s}{%d}{%s:%s}{%s}{%d}",\
+#define _LOG_HEADER tll::utils::stringFormat("{%.9f}{%s}{%d}{%s}{%s}{%s}{%d}",\
   tll::utils::timestamp<double>(),\
   tll::utils::tid(),\
   tll::utils::BT::instance()[std::this_thread::get_id()].size(),\
