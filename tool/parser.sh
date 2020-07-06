@@ -12,7 +12,8 @@ dd if=$1 iflag=skip_bytes,count_bytes,nonblock bs=4K skip=0 count=50M 2> /tmp/nu
 sed -e 's#^.\(.*\).$#\1#g' | \
 awk -F  "}{" '
 BEGIN {
-    if ('"$color_enable"' == 1) {
+    color_enable='"$color_enable"'
+    if (color_enable == 1) {
         RESET="\033[0m"
         split("\033[91m;\033[92m;\033[93m;\033[94m;\033[95m;\033[96m;\033[97m;\033[31m;\033[32m;\033[33m;\033[34m;\033[35m;\033[36m;\033[37m;", colorlist, ";")
     }
@@ -22,11 +23,13 @@ BEGIN {
     type_=$1
     time_=$2
     thread_=$3
-    lvl_=$4
+    lvl_=$4-1
+    prev_ctx=$5
+    curr_ctx=$6
     # if (lvl_ > 4) next;
-    split($5, obj_, ":")
+    # split($5, obj_, ":")
 
-    if ('"$color_enable"' == 1) {
+    if (color_enable == 1) {
         if (thread_color_[thread_] == "") {
             thread_color_[thread_] = colorlist[tcolor];
             tcolor+=1;
@@ -63,37 +66,39 @@ BEGIN {
         }
     }
 
-    if(NF > 7) {
-        func_=$6;
-        line_=$7;
-        msg_=$8;
+    if(NF > 8) {
+        func_=$7;
+        line_=$8;
+        msg_=$9;
 
         if (type_ == "T") {
             printf "{%s}%s{%s}%s%s{%s}%2d%.*s{%s}{%s %s}%s %s\n", 
-                time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, lvl_, "-----------------------------", 
-                obj_[2], func_, line_, RESET, msg_;
+                time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, (lvl_), "-----------------------------", 
+                curr_ctx, func_, line_, RESET, msg_;
 
             # stack_lvl_[thread_]=lvl_;
         }
         else {
             printf "{%s}%s{%s}%s%s{%s}%2d%.*s{%s}{%s %s}%s%s{%s}%s\n", 
-                time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, lvl_, "-----------------------------", 
-                obj_[2], func_, line_, RESET, 
+                time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, (lvl_), "-----------------------------", 
+                curr_ctx, func_, line_, RESET, 
                 type_text_, msg_, RESET;
         }
     }
-    else if (NF == 7) {
-        if ($color_enable == 1) {
+    else if (NF == 8) {
+        if (color_enable == 1) {
             type_color_ = "\033[46m";
         }
-        #printf "{%s}%s{%s}%s%s{%s}%2d%*s{%s}%s%s{%s}{%s}%s\n", time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, lvl_, " ", obj_[1], RESET, type_text_, $6, $7, RESET;
+        #printf "{%s}%s{%s}%s%s{%s}%2d%*s{%s}%s%s{%s}{%s}%s\n", time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, lvl_, " ", curr_ctx, RESET, type_text_, $6, $7, RESET;
+        func_=$7
+        msg_=$8;
         printf "{%s}%s{%s}%s%s{%s}%2d%.*s{%s}{%s %s}%s\n", 
-                time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, lvl_, "-----------------------------", 
-                obj_[1], $6, $7, RESET;
+                time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, (lvl_), "-----------------------------", 
+                curr_ctx, func_, msg_, RESET;
     }
-    # else {
-    #   print "ERROR: " $0
-    # }
+    else {
+      print "ERROR: " $0
+    }
 
 }
 END {
