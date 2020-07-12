@@ -803,7 +803,7 @@ public:
 
         broadcast_ = std::thread([this]()
         {
-            while(is_running_.load(std::memory_order_relaxed))
+            while(isRunning())
             {
                 if(ring_queue_.empty())
                 {
@@ -812,10 +812,10 @@ public:
                     std::unique_lock<std::mutex> tmp_lock(tmp_mtx);
                     /// wait timeout
                     bool wait_status = pop_wait_.wait_for(tmp_lock, std::chrono::milliseconds(wait_ms_), [this] {
-                        return !is_running_.load(std::memory_order_relaxed) || !this->ring_queue_.empty();
+                        return !isRunning() || !this->ring_queue_.empty();
                     });
                     /// wait timeout or running == false
-                    if( !wait_status || !is_running_.load(std::memory_order_relaxed))
+                    if( !wait_status || !isRunning())
                     {
                         this->flush();
                         continue;
@@ -865,7 +865,7 @@ public:
 
     TLL_INLINE void stop()
     {
-        if(is_running_.load(std::memory_order_relaxed))
+        if(isRunning())
         {
             this->join_(); /// wait for all log
             is_running_.store(false, std::memory_order_relaxed);
@@ -898,6 +898,7 @@ public:
     {
         if(isRunning())
             return;
+
         {
             auto it = log_ents_.find(name);
             if(it != log_ents_.end())
@@ -928,7 +929,7 @@ private:
 
     TLL_INLINE void init_()
     {
-        if(is_running_.load(std::memory_order_relaxed))
+        if(isRunning())
             return;
 
         for(auto &[name, log_ent] : log_ents_)
@@ -966,12 +967,12 @@ private:
 
     TLL_INLINE void join_()
     {
-        while(is_running_.load(std::memory_order_relaxed) && !ring_queue_.empty())
+        while(isRunning() && !ring_queue_.empty())
         {
             pop_wait_.notify_one();
             std::mutex mtx;
             std::unique_lock<std::mutex> lock(mtx);
-            join_wait_.wait(lock, [this] {return !is_running_.load(std::memory_order_relaxed) || ring_queue_.empty();});
+            join_wait_.wait(lock, [this] {return !isRunning() || ring_queue_.empty();});
         }
     }
 
