@@ -688,7 +688,7 @@ struct LogEntity
     size_t size;
     std::function<void(void *,const char*, size_t)> log;
     std::function<void *()> open;
-    std::function<void (void *)> close;
+    std::function<void (void **)> close;
     void *handle;
 };
 
@@ -876,7 +876,7 @@ public:
         for(auto &[name, log_ent] : log_ents_)
         {
             if(log_ent.close)
-                log_ent.close(log_ent.handle);
+                log_ent.close(&log_ent.handle);
         }
     }
 
@@ -1018,7 +1018,7 @@ private:
 
 #define TLL_LOGF(plog, format, ...) (plog)->log(static_cast<uint32_t>(tll::LogType::kFatal), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
 
-#define TLL_LOGT(plog, ID) tll::utils::Timer timer_##ID_([plog](std::string const &log_msg){(plog)->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (_LOG_HEADER), (/*(logger).log(static_cast<uint32_t>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ tll::utils::BT::instance()->operator[](std::this_thread::get_id()).push_back(tll::utils::fileName(__FILE__)), #ID))
+#define TLL_LOGT(plog, ID) tll::utils::Timer timer_##ID##_([plog](std::string const &log_msg){(plog)->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (_LOG_HEADER), (/*(logger).log(static_cast<uint32_t>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ tll::utils::BT::instance()->operator[](std::this_thread::get_id()).push_back(tll::utils::fileName(__FILE__)), #ID))
 
 #define TLL_LOGTF(plog) tll::utils::Timer timer_([plog](std::string const &log_msg){(plog)->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (_LOG_HEADER), (/*(logger).log(static_cast<uint32_t>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ tll::utils::BT::instance()->operator[](std::this_thread::get_id()).push_back(tll::utils::fileName(__FILE__)), __FUNCTION__))
 
@@ -1026,7 +1026,7 @@ private:
 #define TLL_GLOGI(...) TLL_LOGI(tll::Logger::instance(), ##__VA_ARGS__)
 #define TLL_GLOGW(...) TLL_LOGW(tll::Logger::instance(), ##__VA_ARGS__)
 #define TLL_GLOGF(...) TLL_LOGF(tll::Logger::instance(), ##__VA_ARGS__)
-#define TLL_GLOGT(ID) tll::utils::Timer timer_##ID_([](std::string const &log_msg){(tll::Logger::instance())->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (tll::utils::BT::instance()->operator[](std::this_thread::get_id()).push_back(tll::utils::fileName(__FILE__)), _LOG_HEADER), (#ID))
+#define TLL_GLOGT(ID) tll::utils::Timer timer_##ID##_([](std::string const &log_msg){(tll::Logger::instance())->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (tll::utils::BT::instance()->operator[](std::this_thread::get_id()).push_back(tll::utils::fileName(__FILE__)), _LOG_HEADER), (#ID))
 
 // #define TLL_GLOGTF()
 #define TLL_GLOGTF() tll::utils::Timer timer_([](std::string const &log_msg){(tll::Logger::instance())->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (tll::utils::BT::instance()->operator[](std::this_thread::get_id()).push_back(tll::utils::fileName(__FILE__)), _LOG_HEADER), (__FUNCTION__))
