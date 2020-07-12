@@ -281,50 +281,6 @@ inline std::string fileName(const std::string &path)
     return path;
 }
 
-struct BT
-{
-    static BT *instance()
-    {
-        static std::atomic<BT*> instance_;
-        for(BT *sin = instance_.load(std::memory_order_relaxed); 
-            !sin && !instance_.compare_exchange_weak(sin, new BT(), std::memory_order_acquire, std::memory_order_relaxed);) { }
-        return instance_.load(std::memory_order_relaxed);
-    }
-
-    std::vector<std::string> &operator[](const std::thread::id &id)
-    {
-        std::lock_guard<std::mutex> lock(mtx_);
-        // if(bt_.find(id) == bt_.end())
-        // {
-        //   // std::lock_guard<std::mutex> lock(mtx_);
-        //   // return bt_[id];
-        //   bt_.insert({id, std::vector<std::string>()});
-        // }
-
-        return bt_[id];
-    }
-
-    // std::vector<std::string> &at(const std::thread::id &id)
-    // {
-    //   return bt_.at(id);
-    // }
-
-    // const std::vector<std::string> &at(const std::thread::id &id) const
-    // {
-    //   return bt_.at(id);
-    // }
-
-    std::string getBackTrace(const std::thread::id &id)
-    {
-        std::lock_guard<std::mutex> lock(mtx_);
-        size_t size = bt_.at(id).size();
-        if(size < 2) return "";
-        return bt_.at(id)[size - 2];
-    }
-    std::mutex mtx_;
-    std::unordered_map<std::thread::id, std::vector<std::string>> bt_;
-};
-
 /// format
 template <typename T>
 T argument(T value) noexcept
@@ -402,6 +358,66 @@ inline bool powerOf2(uint32_t val)
 {
     return (val & (val - 1)) == 0;
 }
+
+
+inline std::string tid()
+{
+    std::stringstream ss;
+    ss << std::this_thread::get_id();
+    return ss.str();
+}
+
+template <typename T=double, typename D=std::ratio<1,1>, typename C=std::chrono::high_resolution_clock>
+T timestamp(typename C::time_point &&t = C::now())
+{
+    return std::chrono::duration_cast<std::chrono::duration<T,D>>(std::forward<typename C::time_point>(t).time_since_epoch()).count();
+}
+
+struct BT
+{
+    static BT *instance()
+    {
+        static std::atomic<BT*> instance_;
+        for(BT *sin = instance_.load(std::memory_order_relaxed); 
+            !sin && !instance_.compare_exchange_weak(sin, new BT(), std::memory_order_acquire, std::memory_order_relaxed);) { }
+        return instance_.load(std::memory_order_relaxed);
+    }
+
+    std::vector<std::string> &operator[](const std::thread::id &id)
+    {
+        std::lock_guard<std::mutex> lock(mtx_);
+        // if(bt_.find(id) == bt_.end())
+        // {
+        //   // std::lock_guard<std::mutex> lock(mtx_);
+        //   // return bt_[id];
+        //   bt_.insert({id, std::vector<std::string>()});
+        // }
+
+        return bt_[id];
+    }
+
+    // std::vector<std::string> &at(const std::thread::id &id)
+    // {
+    //   return bt_.at(id);
+    // }
+
+    // const std::vector<std::string> &at(const std::thread::id &id) const
+    // {
+    //   return bt_.at(id);
+    // }
+
+    std::string getBackTrace(const std::thread::id &id)
+    {
+        std::lock_guard<std::mutex> lock(mtx_);
+        if(bt_.find(id) == bt_.end()) return "";
+
+        size_t size = bt_.at(id).size();
+        if(size < 2) return "";
+        return bt_.at(id)[size - 2];
+    }
+    std::mutex mtx_;
+    std::unordered_map<std::thread::id, std::vector<std::string>> bt_;
+};
 
 template <typename T, size_t const kELemSize=sizeof(T)>
 class BSDLFQ
@@ -552,20 +568,6 @@ private:
     uint32_t capacity_;
     std::vector<T> buffer_;
 };
-
-
-inline std::string tid()
-{
-    std::stringstream ss;
-    ss << std::this_thread::get_id();
-    return ss.str();
-}
-
-template <typename T=double, typename D=std::ratio<1,1>, typename C=std::chrono::high_resolution_clock>
-T timestamp(typename C::time_point &&t = C::now())
-{
-    return std::chrono::duration_cast<std::chrono::duration<T,D>>(std::forward<typename C::time_point>(t).time_since_epoch()).count();
-}
 
 struct Timer
 {
@@ -727,20 +729,22 @@ public:
     Logger(Logger&&) = delete;
     Logger& operator=(Logger&&) = delete;
 
-    TLL_INLINE void setAsync(bool async)
-    {
-        async_ = async;
-    }
-
     TLL_INLINE bool async() const
     {
         return async_;
     }
 
+    TLL_INLINE bool &async()
+    {
+        return async_;
+    }
+
+    /// TODO: separate function to sync & async
     template <typename... Args>
     void log(int type, const char *format, Args &&...args)
     {
         std::string message = utils::stringFormat(format, std::forward<Args>(args)...);
+
         if(async_)
         {
             ring_queue_.push(
@@ -796,7 +800,6 @@ public:
         init_();
         bool val = false;
         if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed)) return;
-        async_ = true;
 
         broadcast_ = std::thread([this]()
         {
@@ -866,7 +869,6 @@ public:
         {
             this->join_(); /// wait for all log
             is_running_.store(false, std::memory_order_relaxed);
-            async_ = false;
             pop_wait_.notify_all();
             if(broadcast_.joinable()) broadcast_.join();
             this->flush(); /// this is necessary
@@ -878,7 +880,7 @@ public:
         }
     }
 
-    TLL_INLINE bool running() const 
+    TLL_INLINE bool isRunning() const 
     {
         return is_running_.load(std::memory_order_relaxed);
     }
@@ -886,7 +888,7 @@ public:
     template < typename ... LogEnts>
     void addLogEnt(LogEnts ...log_ents)
     {
-        if(running())
+        if(isRunning())
             return;
 
         addLogEnt_(log_ents...);
@@ -894,7 +896,7 @@ public:
 
     TLL_INLINE void remLogEnt(const std::string &name)
     {
-        if(running())
+        if(isRunning())
             return;
         {
             auto it = log_ents_.find(name);
