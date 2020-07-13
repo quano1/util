@@ -20,12 +20,12 @@
 #include <algorithm>
 #include <omp.h>
 
-#define LOGPD(format, ...) printf("(D)(%.9f)(%s)(%s:%s:%d)(" format ")\n", tll::timestamp(), tll::tid().data(), tll::fileName(__FILE__).data(), __PRETTY_FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGD(format, ...) printf("(D)(%.9f)(%s)(%s:%s:%d)(" format ")\n", tll::timestamp(), tll::tid().data(), tll::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGE(format, ...) printf("(E)(%.9f)(%s)(%s:%s:%d)(" format ")(%s)\n", tll::timestamp(), tll::tid().data(), tll::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__, strerror(errno))
+#define LOGPD(format, ...) printf("(D)(%.9f)(%s)(%s:%s:%d)(" format ")\n", tll::timestamp(), tll::to_string(tll::tid()).data(), tll::fileName(__FILE__).data(), __PRETTY_FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGD(format, ...) printf("(D)(%.9f)(%s)(%s:%s:%d)(" format ")\n", tll::timestamp(), tll::to_string(tll::tid()).data(), tll::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGE(format, ...) printf("(E)(%.9f)(%s)(%s:%s:%d)(" format ")(%s)\n", tll::timestamp(), tll::to_string(tll::tid()).data(), tll::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__, strerror(errno))
 
 #define TIMER(ID) tll::Timer __timer_##ID(#ID)
-#define TRACE() tll::Timer __tracer(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + tll::tid() + ")")
+#define TRACE() tll::Timer __tracer(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + tll::to_string(tll::tid()) + ")")
 
 namespace Simple {
 
@@ -272,6 +272,16 @@ private:
 } // Simple
 
 namespace tll {
+
+// #define THIS_THREAD_ID_ std::this_thread::get_id()
+// using this_tid std::this_thread::get_id();
+
+template <typename... Args>
+auto tid(Args&&... args) -> decltype(std::this_thread::get_id(std::forward<Args>(args)...))
+{
+    return std::this_thread::get_id(std::forward<Args>(args)...);
+}
+
 // namespace utils {
 inline std::string fileName(const std::string &path)
 {
@@ -359,11 +369,11 @@ inline bool powerOf2(uint32_t val)
     return (val & (val - 1)) == 0;
 }
 
-
-inline std::string tid()
+template <typename T>
+inline std::string to_string(T val)
 {
     std::stringstream ss;
-    ss << std::this_thread::get_id();
+    ss << val;
     return ss.str();
 }
 
@@ -577,7 +587,7 @@ struct Timer
     Timer() : name(""), begin(hrc::now()) {}
     Timer(std::string id) : name(std::move(id)), begin(hrc::now())
     {
-        printf(" (%.9f)%s\n", timestamp(), name.data());
+        printf(" (%.9f)%s\n", tll::timestamp(), name.data());
     }
 
     Timer(std::function<void(std::string const&)> logf, std::string start_log, std::string id="") : name(std::move(id)), begin(hrc::now())
@@ -590,13 +600,13 @@ struct Timer
     {
         if(sig_log)
         {
-            auto id = std::this_thread::get_id();
+            auto id = tll::tid();
             auto &ctx_list = StackMap::instance()[id];
             auto crr_ctx = ctx_list.back();
             ctx_list.pop_back();
             sig_log.emit(stringFormat("{%.9f}{%s}{%ld}{%s}{%s}{%s}{%.6f(s)}\n",
-                                      timestamp(),
-                                      tid(),
+                                      tll::timestamp(),
+                                      tll::to_string(tll::tid()),
                                       ctx_list.size() + 1,
                                       ctx_list.empty() ? "" : ctx_list.back(),
                                       crr_ctx,
@@ -604,7 +614,7 @@ struct Timer
                                       elapse()));
         }
         else if(!name.empty())
-            printf(" (%.9f)~%s: %.6f (s)\n", timestamp(), name.data(), elapse());
+            printf(" (%.9f)~%s: %.6f (s)\n", tll::timestamp(), name.data(), elapse());
     }
 
     template <typename T=double, typename D=std::ratio<1,1>>
@@ -1011,34 +1021,34 @@ private:
 
 } // tll
 
-#define _LOG_HEADER tll::stringFormat("{%.9f}{%s}{%d}{%s}{%s}{%s}{%d}",\
+#define LOG_HEADER_ tll::stringFormat("{%.9f}{%s}{%d}{%s}{%s}{%s}{%d}",\
   tll::timestamp<double>(),\
-  tll::tid(),\
-  tll::StackMap::instance().level(std::this_thread::get_id()),\
-  tll::StackMap::instance().get<tll::StackMap::Pos::Previous>(std::this_thread::get_id()),\
-  tll::StackMap::instance().get<tll::StackMap::Pos::Current>(std::this_thread::get_id()),\
+  tll::to_string(tll::tid()),\
+  tll::StackMap::instance().level(tll::tid()),\
+  tll::StackMap::instance().get<tll::StackMap::Pos::Previous>(tll::tid()),\
+  tll::StackMap::instance().get<tll::StackMap::Pos::Current>(tll::tid()),\
   __FUNCTION__,\
   __LINE__)
 
-#define TLL_LOGD(plog, format, ...) (plog)->log(static_cast<uint32_t>(tll::LogType::kDebug), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
+#define TLL_LOGD(plog, format, ...) (plog)->log(static_cast<uint32_t>(tll::LogType::kDebug), "%s{" format "}\n", LOG_HEADER_ , ##__VA_ARGS__)
 
-#define TLL_LOGI(plog, format, ...) (plog)->log(static_cast<uint32_t>(tll::LogType::kInfo), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
+#define TLL_LOGI(plog, format, ...) (plog)->log(static_cast<uint32_t>(tll::LogType::kInfo), "%s{" format "}\n", LOG_HEADER_ , ##__VA_ARGS__)
 
-#define TLL_LOGW(plog, format, ...) (plog)->log(static_cast<uint32_t>(tll::LogType::kWarn), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
+#define TLL_LOGW(plog, format, ...) (plog)->log(static_cast<uint32_t>(tll::LogType::kWarn), "%s{" format "}\n", LOG_HEADER_ , ##__VA_ARGS__)
 
-#define TLL_LOGF(plog, format, ...) (plog)->log(static_cast<uint32_t>(tll::LogType::kFatal), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
+#define TLL_LOGF(plog, format, ...) (plog)->log(static_cast<uint32_t>(tll::LogType::kFatal), "%s{" format "}\n", LOG_HEADER_ , ##__VA_ARGS__)
 
-#define TLL_LOGT(plog, ID) tll::Timer timer_##ID##_([plog](std::string const &log_msg){(plog)->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (_LOG_HEADER), (/*(logger).log(static_cast<uint32_t>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ tll::StackMap::instance()[std::this_thread::get_id()].push_back(tll::fileName(__FILE__)), #ID))
+#define TLL_LOGT(plog, ID) tll::Timer timer_##ID##_([plog](std::string const &log_msg){(plog)->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (LOG_HEADER_), (/*(logger).log(static_cast<uint32_t>(tll::LogType::kTrace), "%s\n", LOG_HEADER_),*/ tll::StackMap::instance()[tll::tid()].push_back(tll::fileName(__FILE__)), #ID))
 
-#define TLL_LOGTF(plog) tll::Timer timer__([plog](std::string const &log_msg){(plog)->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (_LOG_HEADER), (/*(logger).log(static_cast<uint32_t>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ tll::StackMap::instance()[std::this_thread::get_id()].push_back(tll::fileName(__FILE__)), __FUNCTION__))
+#define TLL_LOGTF(plog) tll::Timer timer__([plog](std::string const &log_msg){(plog)->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (LOG_HEADER_), (/*(logger).log(static_cast<uint32_t>(tll::LogType::kTrace), "%s\n", LOG_HEADER_),*/ tll::StackMap::instance()[tll::tid()].push_back(tll::fileName(__FILE__)), __FUNCTION__))
 
 #define TLL_GLOGD(...) TLL_LOGD(&tll::Logger::instance(), ##__VA_ARGS__)
 #define TLL_GLOGI(...) TLL_LOGI(&tll::Logger::instance(), ##__VA_ARGS__)
 #define TLL_GLOGW(...) TLL_LOGW(&tll::Logger::instance(), ##__VA_ARGS__)
 #define TLL_GLOGF(...) TLL_LOGF(&tll::Logger::instance(), ##__VA_ARGS__)
-#define TLL_GLOGT(ID) tll::Timer timer_##ID##_([](std::string const &log_msg){tll::Logger::instance().log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (tll::StackMap::instance()[std::this_thread::get_id()].push_back(tll::fileName(__FILE__)), _LOG_HEADER), (#ID))
+#define TLL_GLOGT(ID) tll::Timer timer_##ID##_([](std::string const &log_msg){tll::Logger::instance().log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (tll::StackMap::instance()[tll::tid()].push_back(tll::fileName(__FILE__)), LOG_HEADER_), (#ID))
 
-#define TLL_GLOGTF() tll::Timer timer__([](std::string const &log_msg){tll::Logger::instance().log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (tll::StackMap::instance()[std::this_thread::get_id()].push_back(tll::fileName(__FILE__)), _LOG_HEADER), (__FUNCTION__))
+#define TLL_GLOGTF() tll::Timer timer__([](std::string const &log_msg){tll::Logger::instance().log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (tll::StackMap::instance()[tll::tid()].push_back(tll::fileName(__FILE__)), LOG_HEADER_), (__FUNCTION__))
 
 #ifdef STATIC_LIB
 #include "logger.cc"
