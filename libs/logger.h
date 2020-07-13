@@ -373,7 +373,7 @@ T timestamp(typename C::time_point &&t = C::now())
     return std::chrono::duration_cast<std::chrono::duration<T,D>>(std::forward<typename C::time_point>(t).time_since_epoch()).count();
 }
 
-struct ContextMap
+struct StackMap
 {
     enum class Pos
     {
@@ -381,34 +381,34 @@ struct ContextMap
         Current = 1
     };
 
-    static ContextMap &instance()
+    static StackMap &instance()
     {
-        static std::atomic<ContextMap*> singleton;
-        for(ContextMap *sin = singleton.load(std::memory_order_relaxed); 
-            !sin && !singleton.compare_exchange_weak(sin, new ContextMap(), std::memory_order_acquire, std::memory_order_relaxed);) { }
+        static std::atomic<StackMap*> singleton;
+        for(StackMap *sin = singleton.load(std::memory_order_relaxed); 
+            !sin && !singleton.compare_exchange_weak(sin, new StackMap(), std::memory_order_acquire, std::memory_order_relaxed);) { }
         return *singleton.load(std::memory_order_relaxed);
     }
 
     std::vector<std::string> &operator[](const std::thread::id &id)
     {
         std::lock_guard<std::mutex> lock(mtx_);
-        return map_[id];
+        return stack_[id];
     }
 
-    size_t stackLevel(const std::thread::id &id)
+    size_t level(const std::thread::id &id)
     {
         std::lock_guard<std::mutex> lock(mtx_);
-        return map_.at(id).size();
+        return stack_.at(id).size();
     }
 
     template <Pos pos>
     std::string get(const std::thread::id &id)
     {
-        assert(map_.find(id) != map_.end());
+        assert(stack_.find(id) != stack_.end());
         std::vector<std::string> *ctx;
         {
             std::lock_guard<std::mutex> lock(mtx_);
-            ctx = &map_[id];
+            ctx = &stack_[id];
         }
 
         if(pos == Pos::Previous) return (ctx->size() < 2) ? "" : ctx->operator[](ctx->size() - 2);
@@ -417,7 +417,7 @@ struct ContextMap
 
 private:
     std::mutex mtx_;
-    std::unordered_map<std::thread::id, std::vector<std::string>> map_;
+    std::unordered_map<std::thread::id, std::vector<std::string>> stack_;
 };
 
 template <typename T, size_t const kELemSize=sizeof(T)>
@@ -591,7 +591,7 @@ struct Timer
         if(sig_log)
         {
             auto id = std::this_thread::get_id();
-            auto &ctx_list = ContextMap::instance()[id];
+            auto &ctx_list = StackMap::instance()[id];
             auto crr_ctx = ctx_list.back();
             ctx_list.pop_back();
             sig_log.emit(stringFormat("{%.9f}{%s}{%ld}{%s}{%s}{%s}{%.6f(s)}\n",
@@ -1014,9 +1014,9 @@ private:
 #define _LOG_HEADER tll::stringFormat("{%.9f}{%s}{%d}{%s}{%s}{%s}{%d}",\
   tll::timestamp<double>(),\
   tll::tid(),\
-  tll::ContextMap::instance().stackLevel(std::this_thread::get_id()),\
-  tll::ContextMap::instance().get<tll::ContextMap::Pos::Previous>(std::this_thread::get_id()),\
-  tll::ContextMap::instance().get<tll::ContextMap::Pos::Current>(std::this_thread::get_id()),\
+  tll::StackMap::instance().level(std::this_thread::get_id()),\
+  tll::StackMap::instance().get<tll::StackMap::Pos::Previous>(std::this_thread::get_id()),\
+  tll::StackMap::instance().get<tll::StackMap::Pos::Current>(std::this_thread::get_id()),\
   __FUNCTION__,\
   __LINE__)
 
@@ -1028,17 +1028,17 @@ private:
 
 #define TLL_LOGF(plog, format, ...) (plog)->log(static_cast<uint32_t>(tll::LogType::kFatal), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
 
-#define TLL_LOGT(plog, ID) tll::Timer timer_##ID##_([plog](std::string const &log_msg){(plog)->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (_LOG_HEADER), (/*(logger).log(static_cast<uint32_t>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ tll::ContextMap::instance()[std::this_thread::get_id()].push_back(tll::fileName(__FILE__)), #ID))
+#define TLL_LOGT(plog, ID) tll::Timer timer_##ID##_([plog](std::string const &log_msg){(plog)->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (_LOG_HEADER), (/*(logger).log(static_cast<uint32_t>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ tll::StackMap::instance()[std::this_thread::get_id()].push_back(tll::fileName(__FILE__)), #ID))
 
-#define TLL_LOGTF(plog) tll::Timer timer__([plog](std::string const &log_msg){(plog)->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (_LOG_HEADER), (/*(logger).log(static_cast<uint32_t>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ tll::ContextMap::instance()[std::this_thread::get_id()].push_back(tll::fileName(__FILE__)), __FUNCTION__))
+#define TLL_LOGTF(plog) tll::Timer timer__([plog](std::string const &log_msg){(plog)->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (_LOG_HEADER), (/*(logger).log(static_cast<uint32_t>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ tll::StackMap::instance()[std::this_thread::get_id()].push_back(tll::fileName(__FILE__)), __FUNCTION__))
 
 #define TLL_GLOGD(...) TLL_LOGD(&tll::Logger::instance(), ##__VA_ARGS__)
 #define TLL_GLOGI(...) TLL_LOGI(&tll::Logger::instance(), ##__VA_ARGS__)
 #define TLL_GLOGW(...) TLL_LOGW(&tll::Logger::instance(), ##__VA_ARGS__)
 #define TLL_GLOGF(...) TLL_LOGF(&tll::Logger::instance(), ##__VA_ARGS__)
-#define TLL_GLOGT(ID) tll::Timer timer_##ID##_([](std::string const &log_msg){tll::Logger::instance().log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (tll::ContextMap::instance()[std::this_thread::get_id()].push_back(tll::fileName(__FILE__)), _LOG_HEADER), (#ID))
+#define TLL_GLOGT(ID) tll::Timer timer_##ID##_([](std::string const &log_msg){tll::Logger::instance().log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (tll::StackMap::instance()[std::this_thread::get_id()].push_back(tll::fileName(__FILE__)), _LOG_HEADER), (#ID))
 
-#define TLL_GLOGTF() tll::Timer timer__([](std::string const &log_msg){tll::Logger::instance().log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (tll::ContextMap::instance()[std::this_thread::get_id()].push_back(tll::fileName(__FILE__)), _LOG_HEADER), (__FUNCTION__))
+#define TLL_GLOGTF() tll::Timer timer__([](std::string const &log_msg){tll::Logger::instance().log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (tll::StackMap::instance()[std::this_thread::get_id()].push_back(tll::fileName(__FILE__)), _LOG_HEADER), (__FUNCTION__))
 
 #ifdef STATIC_LIB
 #include "logger.cc"
