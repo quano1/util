@@ -97,7 +97,7 @@ BEGIN {
                 curr_ctx, func_, msg_, RESET;
     }
     else {
-      print "ERROR: " $0
+      printf "ERROR: %s\n",$0
     }
 
 }

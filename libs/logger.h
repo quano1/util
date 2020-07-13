@@ -20,9 +20,9 @@
 #include <algorithm>
 #include <omp.h>
 
-#define LOGPD(format, ...) printf("[D](%.9f)%s:%s:%d[%s]:" format "\n", tll::utils::timestamp(), tll::utils::fileName(__FILE__).data(), __PRETTY_FUNCTION__, __LINE__, tll::utils::tid().data(), ##__VA_ARGS__)
-#define LOGD(format, ...) printf("[D](%.9f)%s:%s:%d[%s]:" format "\n", tll::utils::timestamp(), tll::utils::fileName(__FILE__).data(), __FUNCTION__, __LINE__, tll::utils::tid().data(), ##__VA_ARGS__)
-#define LOGE(format, ...) printf("[E](%.9f)%s:%s:%d[%s]:" format "%s\n", tll::utils::timestamp(), tll::utils::fileName(__FILE__).data(), __FUNCTION__, __LINE__, tll::utils::tid().data(), ##__VA_ARGS__, strerror(errno))
+#define LOGPD(format, ...) printf("(D)(%.9f)(%s)(%s:%s:%d)(" format ")\n", tll::utils::timestamp(), tll::utils::tid().data(), tll::utils::fileName(__FILE__).data(), __PRETTY_FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGD(format, ...) printf("(D)(%.9f)(%s)(%s:%s:%d)(" format ")\n", tll::utils::timestamp(), tll::utils::tid().data(), tll::utils::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGE(format, ...) printf("(E)(%.9f)(%s)(%s:%s:%d)(" format ")(%s)\n", tll::utils::timestamp(), tll::utils::tid().data(), tll::utils::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__, strerror(errno))
 
 #define TIMER(ID) tll::utils::Timer __timer_##ID(#ID)
 #define TRACE() tll::utils::Timer __tracer(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + tll::utils::tid() + ")")
@@ -373,13 +373,13 @@ T timestamp(typename C::time_point &&t = C::now())
     return std::chrono::duration_cast<std::chrono::duration<T,D>>(std::forward<typename C::time_point>(t).time_since_epoch()).count();
 }
 
-struct BT
+struct Context
 {
-    static BT *instance()
+    static Context *instance()
     {
-        static std::atomic<BT*> instance_;
-        for(BT *sin = instance_.load(std::memory_order_relaxed); 
-            !sin && !instance_.compare_exchange_weak(sin, new BT(), std::memory_order_acquire, std::memory_order_relaxed);) { }
+        static std::atomic<Context*> instance_;
+        for(Context *sin = instance_.load(std::memory_order_relaxed); 
+            !sin && !instance_.compare_exchange_weak(sin, new Context(), std::memory_order_acquire, std::memory_order_relaxed);) { }
         return instance_.load(std::memory_order_relaxed);
     }
 
@@ -406,7 +406,7 @@ struct BT
     //   return bt_.at(id);
     // }
 
-    std::string getBackTrace(const std::thread::id &id)
+    std::string contexts(const std::thread::id &id)
     {
         std::lock_guard<std::mutex> lock(mtx_);
         if(bt_.find(id) == bt_.end()) return "";
@@ -571,15 +571,15 @@ private:
 
 struct Timer
 {
-    using _clock= std::chrono::high_resolution_clock;
+    using hrc = std::chrono::high_resolution_clock;
 
-    Timer() : name(""), begin(_clock::now()) {}
-    Timer(std::string id) : name(std::move(id)), begin(_clock::now())
+    Timer() : name(""), begin(hrc::now()) {}
+    Timer(std::string id) : name(std::move(id)), begin(hrc::now())
     {
         printf(" (%.9f)%s\n", utils::timestamp(), name.data());
     }
 
-    Timer(std::function<void(std::string const&)> logf, std::string start_log, std::string id="") : name(std::move(id)), begin(_clock::now())
+    Timer(std::function<void(std::string const&)> logf, std::string start_log, std::string id="") : name(std::move(id)), begin(hrc::now())
     {
         sig_log.connect(logf);
         sig_log.emit(stringFormat("%s{%s}\n", start_log, name));
@@ -593,12 +593,12 @@ struct Timer
             sig_log.emit(stringFormat("{%.9f}{%s}{%ld}{%s}{%s}{%s}{%.6f(s)}\n",
                                       utils::timestamp(),
                                       utils::tid(),
-                                      BT::instance()->operator[](id).size(),
-                                      BT::instance()->operator[](id).back(),
-                                      BT::instance()->getBackTrace(id),
+                                      Context::instance()->operator[](id).size(),
+                                      Context::instance()->contexts(id),
+                                      Context::instance()->operator[](id).back(),
                                       name,
                                       elapse()));
-            tll::utils::BT::instance()->operator[](std::this_thread::get_id()).pop_back();
+            tll::utils::Context::instance()->operator[](std::this_thread::get_id()).pop_back();
         }
         else if(!name.empty())
             printf(" (%.9f)~%s: %.6f (s)\n", utils::timestamp(), name.data(), elapse());
@@ -608,7 +608,7 @@ struct Timer
     T reset()
     {
         T ret = elapse<T,D>();
-        begin = _clock::now();
+        begin = hrc::now();
         return ret;
     }
 
@@ -616,19 +616,19 @@ struct Timer
     T elapse() const
     {
         using namespace std::chrono;
-        return duration_cast<std::chrono::duration<T,D>>(_clock::now() - begin).count();
+        return duration_cast<std::chrono::duration<T,D>>(hrc::now() - begin).count();
     }
 
     template <typename T=double, typename D=std::ratio<1,1>>
     std::chrono::duration<T,D> duration() const
     {
         using namespace std::chrono;
-        auto ret = duration_cast<std::chrono::duration<T,D>>(_clock::now() - begin);
+        auto ret = duration_cast<std::chrono::duration<T,D>>(hrc::now() - begin);
         return ret;
     }
 
     std::string name;
-    _clock::time_point begin;
+    hrc::time_point begin;
 
     Simple::Signal<void(std::string const&)> sig_log;
 };
@@ -685,10 +685,10 @@ struct LogEntity
 {
     std::string name;
     LogFlag flag;
-    size_t size;
-    std::function<void(void *,const char*, size_t)> log;
+    size_t chunk_size;
+    std::function<void(void *,const char*, size_t)> send;
     std::function<void *()> open;
-    std::function<void (void **)> close;
+    std::function<void (void *&)> close;
     void *handle;
 };
 
@@ -697,13 +697,13 @@ class Logger
 public:
     Logger() : 
         async_(false), 
-        wait_ms_(100), 
+        wait_ms_(1000), 
         is_running_(false),
         ring_queue_(0x1000)
     {
         /// printf
         addLogEnt_(LogEntity{
-            "default",
+            "console",
             mask::all, 0x1000,
             std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)});
     }
@@ -763,7 +763,7 @@ public:
         {
             for (auto &entry : log_ents_)
             {
-                this->flush_(entry.first, type, 
+                this->send_(entry.first, type, 
                              utils::stringFormat("{%c}%s", kLogTypeString[type], message));
             }
         }
@@ -800,7 +800,7 @@ public:
         init_();
         bool val = false;
         if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed)) return;
-
+        async_ = true;
         broadcast_ = std::thread([this]()
         {
             while(isRunning())
@@ -814,10 +814,11 @@ public:
                     bool wait_status = pop_wait_.wait_for(tmp_lock, std::chrono::milliseconds(wait_ms_), [this] {
                         return !isRunning() || !this->ring_queue_.empty();
                     });
+
+                    this->send_();
                     /// wait timeout or running == false
                     if( !wait_status || !isRunning())
                     {
-                        this->flush();
                         continue;
                     }
                 }
@@ -836,12 +837,13 @@ public:
                     // FIXME: parallel is 10 times slower???
                     // #pragma omp parallel for
                     // #pragma omp for
-                    for(auto &[name, log_ent] : log_ents_)
+                    for(auto &entry : log_ents_)
                     {
+                        auto &name = entry.first;
+                        auto &log_ent = entry.second;
                         LogType const kLogt = log_inf.first;
-                        LogFlag &flag = log_ent.flag;
 
-                        if(flag & tll::toFLag(kLogt))
+                        if(log_ent.flag & tll::toFLag(kLogt))
                         {
                             std::string msg = utils::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(kLogt)], log_inf.second);
                             auto &buff = buffers_[name];
@@ -850,9 +852,9 @@ public:
 
                             buff.resize(new_size);
                             memcpy(buff.data() + old_size, msg.data(), msg.size());
-                            if(new_size >= log_ent.size)
+                            if(new_size >= log_ent.chunk_size)
                             {
-                                this->flush_(name);
+                                this->send_(name);
                             }
                         }
                     }
@@ -863,20 +865,21 @@ public:
         });
     }
 
-    TLL_INLINE void stop()
+    TLL_INLINE void stop(bool wait=true)
     {
-        if(isRunning())
+        if(!isRunning()) return;
+
+        if (wait) this->wait();
+        async_ = false;
+        is_running_.store(false); // write release
+        if(broadcast_.joinable()) broadcast_.join();
+
+        this->send_(); /// this is necessary
+        for(auto &entry : log_ents_)
         {
-            this->join_(); /// wait for all log
-            is_running_.store(false, std::memory_order_relaxed);
-            pop_wait_.notify_all();
-            if(broadcast_.joinable()) broadcast_.join();
-            this->flush(); /// this is necessary
-        }
-        for(auto &[name, log_ent] : log_ents_)
-        {
+            auto &log_ent = entry.second;
             if(log_ent.close)
-                log_ent.close(&log_ent.handle);
+                log_ent.close(log_ent.handle);
         }
     }
 
@@ -925,6 +928,18 @@ public:
         return instance_.load(std::memory_order_relaxed);
     }
 
+    /// wait for ring_queue is empty
+    TLL_INLINE void wait()
+    {
+        std::mutex mtx;
+        std::unique_lock<std::mutex> lock(mtx);
+        join_wait_.wait(lock, [this] 
+        {
+            pop_wait_.notify_one();
+            return !isRunning() || ring_queue_.empty();
+        });
+    }
+
 private:
 
     TLL_INLINE void init_()
@@ -932,47 +947,14 @@ private:
         if(isRunning())
             return;
 
-        for(auto &[name, log_ent] : log_ents_)
+        for(auto &entry : log_ents_)
         {
-            if(log_ent.size > 0) buffers_[name].reserve(log_ent.size*2);
+            auto &name = entry.first;
+            auto &log_ent = entry.second;
+            if(log_ent.chunk_size > 0) buffers_[name].reserve(log_ent.chunk_size*2);
 
             if(log_ent.open && log_ent.handle == nullptr)
                 log_ent.handle = log_ent.open();
-        }
-    }
-
-    TLL_INLINE void flush()
-    {
-        for(auto &[name, log_ent] : log_ents_)
-        {
-            flush_(name);
-        }
-    }
-
-    TLL_INLINE void flush_(const std::string &name)
-    {
-        auto &log_ent = log_ents_[name];
-        auto &buff = buffers_[name];
-        log_ent.log(log_ent.handle, buff.data(), buff.size());
-        buff.resize(0);
-    }
-
-
-    TLL_INLINE void flush_(const std::string &name, int type, const std::string &buff)
-    {
-        auto &log_ent = log_ents_[name];
-        if(! (log_ent.flag & toFLag(LogType(type))) ) return;
-        log_ent.log(log_ent.handle, buff.data(), buff.size());
-    }
-
-    TLL_INLINE void join_()
-    {
-        while(isRunning() && !ring_queue_.empty())
-        {
-            pop_wait_.notify_one();
-            std::mutex mtx;
-            std::unique_lock<std::mutex> lock(mtx);
-            join_wait_.wait(lock, [this] {return !isRunning() || ring_queue_.empty();});
         }
     }
 
@@ -986,6 +968,31 @@ private:
     TLL_INLINE void addLogEnt_(LogEntity log_ent)
     {
         log_ents_[log_ent.name] = log_ent;
+    }
+
+    TLL_INLINE void send_()
+    {
+        for(auto &entry : log_ents_)
+        {
+            send_(entry.first);
+        }
+    }
+
+    TLL_INLINE void send_(const std::string &name)
+    {
+        auto &log_ent = log_ents_[name];
+        auto &buff = buffers_[name];
+        log_ent.send(log_ent.handle, buff.data(), buff.size());
+        buff.resize(0);
+    }
+
+    TLL_INLINE void send_(const std::string &name,
+            int type, 
+            const std::string &buff)
+    {
+        auto &log_ent = log_ents_[name];
+        if(! (log_ent.flag & toFLag(LogType(type))) ) return;
+        log_ent.send(log_ent.handle, buff.data(), buff.size());
     }
 
     bool async_;
@@ -1004,8 +1011,8 @@ private:
 #define _LOG_HEADER tll::utils::stringFormat("{%.9f}{%s}{%d}{%s}{%s}{%s}{%d}",\
   tll::utils::timestamp<double>(),\
   tll::utils::tid(),\
-  tll::utils::BT::instance()->operator[](std::this_thread::get_id()).size(),\
-  tll::utils::BT::instance()->getBackTrace(std::this_thread::get_id()),\
+  tll::utils::Context::instance()->operator[](std::this_thread::get_id()).size(),\
+  tll::utils::Context::instance()->contexts(std::this_thread::get_id()),\
   tll::utils::fileName(__FILE__),\
   __FUNCTION__,\
   __LINE__)
@@ -1018,18 +1025,18 @@ private:
 
 #define TLL_LOGF(plog, format, ...) (plog)->log(static_cast<uint32_t>(tll::LogType::kFatal), "%s{" format "}\n", _LOG_HEADER , ##__VA_ARGS__)
 
-#define TLL_LOGT(plog, ID) tll::utils::Timer timer_##ID##_([plog](std::string const &log_msg){(plog)->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (_LOG_HEADER), (/*(logger).log(static_cast<uint32_t>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ tll::utils::BT::instance()->operator[](std::this_thread::get_id()).push_back(tll::utils::fileName(__FILE__)), #ID))
+#define TLL_LOGT(plog, ID) tll::utils::Timer timer_##ID##_([plog](std::string const &log_msg){(plog)->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (_LOG_HEADER), (/*(logger).log(static_cast<uint32_t>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ tll::utils::Context::instance()->operator[](std::this_thread::get_id()).push_back(tll::utils::fileName(__FILE__)), #ID))
 
-#define TLL_LOGTF(plog) tll::utils::Timer timer_([plog](std::string const &log_msg){(plog)->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (_LOG_HEADER), (/*(logger).log(static_cast<uint32_t>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ tll::utils::BT::instance()->operator[](std::this_thread::get_id()).push_back(tll::utils::fileName(__FILE__)), __FUNCTION__))
+#define TLL_LOGTF(plog) tll::utils::Timer timer_([plog](std::string const &log_msg){(plog)->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (_LOG_HEADER), (/*(logger).log(static_cast<uint32_t>(tll::LogType::kTrace), "%s\n", _LOG_HEADER),*/ tll::utils::Context::instance()->operator[](std::this_thread::get_id()).push_back(tll::utils::fileName(__FILE__)), __FUNCTION__))
 
 #define TLL_GLOGD(...) TLL_LOGD(tll::Logger::instance(), ##__VA_ARGS__)
 #define TLL_GLOGI(...) TLL_LOGI(tll::Logger::instance(), ##__VA_ARGS__)
 #define TLL_GLOGW(...) TLL_LOGW(tll::Logger::instance(), ##__VA_ARGS__)
 #define TLL_GLOGF(...) TLL_LOGF(tll::Logger::instance(), ##__VA_ARGS__)
-#define TLL_GLOGT(ID) tll::utils::Timer timer_##ID##_([](std::string const &log_msg){(tll::Logger::instance())->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (tll::utils::BT::instance()->operator[](std::this_thread::get_id()).push_back(tll::utils::fileName(__FILE__)), _LOG_HEADER), (#ID))
+#define TLL_GLOGT(ID) tll::utils::Timer timer_##ID##_([](std::string const &log_msg){(tll::Logger::instance())->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (tll::utils::Context::instance()->operator[](std::this_thread::get_id()).push_back(tll::utils::fileName(__FILE__)), _LOG_HEADER), (#ID))
 
 // #define TLL_GLOGTF()
-#define TLL_GLOGTF() tll::utils::Timer timer_([](std::string const &log_msg){(tll::Logger::instance())->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (tll::utils::BT::instance()->operator[](std::this_thread::get_id()).push_back(tll::utils::fileName(__FILE__)), _LOG_HEADER), (__FUNCTION__))
+#define TLL_GLOGTF() tll::utils::Timer timer_([](std::string const &log_msg){(tll::Logger::instance())->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (tll::utils::Context::instance()->operator[](std::this_thread::get_id()).push_back(tll::utils::fileName(__FILE__)), _LOG_HEADER), (__FUNCTION__))
 
 #ifdef STATIC_LIB
 #include "logger.cc"
