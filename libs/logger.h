@@ -395,7 +395,7 @@ struct StackMap
     {
         static std::atomic<StackMap*> singleton;
         for(StackMap *sin = singleton.load(std::memory_order_relaxed); 
-            !sin && !singleton.compare_exchange_weak(sin, new StackMap(), std::memory_order_acquire, std::memory_order_relaxed);) { }
+            !sin && !singleton.compare_exchange_weak(sin, new StackMap(), std::memory_order_release, std::memory_order_acquire);) { }
         return *singleton.load(std::memory_order_relaxed);
     }
 
@@ -590,10 +590,10 @@ struct Timer
         printf(" (%.9f)%s\n", tll::timestamp(), name.data());
     }
 
-    Timer(std::function<void(std::string const&)> logf, std::string start_log, std::string id="") : name(std::move(id)), begin(hrc::now())
+    Timer(std::function<void(std::string const&)> logf, std::string header, std::string id="") : name(std::move(id)), begin(hrc::now())
     {
         sig_log.connect(logf);
-        sig_log.emit(stringFormat("%s{%s}\n", start_log, name));
+        sig_log.emit(stringFormat("%s{%s}\n", header, name));
     }
 
     ~Timer()
@@ -937,7 +937,7 @@ public:
         // return &instance;
         static std::atomic<Logger*> singleton;
         for(Logger *sin = singleton.load(std::memory_order_relaxed); 
-            !sin && !singleton.compare_exchange_weak(sin, new Logger(), std::memory_order_acquire, std::memory_order_relaxed);) { }
+            !sin && !singleton.compare_exchange_weak(sin, new Logger(), std::memory_order_release, std::memory_order_acquire);) { }
         return *singleton.load(std::memory_order_relaxed);
     }
 
@@ -1048,8 +1048,8 @@ private:
 #define TLL_GLOGF(...) TLL_LOGF(&tll::Logger::instance(), ##__VA_ARGS__)
 #define TLL_GLOGT(ID) tll::Timer timer_##ID##_([](std::string const &log_msg){tll::Logger::instance().log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (tll::StackMap::instance()[tll::tid()].push_back(tll::fileName(__FILE__)), LOG_HEADER_), (#ID))
 
-#define TLL_GLOGTF() tll::Timer timer__([](std::string const &log_msg){tll::Logger::instance().log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (tll::StackMap::instance()[tll::tid()].push_back(tll::fileName(__FILE__)), LOG_HEADER_), (__FUNCTION__))
-
+// std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)
+#define TLL_GLOGTF() tll::Timer timer__(std::bind(&tll::Logger::log<std::string const &>, &tll::Logger::instance(), static_cast<uint32_t>(tll::LogType::kTrace), "%s", std::placeholders::_1), (tll::StackMap::instance()[tll::tid()].push_back(tll::fileName(__FILE__)), LOG_HEADER_), (__FUNCTION__))
 #ifdef STATIC_LIB
 #include "logger.cc"
 #endif
