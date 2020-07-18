@@ -20,12 +20,12 @@
 #include <algorithm>
 #include <omp.h>
 
-#define LOGPD(format, ...) printf("(D)(%.9f)(%s)(%s:%s:%d)(" format ")\n", tll::timestamp(), tll::to_string(tll::tid()).data(), tll::fileName(__FILE__).data(), __PRETTY_FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGD(format, ...) printf("(D)(%.9f)(%s)(%s:%s:%d)(" format ")\n", tll::timestamp(), tll::to_string(tll::tid()).data(), tll::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGE(format, ...) printf("(E)(%.9f)(%s)(%s:%s:%d)(" format ")(%s)\n", tll::timestamp(), tll::to_string(tll::tid()).data(), tll::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__, strerror(errno))
+#define LOGPD(format, ...) printf("(D)(%.9f)(%s)(%s:%s:%d)(" format ")\n", tll::util::timestamp(), tll::util::to_string(tll::util::tid()).data(), tll::util::fileName(__FILE__).data(), __PRETTY_FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGD(format, ...) printf("(D)(%.9f)(%s)(%s:%s:%d)(" format ")\n", tll::util::timestamp(), tll::util::to_string(tll::util::tid()).data(), tll::util::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGE(format, ...) printf("(E)(%.9f)(%s)(%s:%s:%d)(" format ")(%s)\n", tll::util::timestamp(), tll::util::to_string(tll::util::tid()).data(), tll::util::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__, strerror(errno))
 
 #define TIMER(ID) tll::Timer __timer_##ID(#ID)
-#define TRACE() tll::Timer __tracer(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + tll::to_string(tll::tid()) + ")")
+#define TRACE() tll::Timer __tracer(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + tll::util::to_string(tll::util::tid()) + ")")
 
 namespace Simple {
 
@@ -273,6 +273,7 @@ private:
 
 namespace tll {
 
+namespace util {
 // #define THIS_THREAD_ID_ std::this_thread::get_id()
 // using this_tid std::this_thread::get_id();
 
@@ -282,7 +283,6 @@ auto tid(Args&&... args) -> decltype(std::this_thread::get_id(std::forward<Args>
     return std::this_thread::get_id(std::forward<Args>(args)...);
 }
 
-// namespace utils {
 inline std::string fileName(const std::string &path)
 {
     ssize_t pos = path.find_last_of("/");
@@ -382,53 +382,6 @@ T timestamp(typename C::time_point &&t = C::now())
 {
     return std::chrono::duration_cast<std::chrono::duration<T,D>>(std::forward<typename C::time_point>(t).time_since_epoch()).count();
 }
-
-struct StackMap
-{
-    enum class Pos
-    {
-        Previous = 0,
-        Current = 1
-    };
-
-    static StackMap &instance()
-    {
-        static std::atomic<StackMap*> singleton;
-        for(StackMap *sin = singleton.load(std::memory_order_relaxed); 
-            !sin && !singleton.compare_exchange_weak(sin, new StackMap(), std::memory_order_release, std::memory_order_acquire);) { }
-        return *singleton.load(std::memory_order_relaxed);
-    }
-
-    std::vector<std::string> &operator[](const std::thread::id &id)
-    {
-        std::lock_guard<std::mutex> lock(mtx_);
-        return stack_[id];
-    }
-
-    size_t level(const std::thread::id &id)
-    {
-        std::lock_guard<std::mutex> lock(mtx_);
-        return stack_.at(id).size();
-    }
-
-    template <Pos pos>
-    std::string get(const std::thread::id &id)
-    {
-        assert(stack_.find(id) != stack_.end());
-        std::vector<std::string> *ctx;
-        {
-            std::lock_guard<std::mutex> lock(mtx_);
-            ctx = &stack_[id];
-        }
-
-        if(pos == Pos::Previous) return (ctx->size() < 2) ? "" : ctx->operator[](ctx->size() - 2);
-        else return ctx->back();
-    }
-
-private:
-    std::mutex mtx_;
-    std::unordered_map<std::thread::id, std::vector<std::string>> stack_;
-};
 
 template <typename T, size_t const kELemSize=sizeof(T)>
 class BSDLFQ
@@ -580,6 +533,123 @@ private:
     std::vector<T> buffer_;
 };
 
+} /// utils
+
+#ifdef STATIC_LIB
+#define TLL_INLINE inline
+#else
+#define TLL_INLINE
+#endif
+
+namespace log 
+{
+
+// typedef std::tuple<LogFlag, OpenLog, CloseLog, DoLog, size_t, void *> Entity;
+
+char const kLogTypeString[]="TDIWF";
+enum class Type
+{
+    kTrace = 0,
+    kDebug,
+    kInfo,
+    kWarn,
+    kFatal,
+    kMax,
+};
+
+enum class Flag : uint32_t
+{
+    kTrace = (1U << (int)Type::kTrace),
+    kDebug = (1U << (int)Type::kDebug),
+    kInfo = (1U << (int)Type::kInfo),
+    kWarn = (1U << (int)Type::kWarn),
+    kFatal = (1U << (int)Type::kFatal),
+    kAll = kTrace | kDebug | kInfo | kWarn | kFatal,
+};
+
+enum class Mode
+{
+    kSync = 0,
+    kAsync,
+    kAll,
+};
+
+TLL_INLINE constexpr Flag toFLag(Type type)
+{
+    return static_cast<Flag>(1U << static_cast<int>(type));
+}
+
+template <typename... Args>
+constexpr Flag toFLag(Type type, Args ...args)
+{
+    return toFLag(type) | toFLag(args...);
+}
+
+
+typedef std::function<void *()> OpenLog;
+typedef std::function<void(void *)> CloseLog;
+typedef std::function<void(void *,const char*, size_t)> DoLog;
+
+typedef std::pair<Type, std::string> LogInfo;
+
+struct Entity
+{
+    std::string name;
+    Flag flag;
+    size_t chunk_size;
+    std::function<void(void *,const char*, size_t)> send;
+    std::function<void *()> open;
+    std::function<void (void *&)> close;
+    void *handle;
+};
+
+struct ContextMap
+{
+    enum
+    {
+        Prev = 0,
+        Curr,
+    };
+
+    static ContextMap &instance()
+    {
+        static std::atomic<ContextMap*> singleton;
+        for(ContextMap *sin = singleton.load(std::memory_order_relaxed); 
+            !sin && !singleton.compare_exchange_weak(sin, new ContextMap(), std::memory_order_release, std::memory_order_acquire);) { }
+        return *singleton.load(std::memory_order_relaxed);
+    }
+
+    std::vector<std::string> &operator[](const std::thread::id &id)
+    {
+        std::lock_guard<std::mutex> lock(mtx_);
+        return map_[id];
+    }
+
+    size_t level(const std::thread::id &id)
+    {
+        std::lock_guard<std::mutex> lock(mtx_);
+        return map_.at(id).size();
+    }
+
+    template <int pos>
+    std::string get(const std::thread::id &id)
+    {
+        assert(map_.find(id) != map_.end());
+        std::vector<std::string> *ctx;
+        {
+            std::lock_guard<std::mutex> lock(mtx_);
+            ctx = &map_[id];
+        }
+
+        if(pos == ContextMap::Prev) return (ctx->size() < 2) ? "" : ctx->operator[](ctx->size() - 2);
+        else return ctx->back();
+    }
+
+private:
+    std::mutex mtx_;
+    std::unordered_map<std::thread::id, std::vector<std::string>> map_;
+}; /// ContextMap
+
 struct Timer
 {
     using hrc = std::chrono::high_resolution_clock;
@@ -587,26 +657,26 @@ struct Timer
     Timer() : name(""), begin(hrc::now()) {}
     Timer(std::string id) : name(std::move(id)), begin(hrc::now())
     {
-        printf(" (%.9f)%s\n", tll::timestamp(), name.data());
+        printf(" (%.9f)%s\n", util::timestamp(), name.data());
     }
 
     Timer(std::function<void(std::string const&)> logf, std::string header, std::string id="") : name(std::move(id)), begin(hrc::now())
     {
         sig_log.connect(logf);
-        sig_log.emit(stringFormat("%s{%s}\n", header, name));
+        sig_log.emit(util::stringFormat("%s{%s}\n", header, name));
     }
 
     ~Timer()
     {
         if(sig_log)
         {
-            auto id = tll::tid();
-            auto &ctx_list = StackMap::instance()[id];
+            auto id = util::tid();
+            auto &ctx_list = log::ContextMap::instance()[id];
             auto crr_ctx = ctx_list.back();
             ctx_list.pop_back();
-            sig_log.emit(stringFormat("{%.9f}{%s}{%ld}{%s}{%s}{%s}{%.6f(s)}\n",
-                                      tll::timestamp(),
-                                      tll::to_string(tll::tid()),
+            sig_log.emit(util::stringFormat("{%.9f}{%s}{%ld}{%s}{%s}{%s}{%.6f(s)}\n",
+                                      util::timestamp(),
+                                      util::to_string(util::tid()),
                                       ctx_list.size() + 1,
                                       ctx_list.empty() ? "" : ctx_list.back(),
                                       crr_ctx,
@@ -614,7 +684,7 @@ struct Timer
                                       elapse()));
         }
         else if(!name.empty())
-            printf(" (%.9f)~%s: %.6f (s)\n", tll::timestamp(), name.data(), elapse());
+            printf(" (%.9f)~%s: %.6f (s)\n", util::timestamp(), name.data(), elapse());
     }
 
     template <typename T=double, typename D=std::ratio<1,1>>
@@ -644,85 +714,26 @@ struct Timer
     hrc::time_point begin;
 
     Simple::Signal<void(std::string const&)> sig_log;
-};
+}; /// Timer
 
-// } /// utils
-
-#ifdef STATIC_LIB
-#define TLL_INLINE inline
-#else
-#define TLL_INLINE
-#endif
-
-typedef uint32_t LogFlag;
-
-enum class LogType /// LogType
-{
-    kTrace=0,
-    kDebug,
-    kInfo,
-    kWarn,
-    kFatal,
-};
-
-char const kLogTypeString[]="TDIWF";
-
-TLL_INLINE constexpr LogFlag toFLag(LogType type)
-{
-    return 1U << static_cast<LogFlag>(type);
-}
-
-template <typename... Args>
-constexpr LogFlag toFLag(tll::LogType type, Args ...args)
-{
-    return toFLag(type) | toFLag(args...);
-}
-
-namespace mask {
-constexpr LogFlag trace = toFLag(LogType::kTrace);
-constexpr LogFlag debug = toFLag(LogType::kDebug);
-constexpr LogFlag info = toFLag(LogType::kInfo);
-constexpr LogFlag warn = toFLag(LogType::kWarn);
-constexpr LogFlag fatal = toFLag(LogType::kFatal);
-constexpr LogFlag all = trace | debug | info | warn | fatal;
-}
-
-typedef std::function<void *()> OpenLog;
-typedef std::function<void(void *)> CloseLog;
-typedef std::function<void(void *,const char*, size_t)> DoLog;
-
-typedef std::pair<LogType, std::string> LogInfo;
-// typedef std::tuple<LogFlag, OpenLog, CloseLog, DoLog, size_t, void *> LogEntity;
-
-struct LogEntity
-{
-    std::string name;
-    LogFlag flag;
-    size_t chunk_size;
-    std::function<void(void *,const char*, size_t)> send;
-    std::function<void *()> open;
-    std::function<void (void *&)> close;
-    void *handle;
-};
-
-class Logger
+class Node
 {
 public:
-    Logger() : 
+    Node() : 
         async_(false), 
         wait_ms_(1000), 
         is_running_(false),
         ring_queue_(0x1000)
     {
         /// printf
-        addLogEnt_(LogEntity{
+        addLogEnt_(Entity{
             "console",
-            mask::all, 0x1000,
+            Flag::kAll, 0x1000,
             std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)});
     }
 
     template < typename ... LogEnts>
-    Logger(uint32_t max_log_in_queue, uint32_t wait_ms,
+    Node(uint32_t max_log_in_queue, uint32_t wait_ms,
            LogEnts ...log_ents) : 
         async_(false), 
         wait_ms_(wait_ms), 
@@ -732,15 +743,15 @@ public:
         addLogEnt_(log_ents...);
     }
 
-    ~Logger()
+    ~Node()
     {
         stop();
     }
 
-    Logger(const Logger&) = delete;
-    Logger& operator=(const Logger&) = delete;
-    Logger(Logger&&) = delete;
-    Logger& operator=(Logger&&) = delete;
+    Node(const Node&) = delete;
+    Node& operator=(const Node&) = delete;
+    Node(Node&&) = delete;
+    Node& operator=(Node&&) = delete;
 
     TLL_INLINE bool async() const
     {
@@ -756,7 +767,7 @@ public:
     template <typename... Args>
     void log(int type, const char *format, Args &&...args)
     {
-        std::string message = stringFormat(format, std::forward<Args>(args)...);
+        std::string message = util::stringFormat(format, std::forward<Args>(args)...);
 
         if(async_)
         {
@@ -767,7 +778,7 @@ public:
             [](LogInfo &elem, uint32_t size, LogInfo &&log_msg)
             {
                 elem = std::move(log_msg);
-            }, LogInfo{static_cast<LogType>(type), message}
+            }, LogInfo{static_cast<log::Type>(type), message}
             );
 
             pop_wait_.notify_one();
@@ -777,7 +788,7 @@ public:
             for (auto &entry : log_ents_)
             {
                 this->send_(entry.first, type, 
-                             stringFormat("{%c}%s", kLogTypeString[type], message));
+                            util::stringFormat("{%c}%s", kLogTypeString[type], message));
             }
         }
     }
@@ -785,27 +796,27 @@ public:
     // template <typename... Args>
     // void logd(const char *format, Args &&...args)
     // {
-    //     this->log(static_cast<uint32_t>(LogType::kDebug), format, args...);
+    //     this->log(static_cast<uint32_t>(log::Type::kDebug), format, args...);
     // }
     // template <typename... Args>
     // void logt(const char *format, Args &&...args)
     // {
-    //     this->log(static_cast<uint32_t>(LogType::kTrace), format, args...);
+    //     this->log(static_cast<uint32_t>(log::Type::kTrace), format, args...);
     // }
     // template <typename... Args>
     // void logi(const char *format, Args &&...args)
     // {
-    //     this->log(static_cast<uint32_t>(LogType::kInfo), format, args...);
+    //     this->log(static_cast<uint32_t>(log::Type::kInfo), format, args...);
     // }
     // template <typename... Args>
     // void logw(const char *format, Args &&...args)
     // {
-    //     this->log(static_cast<uint32_t>(LogType::kWarn), format, args...);
+    //     this->log(static_cast<uint32_t>(log::Type::kWarn), format, args...);
     // }
     // template <typename... Args>
     // void logf(const char *format, Args &&...args)
     // {
-    //     this->log(static_cast<uint32_t>(LogType::kFatal), format, args...);
+    //     this->log(static_cast<uint32_t>(log::Type::kFatal), format, args...);
     // }
 
     TLL_INLINE void start()
@@ -854,11 +865,11 @@ public:
                     {
                         auto &name = entry.first;
                         auto &log_ent = entry.second;
-                        LogType const kLogt = log_inf.first;
+                        log::Type const kLogt = log_inf.first;
 
-                        if(log_ent.flag & tll::toFLag(kLogt))
+                        if((uint32_t)log_ent.flag & (uint32_t)toFLag(kLogt))
                         {
-                            std::string msg = stringFormat("{%c}%s", kLogTypeString[(uint32_t)(kLogt)], log_inf.second);
+                            std::string msg = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(kLogt)], log_inf.second);
                             auto &buff = buffers_[name];
                             size_t const old_size = buff.size();
                             size_t const new_size = old_size + msg.size();
@@ -931,13 +942,13 @@ public:
         }
     }
 
-    static Logger &instance()
+    static Node &instance()
     {
-        // static Logger instance;
+        // static Node instance;
         // return &instance;
-        static std::atomic<Logger*> singleton;
-        for(Logger *sin = singleton.load(std::memory_order_relaxed); 
-            !sin && !singleton.compare_exchange_weak(sin, new Logger(), std::memory_order_release, std::memory_order_acquire);) { }
+        static std::atomic<Node*> singleton;
+        for(Node *sin = singleton.load(std::memory_order_relaxed); 
+            !sin && !singleton.compare_exchange_weak(sin, new Node(), std::memory_order_release, std::memory_order_acquire);) { }
         return *singleton.load(std::memory_order_relaxed);
     }
 
@@ -972,13 +983,13 @@ private:
     }
 
     template <typename ... LogEnts>
-    void addLogEnt_(LogEntity log_ent, LogEnts ...log_ents)
+    void addLogEnt_(Entity log_ent, LogEnts ...log_ents)
     {
         log_ents_[log_ent.name] = log_ent;
         addLogEnt_(log_ents...);
     }
 
-    TLL_INLINE void addLogEnt_(LogEntity log_ent)
+    TLL_INLINE void addLogEnt_(Entity log_ent)
     {
         log_ents_[log_ent.name] = log_ent;
     }
@@ -1004,7 +1015,7 @@ private:
             const std::string &buff)
     {
         auto &log_ent = log_ents_[name];
-        if(! (log_ent.flag & toFLag(LogType(type))) ) return;
+        if(! ((uint32_t)log_ent.flag & (uint32_t)toFLag(log::Type{type})) ) return;
         log_ent.send(log_ent.handle, buff.data(), buff.size());
     }
 
@@ -1012,44 +1023,45 @@ private:
     uint32_t wait_ms_;
     std::atomic<bool> is_running_;
     std::thread broadcast_;
-    std::unordered_map<std::string, LogEntity> log_ents_;
+    std::unordered_map<std::string, Entity> log_ents_;
     std::unordered_map<std::string, std::vector<char>> buffers_;
     std::condition_variable pop_wait_, join_wait_;
-    BSDLFQ<LogInfo> ring_queue_;
+    util::BSDLFQ<LogInfo> ring_queue_;
     std::mutex mtx_;
 };
 
-} // tll
+} /// log
+} /// tll
 
-#define LOG_HEADER_ tll::stringFormat("{%.9f}{%s}{%d}{%s}{%s}{%s}{%d}",\
-  tll::timestamp<double>(),\
-  tll::to_string(tll::tid()),\
-  tll::StackMap::instance().level(tll::tid()),\
-  tll::StackMap::instance().get<tll::StackMap::Pos::Previous>(tll::tid()),\
-  tll::StackMap::instance().get<tll::StackMap::Pos::Current>(tll::tid()),\
+#define LOG_HEADER_ tll::util::stringFormat("{%.9f}{%s}{%d}{%s}{%s}{%s}{%d}",\
+  tll::util::timestamp<double>(),\
+  tll::util::to_string(tll::util::tid()),\
+  tll::log::ContextMap::instance().level(tll::util::tid()),\
+  tll::log::ContextMap::instance().get<tll::log::ContextMap::Prev>(tll::util::tid()),\
+  tll::log::ContextMap::instance().get<tll::log::ContextMap::Curr>(tll::util::tid()),\
   __FUNCTION__,\
   __LINE__)
 
-#define TLL_LOGD(plog, format, ...) (plog)->log(static_cast<uint32_t>(tll::LogType::kDebug), "%s{" format "}\n", LOG_HEADER_ , ##__VA_ARGS__)
+#define TLL_LOGD(plog, format, ...) (plog)->log(static_cast<uint32_t>(tll::log::Type::kDebug), "%s{" format "}\n", LOG_HEADER_ , ##__VA_ARGS__)
 
-#define TLL_LOGI(plog, format, ...) (plog)->log(static_cast<uint32_t>(tll::LogType::kInfo), "%s{" format "}\n", LOG_HEADER_ , ##__VA_ARGS__)
+#define TLL_LOGI(plog, format, ...) (plog)->log(static_cast<uint32_t>(tll::log::Type::kInfo), "%s{" format "}\n", LOG_HEADER_ , ##__VA_ARGS__)
 
-#define TLL_LOGW(plog, format, ...) (plog)->log(static_cast<uint32_t>(tll::LogType::kWarn), "%s{" format "}\n", LOG_HEADER_ , ##__VA_ARGS__)
+#define TLL_LOGW(plog, format, ...) (plog)->log(static_cast<uint32_t>(tll::log::Type::kWarn), "%s{" format "}\n", LOG_HEADER_ , ##__VA_ARGS__)
 
-#define TLL_LOGF(plog, format, ...) (plog)->log(static_cast<uint32_t>(tll::LogType::kFatal), "%s{" format "}\n", LOG_HEADER_ , ##__VA_ARGS__)
+#define TLL_LOGF(plog, format, ...) (plog)->log(static_cast<uint32_t>(tll::log::Type::kFatal), "%s{" format "}\n", LOG_HEADER_ , ##__VA_ARGS__)
 
-#define TLL_LOGT(plog, ID) tll::Timer timer_##ID##_([plog](std::string const &log_msg){(plog)->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (LOG_HEADER_), (/*(logger).log(static_cast<uint32_t>(tll::LogType::kTrace), "%s\n", LOG_HEADER_),*/ tll::StackMap::instance()[tll::tid()].push_back(tll::fileName(__FILE__)), #ID))
+#define TLL_LOGT(plog, ID) tll::log::Timer timer_##ID##_([plog](std::string const &log_msg){(plog)->log(static_cast<uint32_t>(tll::log::Type::kTrace), "%s", log_msg);}, (LOG_HEADER_), (/*(Node).log(static_cast<uint32_t>(tll::log::Type::kTrace), "%s\n", LOG_HEADER_),*/ tll::log::ContextMap::instance()[tll::util::tid()].push_back(tll::util::fileName(__FILE__)), #ID))
 
-#define TLL_LOGTF(plog) tll::Timer timer__([plog](std::string const &log_msg){(plog)->log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (LOG_HEADER_), (/*(logger).log(static_cast<uint32_t>(tll::LogType::kTrace), "%s\n", LOG_HEADER_),*/ tll::StackMap::instance()[tll::tid()].push_back(tll::fileName(__FILE__)), __FUNCTION__))
+#define TLL_LOGTF(plog) tll::log::Timer timer__([plog](std::string const &log_msg){(plog)->log(static_cast<uint32_t>(tll::log::Type::kTrace), "%s", log_msg);}, (LOG_HEADER_), (/*(Node).log(static_cast<uint32_t>(tll::log::Type::kTrace), "%s\n", LOG_HEADER_),*/ tll::log::ContextMap::instance()[tll::util::tid()].push_back(tll::util::fileName(__FILE__)), __FUNCTION__))
 
-#define TLL_GLOGD(...) TLL_LOGD(&tll::Logger::instance(), ##__VA_ARGS__)
-#define TLL_GLOGI(...) TLL_LOGI(&tll::Logger::instance(), ##__VA_ARGS__)
-#define TLL_GLOGW(...) TLL_LOGW(&tll::Logger::instance(), ##__VA_ARGS__)
-#define TLL_GLOGF(...) TLL_LOGF(&tll::Logger::instance(), ##__VA_ARGS__)
-#define TLL_GLOGT(ID) tll::Timer timer_##ID##_([](std::string const &log_msg){tll::Logger::instance().log(static_cast<uint32_t>(tll::LogType::kTrace), "%s", log_msg);}, (tll::StackMap::instance()[tll::tid()].push_back(tll::fileName(__FILE__)), LOG_HEADER_), (#ID))
+#define TLL_GLOGD(...) TLL_LOGD(&tll::log::Node::instance(), ##__VA_ARGS__)
+#define TLL_GLOGI(...) TLL_LOGI(&tll::log::Node::instance(), ##__VA_ARGS__)
+#define TLL_GLOGW(...) TLL_LOGW(&tll::log::Node::instance(), ##__VA_ARGS__)
+#define TLL_GLOGF(...) TLL_LOGF(&tll::log::Node::instance(), ##__VA_ARGS__)
+#define TLL_GLOGT(ID) tll::log::Timer timer_##ID##_([](std::string const &log_msg){tll::log::Node::instance().log(static_cast<uint32_t>(tll::log::Type::kTrace), "%s", log_msg);}, (tll::log::ContextMap::instance()[tll::util::tid()].push_back(tll::util::fileName(__FILE__)), LOG_HEADER_), (#ID))
 
 // std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)
-#define TLL_GLOGTF() tll::Timer timer__(std::bind(&tll::Logger::log<std::string const &>, &tll::Logger::instance(), static_cast<uint32_t>(tll::LogType::kTrace), "%s", std::placeholders::_1), (tll::StackMap::instance()[tll::tid()].push_back(tll::fileName(__FILE__)), LOG_HEADER_), (__FUNCTION__))
+#define TLL_GLOGTF() tll::log::Timer timer__(std::bind(&tll::log::Node::log<std::string const &>, &tll::log::Node::instance(), static_cast<uint32_t>(tll::log::Type::kTrace), "%s", std::placeholders::_1), (tll::log::ContextMap::instance()[tll::util::tid()].push_back(tll::util::fileName(__FILE__)), LOG_HEADER_), (__FUNCTION__))
 #ifdef STATIC_LIB
-#include "logger.cc"
+#include "Node.cc"
 #endif

@@ -17,14 +17,14 @@ int write_cnt=0;
 
 int main(int argc, char const *argv[])
 {
-    auto &logger = tll::Logger::instance();
+    auto &logger = tll::log::Node::instance();
     TLL_GLOGTF();
-    tll::LogEntity console_ent{
+    tll::log::Entity console_ent{
                     .name = "console",
-                    .flag = tll::mask::all, .chunk_size = 0x1000,
+                    .flag = tll::log::Flag::kAll, .chunk_size = 0x1000,
                     .send = std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)};
-    tll::LogEntity file_ent1{
-                    .name = "file", .flag = tll::mask::all, .chunk_size = 0x10000,
+    tll::log::Entity file_ent1{
+                    .name = "file", .flag = tll::log::Flag::kAll, .chunk_size = 0x10000,
                     .send = [&](void *handle, const char *buff, size_t size)
                     {
                         if(handle == nullptr) return;
@@ -42,8 +42,8 @@ int main(int argc, char const *argv[])
                         delete static_cast<std::ofstream*>(handle);
                         handle = nullptr;
                     }};
-    tll::LogEntity file_ent2{
-                    .name = "file", .flag = tll::mask::all, .chunk_size = 0x10000,
+    tll::log::Entity file_ent2{
+                    .name = "file", .flag = tll::log::Flag::kAll, .chunk_size = 0x10000,
                     .send = [&](void *handle, const char *buff, size_t size)
                     {
                         if(handle == nullptr) return;
