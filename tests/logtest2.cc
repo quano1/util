@@ -18,7 +18,7 @@ int write_cnt=0;
 int main(int argc, char const *argv[])
 {
     auto &logger = tll::log::Node::instance();
-    TLL_GLOGTF();
+    logger.remLogEnt("console");
     tll::log::Entity console_ent{
                     .name = "console",
                     .flag = tll::log::Flag::kAll, .chunk_size = 0x1000,
@@ -27,7 +27,11 @@ int main(int argc, char const *argv[])
                     .name = "file", .flag = tll::log::Flag::kAll, .chunk_size = 0x10000,
                     .send = [&](void *handle, const char *buff, size_t size)
                     {
-                        if(handle == nullptr) return;
+                        if(handle == nullptr)
+                        {
+                            printf("%.*s", (int)size, buff);
+                            return;
+                        }
                         static_cast<std::ofstream*>(handle)->write((const char *)buff, size);
                         write_cnt++;
                     },
@@ -62,6 +66,7 @@ int main(int argc, char const *argv[])
                         handle = nullptr;
                     }};
     logger.addLogEnt(file_ent1);
+    TLL_GLOGTF();
     logger.start();
     {
         TLL_GLOGT(start);
@@ -81,24 +86,24 @@ int main(int argc, char const *argv[])
     TLL_GLOGI("Write Count: %d", write_cnt);
 
     // logger.remLogEnt("file");
-    logger.addLogEnt(file_ent2);
-    logger.start();
-    {
-        TLL_GLOGT(start);
-        // #pragma omp parallel num_threads ( 16 )
-        {
-            TLL_GLOGT(omp_parallel);
-            for(int i=0; i < std::stoi(argv[1]); i++)
-            {
-                TLL_GLOGD("this is debug logging");
-                TLL_GLOGI("Some information");
-                TLL_GLOGW("A warning!!!");
-                TLL_GLOGF("Ooops!!! fatal logging");
-            }
-        }
-    }
-    logger.stop();
-    TLL_GLOGI("Write Count: %d", write_cnt);
+    // logger.addLogEnt(file_ent2);
+    // logger.start();
+    // {
+    //     TLL_GLOGT(start);
+    //     // #pragma omp parallel num_threads ( 16 )
+    //     {
+    //         TLL_GLOGT(omp_parallel);
+    //         for(int i=0; i < std::stoi(argv[1]); i++)
+    //         {
+    //             TLL_GLOGD("this is debug logging");
+    //             TLL_GLOGI("Some information");
+    //             TLL_GLOGW("A warning!!!");
+    //             TLL_GLOGF("Ooops!!! fatal logging");
+    //         }
+    //     }
+    // }
+    // logger.stop();
+    // TLL_GLOGI("Write Count: %d", write_cnt);
     return 0;
 }
 

@@ -383,11 +383,35 @@ T timestamp(typename C::time_point &&t = C::now())
     return std::chrono::duration_cast<std::chrono::duration<T,D>>(std::forward<typename C::time_point>(t).time_since_epoch()).count();
 }
 
-template <typename T, size_t const kELemSize=sizeof(T)>
-class BSDLFQ
+struct RingBuffer
 {
 public:
-    BSDLFQ(uint32_t num_of_elem) : prod_tail_(0), prod_head_(0), cons_tail_(0), cons_head_(0)
+    inline void push(char *data, size_t size)
+    {
+
+    }
+    inline void pop(char *data, size_t size)
+    {
+
+    }
+    inline size_t size() 
+    { 
+        return (tail >= head) ? tail - head : wmark - head + tail;
+    }
+
+    inline bool empty() { return tail == head; }
+
+    size_t capacity, head, tail, wmark;
+    // size_t size_of_chunk_;
+    // size_t number_of_chunks_;
+};
+
+/// lock-free queue
+template <typename T, size_t const kELemSize=sizeof(T)>
+class LFQueue
+{
+public:
+    LFQueue(uint32_t num_of_elem) : prod_tail_(0), prod_head_(0), cons_tail_(0), cons_head_(0)
     {
         capacity_ = powerOf2(num_of_elem) ? num_of_elem : nextPowerOf2(num_of_elem);
         buffer_.resize(capacity_ * kELemSize);
@@ -531,9 +555,9 @@ private:
     std::atomic<uint32_t> prod_tail_, prod_head_, cons_tail_, cons_head_;
     uint32_t capacity_;
     std::vector<T> buffer_;
-};
+}; /// LFQueue
 
-} /// utils
+} /// util
 
 #ifdef STATIC_LIB
 #define TLL_INLINE inline
@@ -571,7 +595,6 @@ enum class Mode
 {
     kSync = 0,
     kAsync,
-    kAll,
 };
 
 TLL_INLINE constexpr Flag toFLag(Type type)
@@ -590,7 +613,12 @@ typedef std::function<void *()> OpenLog;
 typedef std::function<void(void *)> CloseLog;
 typedef std::function<void(void *,const char*, size_t)> DoLog;
 
-typedef std::pair<Type, std::string> LogInfo;
+// typedef std::pair<Type, std::string> Element;
+struct Message
+{
+    Type type;
+    std::string payload;
+};
 
 struct Entity
 {
@@ -734,13 +762,13 @@ public:
 
     template < typename ... LogEnts>
     Node(uint32_t max_log_in_queue, uint32_t wait_ms,
-           LogEnts ...log_ents) : 
+           LogEnts ...ents) : 
         async_(false), 
         wait_ms_(wait_ms), 
         is_running_(false),
         ring_queue_(max_log_in_queue)
     {
-        addLogEnt_(log_ents...);
+        addLogEnt_(ents...);
     }
 
     ~Node()
@@ -763,63 +791,25 @@ public:
         return async_;
     }
 
-    /// TODO: separate function to sync & async
+    template <Mode mode, typename... Args>
+    void log(int type, const char *format, Args &&...args)
+    {
+        std::string payload = util::stringFormat(format, std::forward<Args>(args)...);
+        log<mode>(type, payload);
+    }
+
     template <typename... Args>
     void log(int type, const char *format, Args &&...args)
     {
-        std::string message = util::stringFormat(format, std::forward<Args>(args)...);
-
-        if(async_)
-        {
-            ring_queue_.push(
-            []() {
-                std::this_thread::yield();
-            },
-            [](LogInfo &elem, uint32_t size, LogInfo &&log_msg)
-            {
-                elem = std::move(log_msg);
-            }, LogInfo{static_cast<log::Type>(type), message}
-            );
-
-            pop_wait_.notify_one();
-        }
-        else
-        {
-            for (auto &entry : log_ents_)
-            {
-                this->send_(entry.first, type, 
-                            util::stringFormat("{%c}%s", kLogTypeString[type], message));
-            }
-        }
+        std::string payload = util::stringFormat(format, std::forward<Args>(args)...);
+        log<Mode::kAsync>(type, payload);
     }
 
-    // template <typename... Args>
-    // void logd(const char *format, Args &&...args)
-    // {
-    //     this->log(static_cast<uint32_t>(log::Type::kDebug), format, args...);
-    // }
-    // template <typename... Args>
-    // void logt(const char *format, Args &&...args)
-    // {
-    //     this->log(static_cast<uint32_t>(log::Type::kTrace), format, args...);
-    // }
-    // template <typename... Args>
-    // void logi(const char *format, Args &&...args)
-    // {
-    //     this->log(static_cast<uint32_t>(log::Type::kInfo), format, args...);
-    // }
-    // template <typename... Args>
-    // void logw(const char *format, Args &&...args)
-    // {
-    //     this->log(static_cast<uint32_t>(log::Type::kWarn), format, args...);
-    // }
-    // template <typename... Args>
-    // void logf(const char *format, Args &&...args)
-    // {
-    //     this->log(static_cast<uint32_t>(log::Type::kFatal), format, args...);
-    // }
+    template <Mode mode>
+    void log(int type, std::string payload);
 
-    TLL_INLINE void start()
+
+    TLL_INLINE void start(size_t chunk_size = 0x1000)
     {
         init_();
         bool val = false;
@@ -847,36 +837,36 @@ public:
                     }
                 }
 
-                LogInfo log_inf;
+                Message log_msg;
                 ring_queue_.pop(
                 []() {
                     std::this_thread::yield();
                 },
-                [&log_inf](LogInfo &elem, uint32_t)
+                [&log_msg](Message &msg, uint32_t)
                 {
-                    log_inf = std::move(elem);
+                    log_msg = std::move(msg);
                 });
                 // #pragma omp parallel num_threads(2)
                 {
                     // FIXME: parallel is 10 times slower???
                     // #pragma omp parallel for
                     // #pragma omp for
-                    for(auto &entry : log_ents_)
+                    for(auto &entry : ents_)
                     {
                         auto &name = entry.first;
-                        auto &log_ent = entry.second;
-                        log::Type const kLogt = log_inf.first;
+                        auto &ent = entry.second;
+                        log::Type const kLogt = log_msg.type;
 
-                        if((uint32_t)log_ent.flag & (uint32_t)toFLag(kLogt))
+                        if((uint32_t)ent.flag & (uint32_t)toFLag(kLogt))
                         {
-                            std::string msg = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(kLogt)], log_inf.second);
+                            std::string msg = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(kLogt)], log_msg.payload);
                             auto &buff = buffers_[name];
                             size_t const old_size = buff.size();
                             size_t const new_size = old_size + msg.size();
 
                             buff.resize(new_size);
                             memcpy(buff.data() + old_size, msg.data(), msg.size());
-                            if(new_size >= log_ent.chunk_size)
+                            if(new_size >= ent.chunk_size)
                             {
                                 this->send_(name);
                             }
@@ -899,11 +889,11 @@ public:
         if(broadcast_.joinable()) broadcast_.join();
 
         this->send_(); /// this is necessary
-        for(auto &entry : log_ents_)
+        for(auto &entry : ents_)
         {
-            auto &log_ent = entry.second;
-            if(log_ent.close)
-                log_ent.close(log_ent.handle);
+            auto &ent = entry.second;
+            if(ent.close)
+                ent.close(ent.handle);
         }
     }
 
@@ -913,12 +903,12 @@ public:
     }
 
     template < typename ... LogEnts>
-    void addLogEnt(LogEnts ...log_ents)
+    void addLogEnt(LogEnts ...ents)
     {
         if(isRunning())
             return;
 
-        addLogEnt_(log_ents...);
+        addLogEnt_(ents...);
     }
 
     TLL_INLINE void remLogEnt(const std::string &name)
@@ -927,10 +917,10 @@ public:
             return;
 
         {
-            auto it = log_ents_.find(name);
-            if(it != log_ents_.end())
+            auto it = ents_.find(name);
+            if(it != ents_.end())
             {
-                log_ents_.erase(it);
+                ents_.erase(it);
             }
         }
         {
@@ -942,6 +932,7 @@ public:
         }
     }
 
+    template <typename T=Node>
     static Node &instance()
     {
         // static Node instance;
@@ -971,32 +962,32 @@ private:
         if(isRunning())
             return;
 
-        for(auto &entry : log_ents_)
+        for(auto &entry : ents_)
         {
             auto &name = entry.first;
-            auto &log_ent = entry.second;
-            if(log_ent.chunk_size > 0) buffers_[name].reserve(log_ent.chunk_size*2);
+            auto &ent = entry.second;
+            if(ent.chunk_size > 0) buffers_[name].reserve(ent.chunk_size*2);
 
-            if(log_ent.open && log_ent.handle == nullptr)
-                log_ent.handle = log_ent.open();
+            if(ent.open && ent.handle == nullptr)
+                ent.handle = ent.open();
         }
     }
 
     template <typename ... LogEnts>
-    void addLogEnt_(Entity log_ent, LogEnts ...log_ents)
+    void addLogEnt_(Entity ent, LogEnts ...ents)
     {
-        log_ents_[log_ent.name] = log_ent;
-        addLogEnt_(log_ents...);
+        ents_[ent.name] = ent;
+        addLogEnt_(ents...);
     }
 
-    TLL_INLINE void addLogEnt_(Entity log_ent)
+    TLL_INLINE void addLogEnt_(Entity ent)
     {
-        log_ents_[log_ent.name] = log_ent;
+        ents_[ent.name] = ent;
     }
 
     TLL_INLINE void send_()
     {
-        for(auto &entry : log_ents_)
+        for(auto &entry : ents_)
         {
             send_(entry.first);
         }
@@ -1004,9 +995,9 @@ private:
 
     TLL_INLINE void send_(const std::string &name)
     {
-        auto &log_ent = log_ents_[name];
+        auto &ent = ents_[name];
         auto &buff = buffers_[name];
-        log_ent.send(log_ent.handle, buff.data(), buff.size());
+        ent.send(ent.handle, buff.data(), buff.size());
         buff.resize(0);
     }
 
@@ -1014,21 +1005,59 @@ private:
             int type, 
             const std::string &buff)
     {
-        auto &log_ent = log_ents_[name];
-        if(! ((uint32_t)log_ent.flag & (uint32_t)toFLag(log::Type{type})) ) return;
-        log_ent.send(log_ent.handle, buff.data(), buff.size());
+        auto &ent = ents_[name];
+        if(! ((uint32_t)ent.flag & (uint32_t)toFLag(log::Type{type})) ) return;
+        ent.send(ent.handle, buff.data(), buff.size());
     }
 
     bool async_;
     uint32_t wait_ms_;
     std::atomic<bool> is_running_;
     std::thread broadcast_;
-    std::unordered_map<std::string, Entity> log_ents_;
+    std::unordered_map<std::string, Entity> ents_;
     std::unordered_map<std::string, std::vector<char>> buffers_;
     std::condition_variable pop_wait_, join_wait_;
-    util::BSDLFQ<LogInfo> ring_queue_;
+    util::LFQueue<Message> ring_queue_;
     std::mutex mtx_;
 };
+
+template <>
+void Node::log<Mode::kSync>(int type, std::string payload)
+{
+    for (auto &entry : ents_)
+    {
+        this->send_(entry.first, type, 
+                    util::stringFormat("{%c}%s", kLogTypeString[type], payload));
+    }
+}
+
+template <>
+void Node::log<Mode::kAsync>(int type, std::string payload)
+{
+    if(!isRunning())
+    {
+        log<Mode::kSync>(type, payload);
+        return;
+    }
+
+    ring_queue_.push(
+    []() {
+        std::this_thread::yield();
+    },
+    [](Message &elem, uint32_t size, Message &&log_msg)
+    {
+        elem = std::move(log_msg);
+    }, Message{static_cast<log::Type>(type), payload}
+    );
+
+    pop_wait_.notify_one();
+}
+// template <>
+// void Node::log<Mode::kAll>(int type, std::string payload)
+// {
+//     log<Mode::kSync>(type, payload);
+//     log<Mode::kAsync>(type, payload);
+// }
 
 } /// log
 } /// tll
