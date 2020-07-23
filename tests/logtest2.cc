@@ -52,25 +52,7 @@ int main(int argc, char const *argv[])
                             delete static_cast<std::ofstream*>(handle);
                             handle = nullptr;
                         }};
-        tll::log::Entity file_ent2{
-                        .name = "file", .flag = tll::log::Flag::kAll, .chunk_size = 0x10000,
-                        .send = [&](void *handle, const char *buff, size_t size)
-                        {
-                            if(handle == nullptr) return;
-                            static_cast<std::ofstream*>(handle)->write((const char *)buff, size);
-                            static_cast<std::ofstream*>(handle)->flush();
-                            write_cnt++;
-                        },
-                        .open = []()
-                        {
-                            write_cnt=0;
-                            return static_cast<void*>(new std::ofstream("file_ent2.log", std::ios::out | std::ios::binary));
-                        }, 
-                        .close = [](void *&handle)
-                        {
-                            delete static_cast<std::ofstream*>(handle);
-                            handle = nullptr;
-                        }};
+
         logger.add(file_ent1);
 
         timer.reset();

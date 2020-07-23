@@ -742,26 +742,14 @@ struct Timer
 class Node
 {
 public:
-    Node() : 
-        async_(false), 
-        wait_ms_(1000), 
-        is_running_(false),
-        ring_queue_(0x1000)
-    {
-        /// printf
-        add_(Entity{
-            "console",
-            Flag::kAll, 0x1000,
-            std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)});
-    }
+    Node() = default;
 
     template < typename ... LogEnts>
     Node(uint32_t max_log_in_queue, uint32_t wait_ms,
-           LogEnts ...ents) : 
-        async_(false), 
-        wait_ms_(wait_ms), 
-        is_running_(false),
-        ring_queue_(max_log_in_queue)
+           LogEnts ...ents) :
+        ents_{},
+        ring_queue_{max_log_in_queue},
+        wait_ms_{wait_ms}
     {
         add_(ents...);
     }
@@ -775,16 +763,6 @@ public:
     Node& operator=(const Node&) = delete;
     Node(Node&&) = delete;
     Node& operator=(Node&&) = delete;
-
-    TLL_INLINE bool async() const
-    {
-        return async_;
-    }
-
-    TLL_INLINE bool &async()
-    {
-        return async_;
-    }
 
     template <Mode mode, typename... Args>
     TLL_INLINE void log(Type type, const char *format, Args &&...args)
@@ -808,7 +786,6 @@ public:
         init_();
         bool val = false;
         if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed)) return;
-        async_ = true;
         broadcast_ = std::thread([this]()
         {
             while(isRunning())
@@ -874,7 +851,6 @@ public:
         if(!isRunning()) return;
 
         if (wait) this->wait();
-        async_ = false;
         is_running_.store(false); // write release
         if(broadcast_.joinable()) broadcast_.join();
 
@@ -931,11 +907,8 @@ public:
         }
     }
 
-    template <typename T=Node>
     static Node &instance()
     {
-        // static Node instance;
-        // return &instance;
         static std::atomic<Node*> singleton;
         for(Node *sin = singleton.load(std::memory_order_relaxed); 
             !sin && !singleton.compare_exchange_weak(sin, new Node(), std::memory_order_release, std::memory_order_acquire);) { }
@@ -1009,14 +982,16 @@ private:
         ent.send(ent.handle, buff.data(), buff.size());
     }
 
-    bool async_;
-    uint32_t wait_ms_;
-    std::atomic<bool> is_running_;
+    std::atomic<bool> is_running_{false};
+    util::LFQueue<Message> ring_queue_{0x1000};
+    std::unordered_map<std::string, Entity> ents_{{"console", Entity{
+                "console",
+                Flag::kAll, 0x1000,
+                std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)}}};
+    uint32_t wait_ms_{100};
     std::thread broadcast_;
-    std::unordered_map<std::string, Entity> ents_;
     std::unordered_map<std::string, std::vector<char>> buffers_;
     std::condition_variable pop_wait_, join_wait_;
-    util::LFQueue<Message> ring_queue_;
     std::mutex mtx_;
 };
 
