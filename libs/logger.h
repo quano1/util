@@ -277,10 +277,10 @@ namespace util {
 // #define THIS_THREAD_ID_ std::this_thread::get_id()
 // using this_tid std::this_thread::get_id();
 
-template <typename... Args>
-auto tid(Args&&... args) -> decltype(std::this_thread::get_id(std::forward<Args>(args)...))
+// template <typename... Args>
+inline std::thread::id tid()
 {
-    return std::this_thread::get_id(std::forward<Args>(args)...);
+    return std::this_thread::get_id();
 }
 
 inline std::string fileName(const std::string &path)
@@ -559,7 +559,7 @@ private:
 
 } /// util
 
-#ifdef STATIC_LIB
+#ifndef STATIC_LIB
 #define TLL_INLINE inline
 #else
 #define TLL_INLINE
@@ -754,7 +754,7 @@ public:
         ring_queue_(0x1000)
     {
         /// printf
-        addLogEnt_(Entity{
+        add_(Entity{
             "console",
             Flag::kAll, 0x1000,
             std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)});
@@ -768,7 +768,7 @@ public:
         is_running_(false),
         ring_queue_(max_log_in_queue)
     {
-        addLogEnt_(ents...);
+        add_(ents...);
     }
 
     ~Node()
@@ -792,21 +792,21 @@ public:
     }
 
     template <Mode mode, typename... Args>
-    void log(int type, const char *format, Args &&...args)
+    TLL_INLINE void log(int type, const char *format, Args &&...args)
     {
         std::string payload = util::stringFormat(format, std::forward<Args>(args)...);
         log<mode>(type, payload);
     }
 
     template <typename... Args>
-    void log(int type, const char *format, Args &&...args)
+    TLL_INLINE void log(int type, const char *format, Args &&...args)
     {
         std::string payload = util::stringFormat(format, std::forward<Args>(args)...);
         log<Mode::kAsync>(type, payload);
     }
 
     template <Mode mode>
-    void log(int type, std::string payload);
+    TLL_INLINE void log(int type, std::string payload);
 
 
     TLL_INLINE void start(size_t chunk_size = 0x1000)
@@ -875,6 +875,7 @@ public:
                 }
             }
 
+            this->send_(); /// this is necessary
             join_wait_.notify_one(); /// notify join
         });
     }
@@ -888,7 +889,6 @@ public:
         is_running_.store(false); // write release
         if(broadcast_.joinable()) broadcast_.join();
 
-        this->send_(); /// this is necessary
         for(auto &entry : ents_)
         {
             auto &ent = entry.second;
@@ -897,21 +897,31 @@ public:
         }
     }
 
+    TLL_INLINE void pause()
+    {
+
+    }
+
+    TLL_INLINE void resume()
+    {
+
+    }
+
     TLL_INLINE bool isRunning() const 
     {
         return is_running_.load(std::memory_order_relaxed);
     }
 
     template < typename ... LogEnts>
-    void addLogEnt(LogEnts ...ents)
+    void add(LogEnts ...ents)
     {
         if(isRunning())
             return;
 
-        addLogEnt_(ents...);
+        add_(ents...);
     }
 
-    TLL_INLINE void remLogEnt(const std::string &name)
+    TLL_INLINE void remove(const std::string &name)
     {
         if(isRunning())
             return;
@@ -974,13 +984,13 @@ private:
     }
 
     template <typename ... LogEnts>
-    void addLogEnt_(Entity ent, LogEnts ...ents)
+    void add_(Entity ent, LogEnts ...ents)
     {
         ents_[ent.name] = ent;
-        addLogEnt_(ents...);
+        add_(ents...);
     }
 
-    TLL_INLINE void addLogEnt_(Entity ent)
+    TLL_INLINE void add_(Entity ent)
     {
         ents_[ent.name] = ent;
     }
@@ -1006,7 +1016,7 @@ private:
             const std::string &buff)
     {
         auto &ent = ents_[name];
-        if(! ((uint32_t)ent.flag & (uint32_t)toFLag(log::Type{type})) ) return;
+        if(! ((uint32_t)ent.flag & (uint32_t)toFLag((log::Type)type)) ) return;
         ent.send(ent.handle, buff.data(), buff.size());
     }
 
@@ -1022,7 +1032,7 @@ private:
 };
 
 template <>
-void Node::log<Mode::kSync>(int type, std::string payload)
+TLL_INLINE void Node::log<Mode::kSync>(int type, std::string payload)
 {
     for (auto &entry : ents_)
     {
@@ -1032,14 +1042,8 @@ void Node::log<Mode::kSync>(int type, std::string payload)
 }
 
 template <>
-void Node::log<Mode::kAsync>(int type, std::string payload)
+TLL_INLINE void Node::log<Mode::kAsync>(int type, std::string payload)
 {
-    if(!isRunning())
-    {
-        log<Mode::kSync>(type, payload);
-        return;
-    }
-
     ring_queue_.push(
     []() {
         std::this_thread::yield();
@@ -1051,6 +1055,12 @@ void Node::log<Mode::kAsync>(int type, std::string payload)
     );
 
     pop_wait_.notify_one();
+
+    if(!isRunning())
+    {
+        log<Mode::kSync>(type, payload);
+        return;
+    }
 }
 // template <>
 // void Node::log<Mode::kAll>(int type, std::string payload)

@@ -18,7 +18,8 @@ int write_cnt=0;
 int main(int argc, char const *argv[])
 {
     auto &logger = tll::log::Node::instance();
-    logger.remLogEnt("console");
+    logger.remove("console");
+    TLL_GLOGTF();
     tll::log::Entity console_ent{
                     .name = "console",
                     .flag = tll::log::Flag::kAll, .chunk_size = 0x1000,
@@ -65,8 +66,7 @@ int main(int argc, char const *argv[])
                         delete static_cast<std::ofstream*>(handle);
                         handle = nullptr;
                     }};
-    logger.addLogEnt(file_ent1);
-    TLL_GLOGTF();
+    logger.add(file_ent1);
     logger.start();
     {
         TLL_GLOGT(start);
@@ -82,11 +82,10 @@ int main(int argc, char const *argv[])
             }
         }
     }
-    logger.stop();
     TLL_GLOGI("Write Count: %d", write_cnt);
-
-    // logger.remLogEnt("file");
-    // logger.addLogEnt(file_ent2);
+    logger.stop();
+    // logger.remove("file");
+    // logger.add(file_ent2);
     // logger.start();
     // {
     //     TLL_GLOGT(start);
