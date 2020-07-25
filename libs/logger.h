@@ -11,7 +11,7 @@
 #include <cassert>
 #include <cstdarg>
 #include <functional>
-
+#include <array>
 #include <unordered_map>
 #include <atomic>
 #include <cstring>
@@ -19,6 +19,8 @@
 #include <list>
 #include <algorithm>
 #include <omp.h>
+#include <set>
+#include "utils.h"
 
 #ifndef STATIC_LIB
 #define TLL_INLINE inline
@@ -30,258 +32,28 @@
 #define LOGD(format, ...) printf("(D)(%.9f)(%s)(%s:%s:%d)(" format ")\n", tll::util::timestamp(), tll::util::to_string(tll::util::tid()).data(), tll::util::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__)
 #define LOGE(format, ...) printf("(E)(%.9f)(%s)(%s:%s:%d)(" format ")(%s)\n", tll::util::timestamp(), tll::util::to_string(tll::util::tid()).data(), tll::util::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__, strerror(errno))
 
-#define TIMER(ID) tll::log::Timer timer_##ID##__(#ID)
-#define TIMERF() tll::log::Timer timer__(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + tll::util::to_string(tll::util::tid()) + ")")
-
-namespace Simple {
-
-namespace Lib {
-
-/// ProtoSignal is the template implementation for callback list.
-template<typename,typename> class ProtoSignal;   // undefined
-
-/// CollectorInvocation invokes signal handlers differently depending on return type.
-template<typename,typename> struct CollectorInvocation;
-
-/// CollectorLast returns the result of the last signal handler from a signal emission.
-template<typename Result>
-struct CollectorLast {
-    using CollectorResult = Result;
-    explicit        CollectorLast ()              : last_() {}
-    inline bool     operator()    (Result r)      {
-        last_ = r;
-        return true;
-    }
-    CollectorResult result        ()              {
-        return last_;
-    }
-private:
-    Result last_;
-};
-
-/// CollectorDefault implements the default signal handler collection behaviour.
-template<typename Result>
-struct CollectorDefault : CollectorLast<Result>
-{};
-
-/// CollectorDefault specialisation for signals with void return type.
-template<>
-struct CollectorDefault<void> {
-    using CollectorResult = void;
-    void                  result     ()           {}
-    inline bool           operator() (void)       {
-        return true;
-    }
-};
-
-/// CollectorInvocation specialisation for regular signals.
-template<class Collector, class R, class... Args>
-struct CollectorInvocation<Collector, R (Args...)> {
-    inline bool
-    invoke (Collector &collector, const std::function<R (Args...)> &cbf, Args... args) const
-    {
-        return collector (cbf (args...));
-    }
-};
-
-/// CollectorInvocation specialisation for signals with void return type.
-template<class Collector, class... Args>
-struct CollectorInvocation<Collector, void (Args...)> {
-    inline bool
-    invoke (Collector &collector, const std::function<void (Args...)> &cbf, Args... args) const
-    {
-        cbf (args...);
-        return collector();
-    }
-};
-
-/// ProtoSignal template specialised for the callback signature and collector.
-template<class Collector, class R, class... Args>
-class ProtoSignal<R (Args...), Collector> : private CollectorInvocation<Collector, R (Args...)> {
-protected:
-    using CbFunction = std::function<R (Args...)>;
-    using Result = typename CbFunction::result_type;
-    using CollectorResult = typename Collector::CollectorResult;
-
-private:
-    /*copy-ctor*/
-    ProtoSignal (const ProtoSignal&) = delete;
-    ProtoSignal&  operator=   (const ProtoSignal&) = delete;
-
-    using CallbackSlot = std::shared_ptr<CbFunction>;
-    using CallbackList = std::list<CallbackSlot>;
-    CallbackList callback_list_;
-
-    size_t add_cb(const CbFunction& cb)
-    {
-        callback_list_.emplace_back(std::make_shared<CbFunction>(cb));
-        return size_t (callback_list_.back().get());
-    }
-
-    bool remove_cb(size_t id)
-    {
-        auto it =std::remove_if(begin(callback_list_), end(callback_list_),
-        [id](const CallbackSlot& slot) {
-            return size_t(slot.get()) == id;
-        });
-        bool const removed = it != end(callback_list_);
-        callback_list_.erase(it, end(callback_list_));
-        return removed;
-    }
-
-public:
-    /// ProtoSignal constructor, connects default callback if non-nullptr.
-    ProtoSignal (const CbFunction &method)
-    {
-        if (method)
-            add_cb(method);
-    }
-    /// ProtoSignal destructor releases all resources associated with this signal.
-    ~ProtoSignal ()
-    {
-    }
-
-    /// Operator to add a new function or lambda as signal handler, returns a handler connection ID.
-    size_t connect (const CbFunction &cb)      {
-        return add_cb(cb);
-    }
-    /// Operator to remove a signal handler through it connection ID, returns if a handler was removed.
-    bool   disconnect (size_t connection)         {
-        return remove_cb(connection);
-    }
-
-    /// Emit a signal, i.e. invoke all its callbacks and collect return types with the Collector.
-    CollectorResult
-    emit (Args... args) const
-    {
-        Collector collector;
-        for (auto &slot : callback_list_) {
-            if (slot) {
-                const bool continue_emission = this->invoke (collector, *slot, args...);
-                if (!continue_emission)
-                    break;
-            }
-        }
-        return collector.result();
-    }
-    // Number of connected slots.
-    std::size_t
-    size () const
-    {
-        return callback_list_.size();
-    }
-
-    operator bool() const {
-        return size() > 0;
-    }
-};
-
-} // Lib
-// namespace Simple
-
-/**
- * Signal is a template type providing an interface for arbitrary callback lists.
- * A signal type needs to be declared with the function signature of its callbacks,
- * and optionally a return result collector class type.
- * Signal callbacks can be added with operator+= to a signal and removed with operator-=, using
- * a callback connection ID return by operator+= as argument.
- * The callbacks of a signal are invoked with the emit() method and arguments according to the signature.
- * The result returned by emit() depends on the signal collector class. By default, the result of
- * the last callback is returned from emit(). Collectors can be implemented to accumulate callback
- * results or to halt a running emissions in correspondance to callback results.
- * The signal implementation is safe against recursion, so callbacks may be removed and
- * added during a signal emission and recursive emit() calls are also safe.
- * The overhead of an unused signal is intentionally kept very low, around the size of a single pointer.
- * Note that the Signal template types is non-copyable.
- */
-template <typename SignalSignature, class Collector = Lib::CollectorDefault<typename std::function<SignalSignature>::result_type> >
-struct Signal /*final*/ :
-    Lib::ProtoSignal<SignalSignature, Collector>
-{
-    using ProtoSignal = Lib::ProtoSignal<SignalSignature, Collector>;
-    using CbFunction = typename ProtoSignal::CbFunction;
-    /// Signal constructor, supports a default callback as argument.
-    Signal (const CbFunction &method = CbFunction()) : ProtoSignal (method) {}
-};
-
-/// This function creates a std::function by binding @a object to the member function pointer @a method.
-template<class Instance, class Class, class R, class... Args> std::function<R (Args...)>
-slot (Instance &object, R (Class::*method) (Args...))
-{
-    return [&object, method] (Args... args) {
-        return (object .* method) (args...);
-    };
-}
-
-/// This function creates a std::function by binding @a object to the member function pointer @a method.
-template<class Class, class R, class... Args> std::function<R (Args...)>
-slot (Class *object, R (Class::*method) (Args...))
-{
-    return [object, method] (Args... args) {
-        return (object ->* method) (args...);
-    };
-}
-
-/// Keep signal emissions going while all handlers return !0 (true).
-template<typename Result>
-struct CollectorUntil0 {
-    using CollectorResult = Result;
-    explicit                      CollectorUntil0 ()      : result_() {}
-    const CollectorResult&        result          ()      {
-        return result_;
-    }
-    inline bool
-    operator() (Result r)
-    {
-        result_ = r;
-        return result_ ? true : false;
-    }
-private:
-    CollectorResult result_;
-};
-
-/// Keep signal emissions going while all handlers return 0 (false).
-template<typename Result>
-struct CollectorWhile0 {
-    using CollectorResult = Result;
-    explicit                      CollectorWhile0 ()      : result_() {}
-    const CollectorResult&        result          ()      {
-        return result_;
-    }
-    inline bool
-    operator() (Result r)
-    {
-        result_ = r;
-        return result_ ? false : true;
-    }
-private:
-    CollectorResult result_;
-};
-
-/// CollectorVector returns the result of the all signal handlers from a signal emission in a std::vector.
-template<typename Result>
-struct CollectorVector {
-    using CollectorResult = std::vector<Result>;
-    const CollectorResult&        result ()       {
-        return result_;
-    }
-    inline bool
-    operator() (Result r)
-    {
-        result_.push_back (r);
-        return true;
-    }
-private:
-    CollectorResult result_;
-};
-
-} // Simple
+#define TRACE(ID) tll::log::Tracer<> tracer_##ID##__(#ID)
+#define TRACEF() tll::log::Tracer<> tracer__(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + tll::util::to_string(tll::util::tid()) + ")")
 
 namespace tll {
 
 namespace util {
 // #define THIS_THREAD_ID_ std::this_thread::get_id()
 // using this_tid std::this_thread::get_id();
+
+template<typename T, std::size_t N, std::size_t... I>
+constexpr auto make_array_impl(T && value, std::index_sequence<I...>)
+{
+    return std::array<std::decay_t<T>, N> {
+            (static_cast<void>(I), std::forward<T>(value))..., 
+        };
+}
+
+template<typename T, std::size_t N>
+constexpr auto make_array(T && value)
+{
+    return make_array_impl<T, N>(std::forward<T>(value), std::make_index_sequence<N>{});
+}
 
 // template <typename... Args>
 inline std::thread::id tid()
@@ -354,8 +126,6 @@ std::basic_string<T> stringFormat(
     int len = stringPrint(&buffer[0], kLogSize, format, args ...);
     buffer.resize(len);
     return buffer;
-
-    return buffer;
 }
 
 inline uint32_t nextPowerOf2(uint32_t val)
@@ -423,44 +193,6 @@ public:
         buffer_.resize(capacity_ * kELemSize);
     }
 
-    template </*typename D,*/ typename F, typename ...Args>
-    bool pop(F &&doPop, Args &&...args)
-    {
-        uint32_t cons_head;
-        while(!tryPop(cons_head)) 
-        {
-            if (empty()) 
-                return false;
-
-            std::this_thread::yield();
-        }
-
-        std::forward<F>(doPop)(elemAt(cons_head), kELemSize, std::forward<Args>(args)...);
-
-        while(!completePop(cons_head)) 
-            std::this_thread::yield();
-
-        return true;
-    }
-
-    template </*typename D, */typename F, typename ...Args>
-    bool push(F &&doPush, Args&&...args)
-    {
-        uint32_t prod_head;
-        prod_head = prod_head_.load(std::memory_order_relaxed);
-        while(!tryPush(prod_head))
-        {
-            if(full()) return false;
-            std::this_thread::yield();
-        }
-
-        std::forward<F>(doPush)(elemAt(prod_head), kELemSize, std::forward<Args>(args)...);
-        while(!completePush(prod_head)) 
-            std::this_thread::yield();
-
-        return true;
-    }
-
     TLL_INLINE bool tryPop(uint32_t &cons_head)
     {
         cons_head = cons_head_.load(std::memory_order_relaxed);
@@ -483,6 +215,51 @@ public:
             return false;
 
         cons_tail_.fetch_add(1, std::memory_order_release);
+        return true;
+    }
+
+    template </*typename D,*/ typename F, typename ...Args>
+    bool pop(F &&doPop, Args &&...args)
+    {
+        uint32_t cons_head;
+        while(!tryPop(cons_head)) 
+        {
+            if (empty()) 
+                return false;
+
+            std::this_thread::yield();
+        }
+
+        std::forward<F>(doPop)(elemAt(cons_head), kELemSize, std::forward<Args>(args)...);
+
+        while(!completePop(cons_head)) 
+            std::this_thread::yield();
+
+        return true;
+    }
+
+    /// ONE consumer only
+    template </*typename D,*/ typename F, typename ...Args>
+    bool popBatch(uint32_t max_num, F &&onPopBatch, Args &&...args)
+    {
+        if (empty())
+            return false;
+
+        uint32_t cons_head = cons_head_.load(std::memory_order_relaxed);
+        uint32_t elem_num = size();
+
+        if(elem_num > max_num)
+            elem_num = max_num;
+
+        while(cons_head + elem_num > prod_tail_.load(std::memory_order_relaxed))
+            std::this_thread::yield();
+
+        cons_head_.fetch_add(elem_num, std::memory_order_acquire);
+
+        std::forward<F>(onPopBatch)(cons_head, elem_num, kELemSize, std::forward<Args>(args)...);
+
+        cons_tail_.fetch_add(elem_num, std::memory_order_release);
+
         return true;
     }
 
@@ -510,9 +287,27 @@ public:
         return true;
     }
 
+    template </*typename D, */typename F, typename ...Args>
+    bool push(F &&doPush, Args&&...args)
+    {
+        uint32_t prod_head;
+        prod_head = prod_head_.load(std::memory_order_relaxed);
+        while(!tryPush(prod_head))
+        {
+            if(full()) return false;
+            std::this_thread::yield();
+        }
+
+        std::forward<F>(doPush)(elemAt(prod_head), kELemSize, std::forward<Args>(args)...);
+        while(!completePush(prod_head)) 
+            std::this_thread::yield();
+
+        return true;
+    }
+
     TLL_INLINE uint32_t size() const
     {
-        return prod_tail_.load(std::memory_order_relaxed) - cons_tail_.load(std::memory_order_relaxed);
+        return prod_head_.load(std::memory_order_relaxed) - cons_head_.load(std::memory_order_relaxed);
     }
 
     TLL_INLINE uint32_t wrap(uint32_t index) const
@@ -553,6 +348,64 @@ private:
     uint32_t capacity_;
     std::vector<T> buffer_;
 }; /// LFQueue
+
+template <typename Signature>
+class Slot
+{
+public:
+    Slot()=default;
+    ~Slot()=default;
+    Slot(std::function<Signature> cb) : cb_(cb) {}
+    operator bool() const
+    {
+        return cb_ != nullptr;
+    }
+
+    template <typename ...Args>
+    void operator()(Args &&...args) const
+    {
+        cb_(std::forward<Args>(args)...);
+    }
+private:
+    std::function<Signature> cb_;
+};
+
+template <typename Signature>
+class Signal
+{
+public:
+    template<typename SL>
+    uintptr_t connect(SL &&slot)
+    {
+        auto it = slots_.emplace(std::forward<SL>(slot));
+        return (uintptr_t)(&*it.first);
+    }
+
+    bool disconnect(uintptr_t id)
+    {
+        auto it = std::find_if(slots_.begin(), slots_.end(),
+            [id](const Slot<Signature> &slot)
+            {return id == (uintptr_t)(&slot);}
+            );
+        if(it == slots_.end()) return false;
+        slots_.erase(it);
+        return true;
+    }
+
+    template <typename ...Args>
+    void emit(Args &&...args) const
+    {
+        for(auto &slot : slots_)
+        {
+            if(slot)
+            {
+                slot(std::forward<Args>(args)...);
+            }
+        }
+    }
+private:
+    std::set<Slot<Signature>> slots_;
+};
 
 } /// util
 
@@ -601,8 +454,8 @@ constexpr Flag toFLag(Type type, Args ...args)
 
 
 typedef std::function<void *()> OpenLog;
-typedef std::function<void(void *)> CloseLog;
-typedef std::function<void(void *,const char*, size_t)> DoLog;
+typedef std::function<void(void *&)> CloseLog;
+typedef std::function<void(void*, const char*, size_t)> DoLog;
 
 // typedef std::pair<Type, std::string> Element;
 struct Message
@@ -616,9 +469,9 @@ struct Entity
     std::string name;
     Flag flag;
     size_t chunk_size;
-    std::function<void(void *,const char*, size_t)> send;
-    std::function<void *()> open;
-    std::function<void (void *&)> close;
+    DoLog send;
+    OpenLog open;
+    CloseLog close;
     void *handle;
 };
 
@@ -670,74 +523,49 @@ private:
 }; /// ContextMap
 
 template <typename clock=std::chrono::steady_clock>
-struct Timer
+struct Tracer
 {
-    Timer() = default;
-    Timer(std::string id) : name(std::move(id))
+    Tracer() = default;
+    Tracer(std::string id) : name(std::move(id))
     {
         printf(" (%.9f)%s\n", util::timestamp(), name.data());
     }
 
-    Timer(std::function<void(std::string const&)> logf, std::string header, std::string id="") : name(std::move(id))
+    Tracer(std::function<void(std::string const&)> logf, std::string header, std::string id="") : name(std::move(id))
     {
-        sig_log.connect(logf);
-        sig_log.emit(util::stringFormat("%s{%s}\n", header, name));
+        // sig_log.connect(logf);
+        on_log = std::move(logf);
+        on_log(util::stringFormat("%s{%s}\n", header, name));
     }
 
-    ~Timer()
+    ~Tracer()
     {
-        if(sig_log)
+        if(on_log)
         {
             auto id = util::tid();
             auto &ctx_list = log::ContextMap::instance()[id];
             auto crr_ctx = ctx_list.back();
             ctx_list.pop_back();
-            sig_log.emit(util::stringFormat("{%.9f}{%s}{%ld}{%s}{%s}{%s}{%.6f(s)}\n",
+            on_log(util::stringFormat("{%.9f}{%s}{%ld}{%s}{%s}{%s}{%.6f(s)}\n",
                                       util::timestamp(),
                                       util::to_string(util::tid()),
                                       ctx_list.size() + 1,
                                       ctx_list.empty() ? "" : ctx_list.back(),
                                       crr_ctx,
                                       name,
-                                      elapse()));
+                                      timer.elapse()));
         }
         else if(!name.empty())
-            printf(" (%.9f)~%s: %.6f (s)\n", util::timestamp(), name.data(), elapse());
-    }
-
-    template <typename T=double, typename D=std::ratio<1,1>>
-    T reset()
-    {
-        T ret = elapse<T,D>();
-        begin = clock::now();
-        return ret;
-    }
-
-    template <typename T=double, typename D=std::ratio<1,1>>
-    T elapse() const
-    {
-        return std::chrono::duration_cast<std::chrono::duration<T,D>>(clock::now() - begin).count();
-    }
-
-    template <typename T=double, typename D=std::ratio<1,1>>
-    T abs_elapse() const
-    {
-        return std::chrono::duration_cast<std::chrono::duration<T,D>>(clock::now() - abs_begin).count();
-    }
-
-    template <typename T=double, typename D=std::ratio<1,1>>
-    std::chrono::duration<T,D> duration() const
-    {
-        auto ret = std::chrono::duration_cast<std::chrono::duration<T,D>>(clock::now() - begin);
-        return ret;
+            printf(" (%.9f)~%s: %.6f (s)\n", util::timestamp(), name.data(), timer.elapse());
     }
 
     std::string name = "";
-    typename clock::time_point begin = clock::now();
-    typename clock::time_point const abs_begin = clock::now();
+    util::Timer<> timer;
+    /// one extra tp for destructor (total time)
+    // std::array<typename clock::time_point, num_of_tp+1> time_points = util::make_array<typename clock::time_point, num_of_tp+1>(clock::now());
 
-    Simple::Signal<void(std::string const&)> sig_log;
-}; /// Timer
+    std::function<void(std::string const&)> on_log;
+}; /// Tracer
 
 class Node
 {
@@ -783,24 +611,32 @@ public:
 
     TLL_INLINE void start(size_t chunk_size = 0x1000)
     {
-        init_();
         bool val = false;
-        if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed)) return;
-        broadcast_ = std::thread([this]()
+        if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
+            return;
+
+        broadcast_ = std::thread([this, chunk_size]()
         {
+            auto buff_list = start_(chunk_size);
             while(isRunning())
             {
                 if(ring_queue_.empty())
                 {
-                    join_wait_.notify_one(); /// notify join
-                    std::mutex tmp_mtx; /// FIXME: without this, crash
-                    std::unique_lock<std::mutex> tmp_lock(tmp_mtx);
+                    // join_wait_.notify_one(); /// notify join
+                    // std::mutex tmp_mtx; /// FIXME: without this, crash
+                    std::unique_lock<std::mutex> lock(mtx_);
                     /// wait timeout
-                    bool wait_status = pop_wait_.wait_for(tmp_lock, std::chrono::milliseconds(wait_ms_), [this] {
+                    bool wait_status = pop_wait_.wait_for(lock, std::chrono::milliseconds(wait_ms_), [this] {
                         return !isRunning() || !this->ring_queue_.empty();
                     });
 
-                    this->send_();
+                    for(auto &entry : buff_list)
+                    {
+                        auto &flag = entry.first;
+                        auto &buff = entry.second;
+                        // this->log_signals[flag].emit(buff.data(), buff.size());
+                        buff.resize(0);
+                    }
                     /// wait timeout or running == false
                     if( !wait_status || !isRunning())
                     {
@@ -809,49 +645,96 @@ public:
                 }
 
                 Message log_msg;
-                ring_queue_.pop([&log_msg](Message &msg, uint32_t) {
-                    log_msg = std::move(msg);
+                ring_queue_.pop([this, chunk_size, &buff_list, &log_msg](Message &elem, uint32_t) {
+                    log_msg = std::move(elem);
+                    // buff_list[msg.flag]
                 });
-                // #pragma omp parallel num_threads(2)
+
+                for(auto &entry : buff_list)
                 {
-                    // FIXME: parallel is 10 times slower???
-                    // #pragma omp parallel for
-                    // #pragma omp for
-                    for(auto &entry : ents_)
+                    auto &flag = entry.first;
+                    auto &buff = entry.second;
+                    if((uint32_t)flag & (uint32_t)log_msg.type)
                     {
-                        auto &name = entry.first;
-                        auto &ent = entry.second;
-                        Type const kLogt = log_msg.type;
+                        std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(log_msg.type)], log_msg.payload);
+                        size_t const old_size = buff.size();
+                        size_t const new_size = old_size + payload.size();
+                        buff.resize(new_size);
+                        memcpy(buff.data() + old_size, payload.data(), payload.size());
+                        /// TODO log exactly chunk_size
+                        // if(new_size >= chunk_size)
+                        //     this->log_signals[flag].emit(buff.data(), buff.size());
 
-                        if((uint32_t)ent.flag & (uint32_t)toFLag(kLogt))
+                        buff.resize(0); /// avoid elem's destructor
+                    }
+                }
+
+                // #pragma omp parallel num_threads(2)
+                // {
+                //     // FIXME: parallel is 10 times slower???
+                //     // #pragma omp parallel for
+                //     // #pragma omp for
+                //     for(auto &entry : ents_)
+                //     {
+                //         auto &name = entry.first;
+                //         auto &ent = entry.second;
+                //         Type const kLogt = log_msg.type;
+
+                //         if((uint32_t)ent.flag & (uint32_t)toFLag(kLogt))
+                //         {
+                //             std::string msg = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(kLogt)], log_msg.payload);
+                //             auto &buff = buff_list_[name];
+                //             size_t const old_size = buff.size();
+                //             size_t const new_size = old_size + msg.size();
+
+                //             buff.resize(new_size);
+                //             memcpy(buff.data() + old_size, msg.data(), msg.size());
+                //             if(new_size >= ent.chunk_size)
+                //             {
+                //                 this->send_(name);
+                //             }
+                //         }
+                //     }
+                // }
+            }
+            /// TODO: popBatch
+            ring_queue_.popBatch(~0u, [this, &buff_list](uint32_t index, uint32_t elem_num, uint32_t) {
+                for(int i=0; i<elem_num; i++)
+                {
+                    Message &log_msg = ring_queue_.elemAt(index + i);
+                    for(auto &entry : buff_list)
+                    {
+                        auto &flag = entry.first;
+                        auto &buff = entry.second;
+                        if((uint32_t)flag & (uint32_t)log_msg.type)
                         {
-                            std::string msg = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(kLogt)], log_msg.payload);
-                            auto &buff = buffers_[name];
+                            std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(log_msg.type)], log_msg.payload);
                             size_t const old_size = buff.size();
-                            size_t const new_size = old_size + msg.size();
-
+                            size_t const new_size = old_size + payload.size();
                             buff.resize(new_size);
-                            memcpy(buff.data() + old_size, msg.data(), msg.size());
-                            if(new_size >= ent.chunk_size)
-                            {
-                                this->send_(name);
-                            }
+                            memcpy(buff.data() + old_size, payload.data(), payload.size());
+                            // this->log_signals[flag].emit(buff.data(), buff.size());
+
+                            buff.resize(0); /// avoid elem's destructor
                         }
                     }
                 }
-            }
-
-            this->send_(); /// this is necessary
-            join_wait_.notify_one(); /// notify join
+            });
+            // this->send_(); /// this is necessary
+            // join_wait_.notify_one(); /// notify join
         });
     }
 
     TLL_INLINE void stop(bool wait=true)
     {
         if(!isRunning()) return;
-
-        if (wait) this->wait();
+        
         is_running_.store(false); // write release
+        {
+            std::lock_guard<std::mutex> lock(mtx_);
+            pop_wait_.notify_one();
+        }
+        // if (wait) this->wait();
         if(broadcast_.joinable()) broadcast_.join();
 
         for(auto &entry : ents_)
@@ -891,20 +774,20 @@ public:
         if(isRunning())
             return;
 
-        {
+        // {
             auto it = ents_.find(name);
             if(it != ents_.end())
             {
                 ents_.erase(it);
             }
-        }
-        {
-            auto it = buffers_.find(name);
-            if(it != buffers_.end())
-            {
-                buffers_.erase(it);
-            }
-        }
+        // }
+        // {
+        //     auto it = buffers_.find(name);
+        //     if(it != buffers_.end())
+        //     {
+        //         buffers_.erase(it);
+        //     }
+        // }
     }
 
     static Node &instance()
@@ -929,20 +812,21 @@ public:
 
 private:
 
-    TLL_INLINE void init_()
+    TLL_INLINE std::unordered_map<Flag, std::vector<char>> start_(uint32_t chunk_size)
     {
-        if(isRunning())
-            return;
-
+        std::unordered_map<Flag, std::vector<char>> buff_list;
         for(auto &entry : ents_)
         {
             auto &name = entry.first;
             auto &ent = entry.second;
-            if(ent.chunk_size > 0) buffers_[name].reserve(ent.chunk_size*2);
-
             if(ent.open && ent.handle == nullptr)
                 ent.handle = ent.open();
+
+            buff_list[ent.flag].reserve(chunk_size);
+            // log_signals[ent.flag].connect(ent.send);
         }
+
+        return buff_list;
     }
 
     template <typename ... LogEnts>
@@ -955,42 +839,45 @@ private:
     TLL_INLINE void add_(Entity ent)
     {
         ents_[ent.name] = ent;
+        /// connect all signals
+
     }
 
-    TLL_INLINE void send_()
-    {
-        for(auto &entry : ents_)
-        {
-            send_(entry.first);
-        }
-    }
+    // TLL_INLINE void send_()
+    // {
+    //     for(auto &entry : ents_)
+    //     {
+    //         send_(entry.first);
+    //     }
+    // }
 
-    TLL_INLINE void send_(const std::string &name)
-    {
-        auto &ent = ents_[name];
-        auto &buff = buffers_[name];
-        ent.send(ent.handle, buff.data(), buff.size());
-        buff.resize(0);
-    }
+    // TLL_INLINE void send_(const std::string &name)
+    // {
+    //     auto &ent = ents_[name];
+    //     // auto &buff = buffers_[name];
+    //     ent.send(ent.handle, buff.data(), buff.size());
+    //     buff.resize(0);
+    // }
 
-    TLL_INLINE void send_(const std::string &name,
-            Type type, 
-            const std::string &buff)
-    {
-        auto &ent = ents_[name];
-        if(! ((uint32_t)ent.flag & (uint32_t)toFLag(type)) ) return;
-        ent.send(ent.handle, buff.data(), buff.size());
-    }
+    // TLL_INLINE void send_(const std::string &name,
+    //         Type type, 
+    //         const std::string &buff)
+    // {
+    //     auto &ent = ents_[name];
+    //     if(! ((uint32_t)ent.flag & (uint32_t)toFLag(type)) ) return;
+    //     ent.send(ent.handle, buff.data(), buff.size());
+    // }
 
     std::atomic<bool> is_running_{false};
     util::LFQueue<Message> ring_queue_{0x1000};
-    std::unordered_map<std::string, Entity> ents_{{"console", Entity{
+    std::unordered_map<std::string, Entity> ents_/*{{"console", Entity{
                 "console",
                 Flag::kAll, 0x1000,
-                std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)}}};
+                std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)}}}*/;
     uint32_t wait_ms_{100};
     std::thread broadcast_;
-    std::unordered_map<std::string, std::vector<char>> buffers_;
+    // std::unordered_map<Flag, DoLog> log_signals;
+    // std::unordered_map<std::string, std::vector<char>> buffers_;
     std::condition_variable pop_wait_, join_wait_;
     std::mutex mtx_;
 };
@@ -1001,8 +888,14 @@ TLL_INLINE void Node::log<Mode::kSync>(Message msg)
     for (auto &entry : ents_)
     {
         /// TODO: add format
-        this->send_(entry.first, msg.type, 
-                    util::stringFormat("{%c}%s", kLogTypeString[(int)msg.type], msg.payload));
+        auto &ent = entry.second;
+        if((uint32_t)msg.type & (uint32_t)ent.flag)
+        {
+            // this->send_(util::stringFormat("{%c}%s", kLogTypeString[(int)msg.type], msg.payload));
+            std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(int)msg.type], msg.payload);
+            ent.send(ent.handle, payload.data(), payload.size());
+            // this->log_signals[ent.flag].emit(payload.data(), payload.size());
+        }
     }
 }
 
@@ -1044,18 +937,18 @@ TLL_INLINE void Node::log<Mode::kAsync>(Message msg)
 
 #define TLL_LOGF(plog, format, ...) (plog)->log((tll::log::Type::kFatal), "%s{" format "}\n", LOG_HEADER_ , ##__VA_ARGS__)
 
-#define TLL_LOGT(plog, ID) tll::log::Timer trace_##ID##__([plog](std::string const &log_msg){(plog)->log((tll::log::Type::kTrace), "%s", log_msg);}, (LOG_HEADER_), (/*(Node).log((tll::log::Type::kTrace), "%s\n", LOG_HEADER_),*/ tll::log::ContextMap::instance()[tll::util::tid()].push_back(tll::util::fileName(__FILE__)), #ID))
+#define TLL_LOGT(plog, ID) tll::log::Tracer<> trace_##ID##__([plog](std::string const &log_msg){(plog)->log((tll::log::Type::kTrace), "%s", log_msg);}, (LOG_HEADER_), (/*(Node).log((tll::log::Type::kTrace), "%s\n", LOG_HEADER_),*/ tll::log::ContextMap::instance()[tll::util::tid()].push_back(tll::util::fileName(__FILE__)), #ID))
 
-#define TLL_LOGTF(plog) tll::log::Timer trace__([plog](std::string const &log_msg){(plog)->log((tll::log::Type::kTrace), "%s", log_msg);}, (LOG_HEADER_), (/*(Node).log((tll::log::Type::kTrace), "%s\n", LOG_HEADER_),*/ tll::log::ContextMap::instance()[tll::util::tid()].push_back(tll::util::fileName(__FILE__)), __FUNCTION__))
+#define TLL_LOGTF(plog) tll::log::Tracer<> trace__([plog](std::string const &log_msg){(plog)->log((tll::log::Type::kTrace), "%s", log_msg);}, (LOG_HEADER_), (/*(Node).log((tll::log::Type::kTrace), "%s\n", LOG_HEADER_),*/ tll::log::ContextMap::instance()[tll::util::tid()].push_back(tll::util::fileName(__FILE__)), __FUNCTION__))
 
 #define TLL_GLOGD(...) TLL_LOGD(&tll::log::Node::instance(), ##__VA_ARGS__)
 #define TLL_GLOGI(...) TLL_LOGI(&tll::log::Node::instance(), ##__VA_ARGS__)
 #define TLL_GLOGW(...) TLL_LOGW(&tll::log::Node::instance(), ##__VA_ARGS__)
 #define TLL_GLOGF(...) TLL_LOGF(&tll::log::Node::instance(), ##__VA_ARGS__)
-#define TLL_GLOGT(ID) tll::log::Timer trace_##ID##__([](std::string const &log_msg){tll::log::Node::instance().log((tll::log::Type::kTrace), "%s", log_msg);}, (tll::log::ContextMap::instance()[tll::util::tid()].push_back(tll::util::fileName(__FILE__)), LOG_HEADER_), (#ID))
+#define TLL_GLOGT(ID) tll::log::Tracer<> trace_##ID##__([](std::string const &log_msg){tll::log::Node::instance().log((tll::log::Type::kTrace), "%s", log_msg);}, (tll::log::ContextMap::instance()[tll::util::tid()].push_back(tll::util::fileName(__FILE__)), LOG_HEADER_), (#ID))
 
 // std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)
-#define TLL_GLOGTF() tll::log::Timer trace__(std::bind(&tll::log::Node::log<std::string const &>, &tll::log::Node::instance(), (tll::log::Type::kTrace), "%s", std::placeholders::_1), (tll::log::ContextMap::instance()[tll::util::tid()].push_back(tll::util::fileName(__FILE__)), LOG_HEADER_), (__FUNCTION__))
+#define TLL_GLOGTF() tll::log::Tracer<> trace__(std::bind(&tll::log::Node::log<std::string const &>, &tll::log::Node::instance(), (tll::log::Type::kTrace), "%s", std::placeholders::_1), (tll::log::ContextMap::instance()[tll::util::tid()].push_back(tll::util::fileName(__FILE__)), LOG_HEADER_), (__FUNCTION__))
 #ifdef STATIC_LIB
 #include "Node.cc"
 #endif

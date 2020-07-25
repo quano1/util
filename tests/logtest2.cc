@@ -17,9 +17,9 @@ int write_cnt=0;
 
 int main(int argc, char const *argv[])
 {
-    double counter[3];
-    memset(counter, 0, sizeof(counter));
-    tll::log::Timer timer;
+    // double counter[3];
+    // memset(counter, 0, sizeof(counter));
+    tll::util::Timer<> timer;
 
     {
         auto &logger = tll::log::Node::instance();
@@ -31,7 +31,7 @@ int main(int argc, char const *argv[])
                         .send = std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)};
         tll::log::Entity file_ent1{
                         .name = "file", .flag = tll::log::Flag::kAll, .chunk_size = 0x10000,
-                        .send = [&](void *handle, const char *buff, size_t size)
+                        .send = [&write_cnt](void *handle, const char *buff, size_t size)
                         {
                             if(handle == nullptr)
                             {
@@ -46,7 +46,7 @@ int main(int argc, char const *argv[])
                             write_cnt=0;
                             return static_cast<void*>(new std::ofstream("file_ent1.log", std::ios::out | std::ios::binary));
                         }, 
-                        .close = [](void *&handle)
+                        .close = [](void *handle)
                         {
                             static_cast<std::ofstream*>(handle)->flush();
                             delete static_cast<std::ofstream*>(handle);
@@ -54,16 +54,15 @@ int main(int argc, char const *argv[])
                         }};
 
         logger.add(file_ent1);
-
-        timer.reset();
         logger.start();
-        counter[0] = timer.elapse();
+        timer.add("start");
+        timer.save("start");
         {
             TLL_GLOGT(start);
             // #pragma omp parallel num_threads ( 16 )
             {
                 TLL_GLOGT(omp_parallel);
-                timer.reset();
+                timer.add("log");
                 for(int i=0; i < std::stoi(argv[1]); i++)
                 {
                     TLL_GLOGD("this is debug logging");
@@ -71,13 +70,13 @@ int main(int argc, char const *argv[])
                     TLL_GLOGW("A warning!!!");
                     TLL_GLOGF("Ooops!!! fatal logging");
                 }
-                counter[1] = timer.elapse();
+                timer.save("log");
             }
         }
         TLL_GLOGI("Write Count: %d", write_cnt);
-        timer.reset();
+        timer.add("stop");
         logger.stop();
-        counter[2] = timer.elapse();
+        timer.save("stop");
         // logger.remove("file");
         // logger.add(file_ent2);
         // logger.start();
@@ -98,10 +97,11 @@ int main(int argc, char const *argv[])
         // logger.stop();
         // TLL_GLOGI("Write Count: %d", write_cnt);
     }
-    for(auto val : counter)
-        LOGD("%.3f", val);
 
-    LOGD("%.3f", timer.abs_elapse());
+    LOGD("start: %.3f", timer.get("start"));
+    LOGD("log: %.3f", timer.get("log"));
+    LOGD("stop: %.3f", timer.get("stop"));
+    LOGD("%.3f", timer.elapse());
 
     return 0;
 }
