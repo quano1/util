@@ -17,8 +17,6 @@ int write_cnt=0;
 
 int main(int argc, char const *argv[])
 {
-    // double counter[3];
-    // memset(counter, 0, sizeof(counter));
     tll::time::List<> timer;
 
     {
@@ -55,7 +53,7 @@ int main(int argc, char const *argv[])
 
         logger.add(file_ent1);
         {
-            tll::util::Guard{timer.counter("starting")};
+            tll::util::Guard{timer("starting")};
             logger.start();
         }
         {
@@ -63,7 +61,7 @@ int main(int argc, char const *argv[])
             // #pragma omp parallel num_threads ( 16 )
             {
                 TLL_GLOGT(omp_parallel);
-                tll::util::Guard{timer.counter("do logging")};
+                tll::util::Guard{timer("do logging")};
                 for(int i=0; i < std::stoi(argv[1]); i++)
                 {
                     TLL_GLOGD("this is debug logging");
@@ -75,7 +73,7 @@ int main(int argc, char const *argv[])
         }
         TLL_GLOGI("Write Count: %d", write_cnt);
         {
-            tll::util::Guard{timer.counter("stopping")};
+            tll::util::Guard{timer("stopping")};
             logger.stop();
         }
         // logger.remove("file");
@@ -99,10 +97,10 @@ int main(int argc, char const *argv[])
         // TLL_GLOGI("Write Count: %d", write_cnt);
     }
 
-    LOGD("start: %.3f", timer.counter("starting").total());
-    LOGD("log: %.3f", timer.counter("do logging").total());
-    LOGD("stop: %.3f", timer.counter("stopping").total());
-    LOGD("%.3f", timer.counter().elapse());
+    LOGD("start: %.3f", timer("starting").total());
+    LOGD("log: %.3f", timer("do logging").total());
+    LOGD("stop: %.3f", timer("stopping").total());
+    LOGD("%.3f", timer().elapse());
 
     return 0;
 }

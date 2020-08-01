@@ -74,6 +74,16 @@ public:
             counters_[tp_id].start(begin_);
     }
 
+    Cnt const &operator()(const std::string tp_id="") const
+    {
+        return counters_.at(tp_id);
+    }
+
+    Cnt &operator()(const std::string tp_id="")
+    {
+        return counters_[tp_id];
+    }
+
     Cnt const &counter(const std::string tp_id="") const
     {
         return counters_.at(tp_id);
