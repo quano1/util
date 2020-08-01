@@ -19,7 +19,7 @@ int main(int argc, char const *argv[])
 {
     // double counter[3];
     // memset(counter, 0, sizeof(counter));
-    tll::util::Timer<> timer;
+    tll::time::List<> timer;
 
     {
         auto &logger = tll::log::Node::instance();
@@ -54,15 +54,16 @@ int main(int argc, char const *argv[])
                         }};
 
         logger.add(file_ent1);
-        logger.start();
-        timer.add("start");
-        timer.save("start");
         {
-            TLL_GLOGT(start);
+            tll::util::Guard{timer.counter("starting")};
+            logger.start();
+        }
+        {
+            TLL_GLOGT(log);
             // #pragma omp parallel num_threads ( 16 )
             {
                 TLL_GLOGT(omp_parallel);
-                timer.add("log");
+                tll::util::Guard{timer.counter("do logging")};
                 for(int i=0; i < std::stoi(argv[1]); i++)
                 {
                     TLL_GLOGD("this is debug logging");
@@ -70,13 +71,13 @@ int main(int argc, char const *argv[])
                     TLL_GLOGW("A warning!!!");
                     TLL_GLOGF("Ooops!!! fatal logging");
                 }
-                timer.save("log");
             }
         }
         TLL_GLOGI("Write Count: %d", write_cnt);
-        timer.add("stop");
-        logger.stop();
-        timer.save("stop");
+        {
+            tll::util::Guard{timer.counter("stopping")};
+            logger.stop();
+        }
         // logger.remove("file");
         // logger.add(file_ent2);
         // logger.start();
@@ -98,10 +99,10 @@ int main(int argc, char const *argv[])
         // TLL_GLOGI("Write Count: %d", write_cnt);
     }
 
-    LOGD("start: %.3f", timer.get("start"));
-    LOGD("log: %.3f", timer.get("log"));
-    LOGD("stop: %.3f", timer.get("stop"));
-    LOGD("%.3f", timer.elapse());
+    LOGD("start: %.3f", timer.counter("starting").total());
+    LOGD("log: %.3f", timer.counter("do logging").total());
+    LOGD("stop: %.3f", timer.counter("stopping").total());
+    LOGD("%.3f", timer.counter().elapse());
 
     return 0;
 }
