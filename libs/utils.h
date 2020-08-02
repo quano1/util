@@ -343,42 +343,44 @@ private:
     std::vector<T> buffer_;
 }; /// LFQueue
 
-template <typename Signature>
-class Slot
+// template <typename Signature>
+// class Slot
+// {
+// public:
+//     Slot()=default;
+//     ~Slot()=default;
+//     Slot(std::function<Signature> cb) : cb_(cb) {}
+//     operator bool() const
+//     {
+//         return cb_ != nullptr;
+//     }
+
+//     template <typename ...Args>
+//     void operator()(Args &&...args) const
+//     {
+//         cb_(std::forward<Args>(args)...);
+//     }
+// private:
+//     std::function<Signature> cb_;
+// };
+
+template <typename, typename...> class Signal;
+
+template <typename R, class... Args>
+class Signal<R (Args...)>
 {
 public:
-    Slot()=default;
-    ~Slot()=default;
-    Slot(std::function<Signature> cb) : cb_(cb) {}
-    operator bool() const
+    using Slot = std::function<R (Args...)>;
+    uintptr_t connect(Slot slot)
     {
-        return cb_ != nullptr;
-    }
-
-    template <typename ...Args>
-    void operator()(Args &&...args) const
-    {
-        cb_(std::forward<Args>(args)...);
-    }
-private:
-    std::function<Signature> cb_;
-};
-
-template <typename Signature>
-class Signal
-{
-public:
-    template<typename SL>
-    uintptr_t connect(SL &&slot)
-    {
-        auto it = slots_.emplace(std::forward<SL>(slot));
-        return (uintptr_t)(&*it.first);
+        slots_.emplace_back(slot);
+        return (uintptr_t)(&(slots_.back()));
     }
 
     bool disconnect(uintptr_t id)
     {
         auto it = std::find_if(slots_.begin(), slots_.end(),
-            [id](const Slot<Signature> &slot)
+            [id](const Slot &slot)
             {return id == (uintptr_t)(&slot);}
             );
         if(it == slots_.end()) return false;
@@ -386,7 +388,6 @@ public:
         return true;
     }
 
-    template <typename ...Args>
     void emit(Args &&...args) const
     {
         for(auto &slot : slots_)
@@ -398,7 +399,7 @@ public:
         }
     }
 private:
-    std::set<Slot<Signature>> slots_;
+    std::list<Slot> slots_;
 };
 
 template <class T>

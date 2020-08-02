@@ -98,10 +98,13 @@ constexpr Flag toFLag(Type type, Args ...args)
     return toFLag(type) | toFLag(args...);
 }
 
+typedef std::function<void *()> OnStart;
+typedef std::function<void(void *&)> OnStop;
+typedef std::function<void(void*, const char*, size_t)> OnLog;
 
-typedef std::function<void *()> OpenLog;
-typedef std::function<void(void *&)> CloseLog;
-typedef std::function<void(void*, const char*, size_t)> DoLog;
+// typedef std::function<void()> OnOpen;
+// typedef std::function<void()> OnClose;
+// typedef std::function<void(const char*, size_t)> OnLog;
 
 // typedef std::pair<Type, std::string> Element;
 struct Message
@@ -114,11 +117,28 @@ struct Entity
 {
     std::string name;
     Flag flag;
-    size_t chunk_size;
-    DoLog send;
-    OpenLog open;
-    CloseLog close;
+    // size_t chunk_size;
+    OnStart on_start;
+    OnStop on_stop;
+    OnLog on_log;
     void *handle;
+
+// private:
+    void start()
+    {
+        if(handle == nullptr)
+            handle = on_start();
+    }
+
+    void log(const char *buff, size_t size)
+    {
+        on_log(handle, buff, size);
+    }
+
+    void stop()
+    {
+        on_stop(handle);
+    }
 };
 
 struct ContextMap
@@ -276,7 +296,7 @@ public:
                     {
                         auto &flag = entry.first;
                         auto &buff = entry.second;
-                        // this->log_signals[flag].emit(buff.data(), buff.size());
+                        this->log_signal_[flag].emit(buff.data(), buff.size());
                         buff.resize(0);
                     }
                     /// wait timeout or running == false
@@ -304,8 +324,8 @@ public:
                         buff.resize(new_size);
                         memcpy(buff.data() + old_size, payload.data(), payload.size());
                         /// TODO log exactly chunk_size
-                        // if(new_size >= chunk_size)
-                        //     this->log_signals[flag].emit(buff.data(), buff.size());
+                        if(new_size >= chunk_size)
+                            this->log_signal_[flag].emit(buff.data(), buff.size());
 
                         buff.resize(0); /// avoid elem's destructor
                     }
@@ -355,7 +375,7 @@ public:
                             size_t const new_size = old_size + payload.size();
                             buff.resize(new_size);
                             memcpy(buff.data() + old_size, payload.data(), payload.size());
-                            // this->log_signals[flag].emit(buff.data(), buff.size());
+                            this->log_signal_[flag].emit(buff.data(), buff.size());
 
                             buff.resize(0); /// avoid elem's destructor
                         }
@@ -379,22 +399,44 @@ public:
         // if (wait) this->wait();
         if(broadcast_.joinable()) broadcast_.join();
 
-        for(auto &entry : ents_)
-        {
-            auto &ent = entry.second;
-            if(ent.close)
-                ent.close(ent.handle);
-        }
+        // for(auto &entry : ents_)
+        // {
+        //     auto &ent = entry.second;
+        //     if(ent.close)
+        //         ent.close(ent.handle);
+        // }
+        stop_signal_.emit();
     }
 
-    TLL_INLINE void pause()
+    /// TODO remove duplicated code
+    TLL_INLINE uintptr_t connectStart(util::Signal<void()>::Slot start)
     {
-
+        return isRunning() ? 0 : start_signal_.connect(start);
     }
 
-    TLL_INLINE void resume()
+    TLL_INLINE bool disconnectStart(uintptr_t id)
     {
+        return isRunning() ? false : start_signal_.disconnect(id);
+    }
 
+    TLL_INLINE uintptr_t connectStop(util::Signal<void()>::Slot stop)
+    {
+        return isRunning() ? 0 : stop_signal_.connect(stop);
+    }
+
+    TLL_INLINE bool disconnectStop(uintptr_t id)
+    {
+        return isRunning() ? false : stop_signal_.disconnect(id);
+    }
+
+    TLL_INLINE uintptr_t connectLog(Flag flag, util::Signal<void(const char*, size_t)>::Slot log)
+    {
+        return isRunning() ? 0 : log_signal_[flag].connect(log);
+    }
+
+    TLL_INLINE bool disconnectLog(Flag flag, uintptr_t id)
+    {
+        return isRunning() ? false : log_signal_[flag].disconnect(id);
     }
 
     TLL_INLINE bool isRunning() const 
@@ -411,26 +453,29 @@ public:
         add_(ents...);
     }
 
-    TLL_INLINE void remove(const std::string &name)
-    {
-        if(isRunning())
-            return;
+    // TLL_INLINE void remove(const std::string &name)
+    // {
+    //     if(isRunning())
+    //         return;
 
-        // {
-            auto it = ents_.find(name);
-            if(it != ents_.end())
-            {
-                ents_.erase(it);
-            }
-        // }
-        // {
-        //     auto it = buffers_.find(name);
-        //     if(it != buffers_.end())
-        //     {
-        //         buffers_.erase(it);
-        //     }
-        // }
-    }
+    //     // {
+    //         auto it = ents_.find(name);
+    //         if(it != ents_.end())
+    //         {
+    //             // disconnectStart(it->start);
+    //             // disconnectStop(it->stop);
+    //             // disconnectLog(it->flag, it->log);
+    //             ents_.erase(it);
+    //         }
+    //     // }
+    //     // {
+    //     //     auto it = buffers_.find(name);
+    //     //     if(it != buffers_.end())
+    //     //     {
+    //     //         buffers_.erase(it);
+    //     //     }
+    //     // }
+    // }
 
     static Node &instance()
     {
@@ -454,19 +499,22 @@ public:
 
 private:
 
-    TLL_INLINE std::unordered_map<Flag, std::vector<char>> start_(uint32_t chunk_size)
+    TLL_INLINE std::unordered_map<Flag, std::vector<char>> start_(uint32_t chunk_size) const
     {
         std::unordered_map<Flag, std::vector<char>> buff_list;
-        for(auto &entry : ents_)
+        for(const auto &entry : ents_)
         {
-            auto &name = entry.first;
+            // auto &name = entry.first;
             auto &ent = entry.second;
-            if(ent.open && ent.handle == nullptr)
-                ent.handle = ent.open();
+
+            // if(ent.open && ent.handle == nullptr)
+                // ent.handle = ent.open();
 
             buff_list[ent.flag].reserve(chunk_size);
-            // log_signals[ent.flag].connect(ent.send);
+            // log_signals[ent.flag].connect(Entity::open, &ent);
         }
+
+        start_signal_.emit();
 
         return buff_list;
     }
@@ -475,14 +523,24 @@ private:
     void add_(Entity ent, LogEnts ...ents)
     {
         ents_[ent.name] = ent;
+        auto &entity = ents_[ent.name];
+        /// connect all signals
+        connectStart(std::bind(&Entity::start, &entity));
+        connectStop(std::bind(&Entity::stop, &entity));
+        connectLog(ent.flag, std::bind(&Entity::log, &entity, std::placeholders::_1, std::placeholders::_2));
+
         add_(ents...);
     }
 
     TLL_INLINE void add_(Entity ent)
     {
         ents_[ent.name] = ent;
+        auto &entity = ents_[ent.name];
         /// connect all signals
 
+        connectStart(std::bind(&Entity::start, &entity));
+        connectStop(std::bind(&Entity::stop, &entity));
+        connectLog(ent.flag, std::bind(&Entity::log, &entity, std::placeholders::_1, std::placeholders::_2));
     }
 
     // TLL_INLINE void send_()
@@ -518,7 +576,11 @@ private:
                 std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)}}}*/;
     uint32_t wait_ms_{100};
     std::thread broadcast_;
-    // std::unordered_map<Flag, DoLog> log_signals;
+
+    std::unordered_map<Flag, util::Signal<void (const char*, size_t)>> log_signal_;
+    // std::unordered_map<Flag, util::Signal<void (const char*, size_t)>> log_signal_;
+    util::Signal<void()> start_signal_;
+    util::Signal<void()> stop_signal_;
     // std::unordered_map<std::string, std::vector<char>> buffers_;
     std::condition_variable pop_wait_, join_wait_;
     std::mutex mtx_;
@@ -527,18 +589,29 @@ private:
 template <>
 TLL_INLINE void Node::log<Mode::kSync>(Message msg)
 {
-    for (auto &entry : ents_)
+    std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(int)msg.type], msg.payload);
+    for( auto &entry : log_signal_)
     {
-        /// TODO: add format
-        auto &ent = entry.second;
-        if((uint32_t)msg.type & (uint32_t)ent.flag)
-        {
-            // this->send_(util::stringFormat("{%c}%s", kLogTypeString[(int)msg.type], msg.payload));
-            std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(int)msg.type], msg.payload);
-            ent.send(ent.handle, payload.data(), payload.size());
-            // this->log_signals[ent.flag].emit(payload.data(), payload.size());
-        }
+        Flag flag = entry.first;
+        auto &log_sig = entry.second;
+
+        if((uint32_t)flag & (uint32_t)msg.type)
+            log_sig.emit(payload.data(), payload.size());
     }
+
+    // log_signal_[msg.type].emit(payload.data(), payload.size());
+
+    // for (auto &entry : ents_)
+    // {
+    //     /// TODO: add format
+    //     auto &ent = entry.second;
+    //     if((uint32_t)msg.type & (uint32_t)ent.flag)
+    //     {
+    //         // this->send_(util::stringFormat("{%c}%s", kLogTypeString[(int)msg.type], msg.payload));
+    //         ent.send(ent.handle, payload.data(), payload.size());
+    //         // this->log_signals[ent.flag].emit(payload.data(), payload.size());
+    //     }
+    // }
 }
 
 template <>
