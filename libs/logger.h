@@ -87,15 +87,15 @@ enum class Mode
     kAsync,
 };
 
-TLL_INLINE constexpr Flag toFLag(Type type)
+TLL_INLINE constexpr Flag toFlag(Type type)
 {
     return static_cast<Flag>(1U << static_cast<int>(type));
 }
 
 template <typename... Args>
-constexpr Flag toFLag(Type type, Args ...args)
+constexpr Flag toFlag(Type type, Args ...args)
 {
-    return toFLag(type) | toFLag(args...);
+    return toFlag(type) | toFlag(args...);
 }
 
 typedef std::function<void *()> OnStart;
@@ -118,9 +118,9 @@ struct Entity
     std::string name;
     Flag flag;
     // size_t chunk_size;
+    OnLog on_log;
     OnStart on_start;
     OnStop on_stop;
-    OnLog on_log;
     void *handle;
 
 // private:
@@ -271,7 +271,7 @@ public:
     template <Mode mode>
     TLL_INLINE void log(Message);
 
-    TLL_INLINE void start(size_t chunk_size = 0x1000)
+    TLL_INLINE void start(size_t chunk_size = 0x400) /// 1 Kb
     {
         bool val = false;
         if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
@@ -316,7 +316,7 @@ public:
                 {
                     auto &flag = entry.first;
                     auto &buff = entry.second;
-                    if((uint32_t)flag & (uint32_t)log_msg.type)
+                    if((uint32_t)flag & (uint32_t)toFlag(log_msg.type))
                     {
                         std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(log_msg.type)], log_msg.payload);
                         size_t const old_size = buff.size();
@@ -325,9 +325,10 @@ public:
                         memcpy(buff.data() + old_size, payload.data(), payload.size());
                         /// TODO log exactly chunk_size
                         if(new_size >= chunk_size)
+                        {
                             this->log_signal_[flag].emit(buff.data(), buff.size());
-
-                        buff.resize(0); /// avoid elem's destructor
+                            buff.resize(0); /// avoid elem's destructor
+                        }
                     }
                 }
 
@@ -342,7 +343,7 @@ public:
                 //         auto &ent = entry.second;
                 //         Type const kLogt = log_msg.type;
 
-                //         if((uint32_t)ent.flag & (uint32_t)toFLag(kLogt))
+                //         if((uint32_t)ent.flag & (uint32_t)toFlag(kLogt))
                 //         {
                 //             std::string msg = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(kLogt)], log_msg.payload);
                 //             auto &buff = buff_list_[name];
@@ -368,20 +369,24 @@ public:
                     {
                         auto &flag = entry.first;
                         auto &buff = entry.second;
-                        if((uint32_t)flag & (uint32_t)log_msg.type)
+                        if((uint32_t)flag & (uint32_t)toFlag(log_msg.type))
                         {
                             std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(log_msg.type)], log_msg.payload);
                             size_t const old_size = buff.size();
                             size_t const new_size = old_size + payload.size();
                             buff.resize(new_size);
                             memcpy(buff.data() + old_size, payload.data(), payload.size());
-                            this->log_signal_[flag].emit(buff.data(), buff.size());
-
-                            buff.resize(0); /// avoid elem's destructor
                         }
                     }
                 }
             });
+
+            for(auto &entry : buff_list)
+            {
+                auto &flag = entry.first;
+                auto &buff = entry.second;
+                this->log_signal_[flag].emit(buff.data(), buff.size());
+            }
             // this->send_(); /// this is necessary
             // join_wait_.notify_one(); /// notify join
         });
@@ -501,21 +506,13 @@ private:
 
     TLL_INLINE std::unordered_map<Flag, std::vector<char>> start_(uint32_t chunk_size) const
     {
-        std::unordered_map<Flag, std::vector<char>> buff_list;
-        for(const auto &entry : ents_)
-        {
-            // auto &name = entry.first;
-            auto &ent = entry.second;
-
-            // if(ent.open && ent.handle == nullptr)
-                // ent.handle = ent.open();
-
-            buff_list[ent.flag].reserve(chunk_size);
-            // log_signals[ent.flag].connect(Entity::open, &ent);
-        }
-
         start_signal_.emit();
-
+        std::unordered_map<Flag, std::vector<char>> buff_list;
+        for(const auto &entry : log_signal_)
+        {
+            auto flag = entry.first;
+            buff_list[flag].reserve(chunk_size);
+        }
         return buff_list;
     }
 
@@ -564,15 +561,15 @@ private:
     //         const std::string &buff)
     // {
     //     auto &ent = ents_[name];
-    //     if(! ((uint32_t)ent.flag & (uint32_t)toFLag(type)) ) return;
+    //     if(! ((uint32_t)ent.flag & (uint32_t)toFlag(type)) ) return;
     //     ent.send(ent.handle, buff.data(), buff.size());
     // }
 
     std::atomic<bool> is_running_{false};
     util::LFQueue<Message> ring_queue_{0x1000};
-    std::unordered_map<std::string, Entity> ents_/*{{"console", Entity{
+    std::unordered_map<std::string, Entity> ents_/* = {{"console", Entity{
                 "console",
-                Flag::kAll, 0x1000,
+                Flag::kAll, 
                 std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)}}}*/;
     uint32_t wait_ms_{100};
     std::thread broadcast_;
@@ -595,8 +592,10 @@ TLL_INLINE void Node::log<Mode::kSync>(Message msg)
         Flag flag = entry.first;
         auto &log_sig = entry.second;
 
-        if((uint32_t)flag & (uint32_t)msg.type)
+        if((uint32_t)flag & (uint32_t)toFlag(msg.type))
+        {
             log_sig.emit(payload.data(), payload.size());
+        }
     }
 
     // log_signal_[msg.type].emit(payload.data(), payload.size());

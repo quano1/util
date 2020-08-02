@@ -18,70 +18,80 @@ int write_cnt=0;
 int main(int argc, char const *argv[])
 {
     tll::time::List<> timer;
-
+    auto &logger = tll::log::Node::instance();
     {
-        auto &logger = tll::log::Node::instance();
+        // logger.start(0x1000);
         // logger.remove("console");
         TLL_GLOGTF();
         // tll::log::Entity console_ent{
         //                 .name = "console",
-        //                 .flag = tll::log::Flag::kAll, .chunk_size = 0x1000,
-        //                 .send = std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)};
-        // tll::log::Entity file_ent1{
-        //                 .name = "file", .flag = tll::log::Flag::kAll, .chunk_size = 0x10000,
-        //                 .send = [&write_cnt](void *handle, const char *buff, size_t size)
-        //                 {
-        //                     if(handle == nullptr)
-        //                     {
-        //                         printf("%.*s", (int)size, buff);
-        //                         return;
-        //                     }
-        //                     static_cast<std::ofstream*>(handle)->write((const char *)buff, size);
-        //                     write_cnt++;
-        //                 },
-        //                 .open = []()
-        //                 {
-        //                     write_cnt=0;
-        //                     return static_cast<void*>(new std::ofstream("file_ent1.log", std::ios::out | std::ios::binary));
-        //                 }, 
-        //                 .close = [](void *handle)
-        //                 {
-        //                     static_cast<std::ofstream*>(handle)->flush();
-        //                     delete static_cast<std::ofstream*>(handle);
-        //                     handle = nullptr;
-        //                 }};
+        //                 .flag = tll::log::Flag::kAll,
+        //                 .on_log = std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)};
+        tll::log::Entity file_ent1{
+                        .name = "file", .flag = tll::log::Flag::kAll,
+                        .on_log= [&write_cnt](void *handle, const char *buff, size_t size)
+                        {
+                            if(handle == nullptr)
+                            {
+                                printf("%.*s", (int)size, buff);
+                                return;
+                            }
+                            static_cast<std::ofstream*>(handle)->write((const char *)buff, size);
+                            write_cnt++;
+                        },
+                        .on_start = []()
+                        {
+                            write_cnt=0;
+                            return static_cast<void*>(new std::ofstream("file_ent1.log", std::ios::out | std::ios::binary));
+                        }, 
+                        .on_stop = [](void *&handle)
+                        {
+                            static_cast<std::ofstream*>(handle)->flush();
+                            delete static_cast<std::ofstream*>(handle);
+                            handle = nullptr;
+                        }};
+        logger.add(file_ent1);
 
-        // logger.add(file_ent1);
-        // {
-        //     tll::util::Guard{timer("starting")};
-        //     logger.start();
-        // }
-        // {
-        //     TLL_GLOGT(log);
-        //     // #pragma omp parallel num_threads ( 16 )
-        //     {
-        //         TLL_GLOGT(omp_parallel);
-        //         tll::util::Guard{timer("do logging")};
-        //         for(int i=0; i < std::stoi(argv[1]); i++)
-        //         {
-        //             TLL_GLOGD("this is debug logging");
-        //             TLL_GLOGI("Some information");
-        //             TLL_GLOGW("A warning!!!");
-        //             TLL_GLOGF("Ooops!!! fatal logging");
-        //         }
-        //     }
-        // }
-        // TLL_GLOGI("Write Count: %d", write_cnt);
-        // {
-        //     tll::util::Guard{timer("stopping")};
-        //     logger.stop();
-        // }
+        {
+            tll::util::Guard{timer("starting")};
+            logger.start();
+        }
+        {
+            TLL_GLOGT(log);
+            // #pragma omp parallel num_threads ( 16 )
+            {
+                TLL_GLOGT(omp_parallel);
+                tll::util::Guard{timer("do logging")};
+                for(int i=0; i < std::stoi(argv[1]); i++)
+                {
+                    TLL_GLOGD("this is debug logging");
+                    TLL_GLOGI("Some information");
+                    TLL_GLOGW("A warning!!!");
+                    TLL_GLOGF("Ooops!!! fatal logging");
+                }
+            }
+        }
+        // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        {
+            tll::util::Guard{timer("stopping")};
+            logger.stop();
+        }
     }
-
-    LOGD("start: %.3f", timer("starting").total());
-    LOGD("log: %.3f", timer("do logging").total());
-    LOGD("stop: %.3f", timer("stopping").total());
-    LOGD("%.3f", timer().elapse());
+    LOGD("");
+    auto header = LOG_HEADER_ + LOG_DBG_;
+    LOGD("%s", header.data());
+    auto ptr = logger.connectLog(tll::log::Flag::kAll, std::bind(printf, "%.*s", std::placeholders::_2, std::placeholders::_1));
+    LOGD("%p", ptr);
+    // logger.stop();
+    LOGD("%s", tll::util::stringFormat("%.9f", "oi troi oi").data());
+    // TLL_GLOGD("");
+    tll::log::Node::instance().log(tll::log::Type::kDebug, "{HAHAHA}\n");
+    LOGD("");
+    TLL_GLOGD("Write Count: %d", write_cnt);
+    TLL_GLOGD("start: %.3f", timer("starting").total());
+    TLL_GLOGD("log: %.3f", timer("do logging").total());
+    TLL_GLOGD("stop: %.3f", timer("stopping").total());
+    TLL_GLOGD("%.3f", timer().elapse());
 
     return 0;
 }
