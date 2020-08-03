@@ -58,8 +58,6 @@
 namespace tll::log
 {
 
-// typedef std::tuple<LogFlag, OpenLog, CloseLog, DoLog, size_t, void *> Entity;
-
 char const kLogTypeString[]="TDIWF";
 enum class Type
 {
@@ -102,11 +100,6 @@ typedef std::function<void *()> OnStart;
 typedef std::function<void(void *&)> OnStop;
 typedef std::function<void(void*, const char*, size_t)> OnLog;
 
-// typedef std::function<void()> OnOpen;
-// typedef std::function<void()> OnClose;
-// typedef std::function<void(const char*, size_t)> OnLog;
-
-// typedef std::pair<Type, std::string> Element;
 struct Message
 {
     Type type;
@@ -117,7 +110,6 @@ struct Entity
 {
     std::string name;
     Flag flag;
-    // size_t chunk_size;
     OnLog on_log;
     OnStart on_start;
     OnStop on_stop;
@@ -215,9 +207,6 @@ struct Tracer
         const auto duration = timer().stop();
         if(on_log)
         {
-            // auto id = util::tid();
-            // auto &ctx_list = log::ContextMap::instance()[id];
-            // auto crr_ctx = ctx_list.back();
             on_log(util::stringFormat("%s{%s}{%.6f(s)}\n",
                                       LOG_HEADER_,
                                       name,
@@ -230,8 +219,6 @@ struct Tracer
 
     std::string name = "";
     time::List<> timer;
-    /// one extra tp for destructor (total time)
-    // std::array<typename clock::time_point, num_of_tp+1> time_points = util::make_array<typename clock::time_point, num_of_tp+1>(clock::now());
 
     std::function<void(std::string const&)> on_log;
 }; /// Tracer
@@ -291,8 +278,6 @@ public:
             {
                 if(ring_queue_.empty())
                 {
-                    // join_wait_.notify_one(); /// notify join
-                    // std::mutex tmp_mtx; /// FIXME: without this, crash
                     std::unique_lock<std::mutex> lock(mtx_);
                     /// wait timeout
                     bool wait_status = pop_wait_.wait_for(lock, std::chrono::milliseconds(wait_ms_), [this] {
@@ -388,15 +373,7 @@ public:
             std::lock_guard<std::mutex> lock(mtx_);
             pop_wait_.notify_one();
         }
-        // if (wait) this->wait();
         if(broadcast_.joinable()) broadcast_.join();
-
-        // for(auto &entry : ents_)
-        // {
-        //     auto &ent = entry.second;
-        //     if(ent.close)
-        //         ent.close(ent.handle);
-        // }
         stop_signal_.emit();
     }
 
@@ -444,30 +421,6 @@ public:
 
         add_(ents...);
     }
-
-    // TLL_INLINE void remove(const std::string &name)
-    // {
-    //     if(isRunning())
-    //         return;
-
-    //     // {
-    //         auto it = ents_.find(name);
-    //         if(it != ents_.end())
-    //         {
-    //             // disconnectStart(it->start);
-    //             // disconnectStop(it->stop);
-    //             // disconnectLog(it->flag, it->log);
-    //             ents_.erase(it);
-    //         }
-    //     // }
-    //     // {
-    //     //     auto it = buffers_.find(name);
-    //     //     if(it != buffers_.end())
-    //     //     {
-    //     //         buffers_.erase(it);
-    //     //     }
-    //     // }
-    // }
 
     static Node &instance()
     {
@@ -527,31 +480,6 @@ private:
         connectLog(ent.flag, std::bind(&Entity::log, &entity, std::placeholders::_1, std::placeholders::_2));
     }
 
-    // TLL_INLINE void send_()
-    // {
-    //     for(auto &entry : ents_)
-    //     {
-    //         send_(entry.first);
-    //     }
-    // }
-
-    // TLL_INLINE void send_(const std::string &name)
-    // {
-    //     auto &ent = ents_[name];
-    //     // auto &buff = buffers_[name];
-    //     ent.send(ent.handle, buff.data(), buff.size());
-    //     buff.resize(0);
-    // }
-
-    // TLL_INLINE void send_(const std::string &name,
-    //         Type type, 
-    //         const std::string &buff)
-    // {
-    //     auto &ent = ents_[name];
-    //     if(! ((uint32_t)ent.flag & (uint32_t)toFlag(type)) ) return;
-    //     ent.send(ent.handle, buff.data(), buff.size());
-    // }
-
     std::atomic<bool> is_running_{false};
     util::LFQueue<Message> ring_queue_{0x1000};
     std::unordered_map<std::string, Entity> ents_/* = {{"console", Entity{
@@ -562,10 +490,9 @@ private:
     std::thread broadcast_;
 
     std::unordered_map<Flag, util::Signal<void (const char*, size_t)>> log_signal_;
-    // std::unordered_map<Flag, util::Signal<void (const char*, size_t)>> log_signal_;
     util::Signal<void()> start_signal_;
     util::Signal<void()> stop_signal_;
-    // std::unordered_map<std::string, std::vector<char>> buffers_;
+
     std::condition_variable pop_wait_, join_wait_;
     std::mutex mtx_;
 };
@@ -573,6 +500,7 @@ private:
 template <>
 TLL_INLINE void Node::log<Mode::kSync>(Message msg)
 {
+    /// TODO add pre-format
     std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(int)msg.type], msg.payload);
     for( auto &entry : log_signal_)
     {
@@ -584,20 +512,6 @@ TLL_INLINE void Node::log<Mode::kSync>(Message msg)
             log_sig.emit(payload.data(), payload.size());
         }
     }
-
-    // log_signal_[msg.type].emit(payload.data(), payload.size());
-
-    // for (auto &entry : ents_)
-    // {
-    //     /// TODO: add format
-    //     auto &ent = entry.second;
-    //     if((uint32_t)msg.type & (uint32_t)ent.flag)
-    //     {
-    //         // this->send_(util::stringFormat("{%c}%s", kLogTypeString[(int)msg.type], msg.payload));
-    //         ent.send(ent.handle, payload.data(), payload.size());
-    //         // this->log_signals[ent.flag].emit(payload.data(), payload.size());
-    //     }
-    // }
 }
 
 template <>
