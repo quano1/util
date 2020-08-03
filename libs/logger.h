@@ -212,7 +212,7 @@ struct Tracer
 
     ~Tracer()
     {
-        const auto duration = timer.counter().stop();
+        const auto duration = timer().stop();
         if(on_log)
         {
             // auto id = util::tid();
@@ -351,11 +351,11 @@ public:
             }
             /// TODO: popBatch
             ring_queue_.popBatch(~0u, [this, &buff_list](uint32_t index, uint32_t elem_num, uint32_t) {
-                for(int i=0; i<elem_num; i++)
+                for(auto &entry : buff_list)
                 {
-                    Message &log_msg = ring_queue_.elemAt(index + i);
-                    for(auto &entry : buff_list)
+                    for(int i=0; i<elem_num; i++)
                     {
+                        Message &log_msg = ring_queue_.elemAt(index + i);
                         auto &flag = entry.first;
                         auto &buff = entry.second;
                         if((uint32_t)flag & (uint32_t)toFlag(log_msg.type))

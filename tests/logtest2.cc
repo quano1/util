@@ -17,12 +17,11 @@ int write_cnt=0;
 
 int main(int argc, char const *argv[])
 {
-    TLL_GLOGTF();
-    tll::time::List<> timer;
     auto &logger = tll::log::Node::instance();
+    auto ptr = logger.connectLog(tll::log::Flag::kAll, std::bind(printf, "%.*s", std::placeholders::_2, std::placeholders::_1));
+    tll::time::List<> timer;
+    TLL_GLOGTF();
     {
-        // logger.start(0x1000);
-        // logger.remove("console");
         TLL_GLOGT(MAIN);
         // tll::log::Entity console_ent{
         //                 .name = "console",
@@ -34,7 +33,7 @@ int main(int argc, char const *argv[])
                         {
                             if(handle == nullptr)
                             {
-                                printf("%.*s", (int)size, buff);
+                                // printf("%.*s", (int)size, buff);
                                 return;
                             }
                             static_cast<std::ofstream*>(handle)->write((const char *)buff, size);
@@ -78,7 +77,6 @@ int main(int argc, char const *argv[])
             logger.stop();
         }
     }
-    // auto ptr = logger.connectLog(tll::log::Flag::kAll, std::bind(printf, "%.*s", std::placeholders::_2, std::placeholders::_1));
 
     TLL_GLOGD("Write Count: %d", write_cnt);
     TLL_GLOGD("start: %.3f", timer("starting").total());
