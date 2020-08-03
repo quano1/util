@@ -17,19 +17,20 @@ int write_cnt=0;
 
 int main(int argc, char const *argv[])
 {
+    TLL_GLOGTF();
     tll::time::List<> timer;
     auto &logger = tll::log::Node::instance();
     {
         // logger.start(0x1000);
         // logger.remove("console");
-        TLL_GLOGTF();
+        TLL_GLOGT(MAIN);
         // tll::log::Entity console_ent{
         //                 .name = "console",
         //                 .flag = tll::log::Flag::kAll,
         //                 .on_log = std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)};
         tll::log::Entity file_ent1{
                         .name = "file", .flag = tll::log::Flag::kAll,
-                        .on_log= [&write_cnt](void *handle, const char *buff, size_t size)
+                        .on_log= [](void *handle, const char *buff, size_t size)
                         {
                             if(handle == nullptr)
                             {
@@ -77,16 +78,8 @@ int main(int argc, char const *argv[])
             logger.stop();
         }
     }
-    LOGD("");
-    auto header = LOG_HEADER_ + LOG_DBG_;
-    LOGD("%s", header.data());
-    auto ptr = logger.connectLog(tll::log::Flag::kAll, std::bind(printf, "%.*s", std::placeholders::_2, std::placeholders::_1));
-    LOGD("%p", ptr);
-    // logger.stop();
-    LOGD("%s", tll::util::stringFormat("%.9f", "oi troi oi").data());
-    // TLL_GLOGD("");
-    tll::log::Node::instance().log(tll::log::Type::kDebug, "{HAHAHA}\n");
-    LOGD("");
+    // auto ptr = logger.connectLog(tll::log::Flag::kAll, std::bind(printf, "%.*s", std::placeholders::_2, std::placeholders::_1));
+
     TLL_GLOGD("Write Count: %d", write_cnt);
     TLL_GLOGD("start: %.3f", timer("starting").total());
     TLL_GLOGD("log: %.3f", timer("do logging").total());

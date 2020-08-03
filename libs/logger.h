@@ -26,9 +26,9 @@
 #define LOG_HEADER_ tll::util::stringFormat("{%.9f}{%s}{%d}{%s}{%s}",\
   tll::util::timestamp<double>(),\
   tll::util::to_string(tll::util::tid()),\
-  tll::log::ContextMap::instance().level(tll::util::tid()),\
-  tll::log::ContextMap::instance().get<tll::log::ContextMap::Prev>(tll::util::tid()),\
-  tll::log::ContextMap::instance().get<tll::log::ContextMap::Curr>(tll::util::tid()))
+  tll::log::ContextMap::instance().level(),\
+  tll::log::ContextMap::instance().get<tll::log::ContextMap::Prev>(),\
+  tll::log::ContextMap::instance().get<tll::log::ContextMap::Curr>())
 
 #define LOG_DBG_ tll::util::stringFormat("{%s}{%d}",\
   __FUNCTION__,\
@@ -42,18 +42,18 @@
 
 #define TLL_LOGF(plog, format, ...) (plog)->log((tll::log::Type::kFatal), "%s{" format "}\n", LOG_HEADER_ + LOG_DBG_ , ##__VA_ARGS__)
 
-#define TLL_LOGT(plog, ID) tll::log::Tracer<> trace_##ID##__([plog](std::string const &log_msg){(plog)->log((tll::log::Type::kTrace), "%s", log_msg);}, (LOG_HEADER_ + LOG_DBG_), (/*(Node).log((tll::log::Type::kTrace), "%s\n", LOG_HEADER_ + LOG_DBG_),*/ tll::log::ContextMap::instance()[tll::util::tid()].push_back(tll::util::fileName(__FILE__)), #ID))
+#define TLL_LOGT(plog, ID) tll::log::Tracer<> trace_##ID##__([plog](std::string const &log_msg){(plog)->log((tll::log::Type::kTrace), "%s", log_msg);}, (LOG_HEADER_ + LOG_DBG_), (/*(Node).log((tll::log::Type::kTrace), "%s\n", LOG_HEADER_ + LOG_DBG_),*/ tll::log::ContextMap::instance()().push_back(tll::util::fileName(__FILE__)), #ID))
 
-#define TLL_LOGTF(plog) tll::log::Tracer<> trace__([plog](std::string const &log_msg){(plog)->log((tll::log::Type::kTrace), "%s", log_msg);}, (LOG_HEADER_ + LOG_DBG_), (/*(Node).log((tll::log::Type::kTrace), "%s\n", LOG_HEADER_ + LOG_DBG_),*/ tll::log::ContextMap::instance()[tll::util::tid()].push_back(tll::util::fileName(__FILE__)), __FUNCTION__))
+#define TLL_LOGTF(plog) tll::log::Tracer<> trace__([plog](std::string const &log_msg){(plog)->log((tll::log::Type::kTrace), "%s", log_msg);}, (LOG_HEADER_ + LOG_DBG_), (/*(Node).log((tll::log::Type::kTrace), "%s\n", LOG_HEADER_ + LOG_DBG_),*/ tll::log::ContextMap::instance()().push_back(tll::util::fileName(__FILE__)), __FUNCTION__))
 
 #define TLL_GLOGD(...) TLL_LOGD(&tll::log::Node::instance(), ##__VA_ARGS__)
 #define TLL_GLOGI(...) TLL_LOGI(&tll::log::Node::instance(), ##__VA_ARGS__)
 #define TLL_GLOGW(...) TLL_LOGW(&tll::log::Node::instance(), ##__VA_ARGS__)
 #define TLL_GLOGF(...) TLL_LOGF(&tll::log::Node::instance(), ##__VA_ARGS__)
-#define TLL_GLOGT(ID) tll::log::Tracer<> trace_##ID##__([](std::string const &log_msg){tll::log::Node::instance().log((tll::log::Type::kTrace), "%s", log_msg);}, (tll::log::ContextMap::instance()[tll::util::tid()].push_back(tll::util::fileName(__FILE__)), LOG_HEADER_ + LOG_DBG_), (#ID))
+#define TLL_GLOGT(ID) tll::log::Tracer<> trace_##ID##__([](std::string const &log_msg){tll::log::Node::instance().log((tll::log::Type::kTrace), "%s", log_msg);}, (tll::log::ContextMap::instance()().push_back(tll::util::fileName(__FILE__)), LOG_HEADER_ + LOG_DBG_), (#ID))
 
 // std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)
-#define TLL_GLOGTF() tll::log::Tracer<> trace__(std::bind(&tll::log::Node::log<std::string const &>, &tll::log::Node::instance(), (tll::log::Type::kTrace), "%s", std::placeholders::_1), (tll::log::ContextMap::instance()[tll::util::tid()].push_back(tll::util::fileName(__FILE__)), LOG_HEADER_ + LOG_DBG_), (__FUNCTION__))
+#define TLL_GLOGTF() tll::log::Tracer<> trace__(std::bind(&tll::log::Node::log<std::string const &>, &tll::log::Node::instance(), (tll::log::Type::kTrace), "%s", std::placeholders::_1), (tll::log::ContextMap::instance()().push_back(tll::util::fileName(__FILE__)), LOG_HEADER_ + LOG_DBG_), (__FUNCTION__))
 
 namespace tll::log
 {
@@ -157,30 +157,36 @@ struct ContextMap
         return *singleton.load(std::memory_order_relaxed);
     }
 
-    std::vector<std::string> &operator[](const std::thread::id &id)
+    std::vector<std::string> &operator()(const std::thread::id tid = tll::util::tid())
     {
         std::lock_guard<std::mutex> lock(mtx_);
-        return map_[id];
+        return map_[tid];
     }
 
-    size_t level(const std::thread::id &id)
+    size_t level(const std::thread::id tid = tll::util::tid())
     {
         std::lock_guard<std::mutex> lock(mtx_);
-        return map_.at(id).size();
+        return map_.at(tid).size();
     }
 
     template <int pos>
-    std::string get(const std::thread::id &id)
+    std::string get(const std::thread::id tid = tll::util::tid())
     {
-        assert(map_.find(id) != map_.end());
+        assert(map_.find(tid) != map_.end());
         std::vector<std::string> *ctx;
         {
             std::lock_guard<std::mutex> lock(mtx_);
-            ctx = &map_[id];
+            ctx = &map_[tid];
         }
 
-        if(pos == ContextMap::Prev) return (ctx->size() < 2) ? "" : ctx->operator[](ctx->size() - 2);
-        else return ctx->back();
+        if(pos == ContextMap::Prev)
+        {
+            return (ctx->size() < 2) ? "" : ctx->operator[](ctx->size() - 2);
+        }
+        else 
+        {
+            return ctx->back();
+        }
     }
 
 private:
@@ -206,6 +212,7 @@ struct Tracer
 
     ~Tracer()
     {
+        const auto duration = timer.counter().stop();
         if(on_log)
         {
             // auto id = util::tid();
@@ -214,11 +221,11 @@ struct Tracer
             on_log(util::stringFormat("%s{%s}{%.6f(s)}\n",
                                       LOG_HEADER_,
                                       name,
-                                      timer.counter().stop()));
-            log::ContextMap::instance()[util::tid()].pop_back();
+                                      duration.count()));
+            log::ContextMap::instance()().pop_back();
         }
         else if(!name.empty())
-            printf(" (%.9f)~%s: %.6f (s)\n", util::timestamp(), name.data(), timer.counter().stop());
+            printf(" (%.9f)~%s: %.6f (s)\n", util::timestamp(), name.data(), duration.count());
     }
 
     std::string name = "";
@@ -339,24 +346,6 @@ public:
                 //     // #pragma omp for
                 //     for(auto &entry : ents_)
                 //     {
-                //         auto &name = entry.first;
-                //         auto &ent = entry.second;
-                //         Type const kLogt = log_msg.type;
-
-                //         if((uint32_t)ent.flag & (uint32_t)toFlag(kLogt))
-                //         {
-                //             std::string msg = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(kLogt)], log_msg.payload);
-                //             auto &buff = buff_list_[name];
-                //             size_t const old_size = buff.size();
-                //             size_t const new_size = old_size + msg.size();
-
-                //             buff.resize(new_size);
-                //             memcpy(buff.data() + old_size, msg.data(), msg.size());
-                //             if(new_size >= ent.chunk_size)
-                //             {
-                //                 this->send_(name);
-                //             }
-                //         }
                 //     }
                 // }
             }
@@ -387,8 +376,6 @@ public:
                 auto &buff = entry.second;
                 this->log_signal_[flag].emit(buff.data(), buff.size());
             }
-            // this->send_(); /// this is necessary
-            // join_wait_.notify_one(); /// notify join
         });
     }
 
