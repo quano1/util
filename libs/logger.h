@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <omp.h>
 #include <set>
+#include <condition_variable>
 #include "utils.h"
 #include "timer.h"
 
@@ -118,18 +119,19 @@ struct Entity
 // private:
     void start()
     {
-        if(handle == nullptr)
+        if(handle == nullptr && on_start)
             handle = on_start();
     }
 
-    void log(const char *buff, size_t size)
+    void log(const char *buff, size_t size) const
     {
         on_log(handle, buff, size);
     }
 
     void stop()
     {
-        on_stop(handle);
+        if(on_stop)
+            on_stop(handle);
     }
 };
 
@@ -233,7 +235,6 @@ public:
            LogEnts ...ents) :
         ents_{},
         ring_queue_{max_log_in_queue}
-        // wait_ms_{wait_ms}
     {
         add_(ents...);
     }
@@ -265,7 +266,7 @@ public:
     template <Mode mode>
     TLL_INLINE void log(Message);
 
-    TLL_INLINE void start(size_t chunk_size = 0x400, uint32_t period_ms=500) /// 1 Kb, 500 ms
+    TLL_INLINE void start(size_t chunk_size = 0x400, uint32_t period_ms=1000) /// 1 Kb, 1000 ms
     {
         bool val = false;
         if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
@@ -286,12 +287,11 @@ public:
                 {
                     total_delta -= period_ms;
                     /// flushing the buffer list
-                    LOGD("Flushing all");
-                    for(auto &entry : buff_list)
+                    for(auto &buff_entry : buff_list)
                     {
-                        auto &flag = entry.first;
-                        auto &buff = entry.second;
-                        this->log_signal_[flag].emit(buff.data(), buff.size());
+                        auto &flag = buff_entry.first;
+                        auto &buff = buff_entry.second;
+                        onLog(flag, buff);
                         buff.resize(0);
                     }
                 }
@@ -316,10 +316,10 @@ public:
                     // buff_list[msg.flag]
                 });
 
-                for(auto &entry : buff_list)
+                for(auto &buff_entry : buff_list)
                 {
-                    auto &flag = entry.first;
-                    auto &buff = entry.second;
+                    auto &flag = buff_entry.first;
+                    auto &buff = buff_entry.second;
                     if((uint32_t)flag & (uint32_t)toFlag(log_msg.type))
                     {
                         std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(log_msg.type)], log_msg.payload);
@@ -330,7 +330,7 @@ public:
                         /// TODO log exactly chunk_size
                         if(new_size >= chunk_size)
                         {
-                            this->log_signal_[flag].emit(buff.data(), buff.size());
+                            onLog(flag, buff);
                             buff.resize(0); /// avoid elem's destructor
                         }
                     }
@@ -367,11 +367,11 @@ public:
                 }
             });
 
-            for(auto &entry : buff_list)
+            for(auto &buff_entry : buff_list)
             {
-                auto &flag = entry.first;
-                auto &buff = entry.second;
-                this->log_signal_[flag].emit(buff.data(), buff.size());
+                auto &flag = buff_entry.first;
+                auto &buff = buff_entry.second;
+                onLog(flag, buff);
             }
         });
     }
@@ -387,6 +387,11 @@ public:
         }
         if(broadcast_.joinable()) broadcast_.join();
         stop_signal_.emit();
+        for(auto &ent_entry : ents_)
+        {
+            auto &ent = ent_entry.second;
+            ent.stop();
+        }
     }
 
     /// TODO remove duplicated code
@@ -425,6 +430,13 @@ public:
         return is_running_.load(std::memory_order_relaxed);
     }
 
+    void remove(const std::string &name)
+    {
+        auto it = ents_.find(name);
+        if(it != ents_.end())
+            ents_.erase(it);
+    }
+
     template < typename ... LogEnts>
     void add(LogEnts ...ents)
     {
@@ -437,8 +449,8 @@ public:
     static Node &instance()
     {
         static std::atomic<Node*> singleton;
-        for(Node *sin = singleton.load(std::memory_order_relaxed); 
-            !sin && !singleton.compare_exchange_weak(sin, new Node(), std::memory_order_release, std::memory_order_acquire);) { }
+        Node *sin = singleton.load(std::memory_order_relaxed);
+        while(!sin && !singleton.compare_exchange_weak(sin, new Node(),std::memory_order_release, std::memory_order_acquire)) { }
         return *singleton.load(std::memory_order_relaxed);
     }
 
@@ -456,13 +468,56 @@ public:
 
 private:
 
-    TLL_INLINE std::unordered_map<Flag, std::vector<char>> start_(uint32_t chunk_size) const
+    TLL_INLINE void onLog(Flag flag, const std::vector<char> buff) const
+    {
+        this->log_signal_.at(flag).emit(buff.data(), buff.size());
+        for(auto &ent_entry : ents_)
+        {
+            auto &ent = ent_entry.second;
+            if(ent.flag == flag)
+                ent.log(buff.data(), buff.size());
+        }
+    }
+
+    TLL_INLINE void onLog(Type type, const std::string payload) const
+    {
+        for( auto &entry : log_signal_)
+        {
+            Flag flag = entry.first;
+            auto &log_sig = entry.second;
+
+            if((uint32_t)flag & (uint32_t)toFlag(type))
+            {
+                log_sig.emit(payload.data(), payload.size());
+            }
+        }
+
+        for( auto &entry : ents_)
+        {
+            auto &ent = entry.second;
+            if((uint32_t)ent.flag & (uint32_t)toFlag(type))
+            {
+                ent.log(payload.data(), payload.size());
+            }
+        }
+    }
+
+    TLL_INLINE std::unordered_map<Flag, std::vector<char>> start_(uint32_t chunk_size)
     {
         start_signal_.emit();
         std::unordered_map<Flag, std::vector<char>> buff_list;
         for(const auto &entry : log_signal_)
         {
             auto flag = entry.first;
+            buff_list[flag].reserve(chunk_size);
+        }
+
+        for(auto &entry : ents_)
+        {
+            auto &ent = entry.second;
+            auto flag = ent.flag;
+            log_signal_[flag];
+            ent.start();
             buff_list[flag].reserve(chunk_size);
         }
         return buff_list;
@@ -474,9 +529,9 @@ private:
         ents_[ent.name] = ent;
         auto &entity = ents_[ent.name];
         /// connect all signals
-        connectStart(std::bind(&Entity::start, &entity));
-        connectStop(std::bind(&Entity::stop, &entity));
-        connectLog(ent.flag, std::bind(&Entity::log, &entity, std::placeholders::_1, std::placeholders::_2));
+        // connectStart(std::bind(&Entity::start, &entity));
+        // connectStop(std::bind(&Entity::stop, &entity));
+        // connectLog(ent.flag, std::bind(&Entity::log, &entity, std::placeholders::_1, std::placeholders::_2));
 
         add_(ents...);
     }
@@ -486,18 +541,17 @@ private:
         ents_[ent.name] = ent;
         auto &entity = ents_[ent.name];
         /// connect all signals
-
-        connectStart(std::bind(&Entity::start, &entity));
-        connectStop(std::bind(&Entity::stop, &entity));
-        connectLog(ent.flag, std::bind(&Entity::log, &entity, std::placeholders::_1, std::placeholders::_2));
+        // connectStart(std::bind(&Entity::start, &entity));
+        // connectStop(std::bind(&Entity::stop, &entity));
+        // connectLog(ent.flag, std::bind(&Entity::log, &entity, std::placeholders::_1, std::placeholders::_2));
     }
 
     std::atomic<bool> is_running_{false};
     util::LFQueue<Message> ring_queue_{0x1000};
-    std::unordered_map<std::string, Entity> ents_/* = {{"console", Entity{
+    std::unordered_map<std::string, Entity> ents_ = {{"console", Entity{
                 "console",
                 Flag::kAll, 
-                std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)}}}*/;
+                std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)}}};
     // uint32_t wait_ms_{100};
     std::thread broadcast_;
 
@@ -514,16 +568,8 @@ TLL_INLINE void Node::log<Mode::kSync>(Message msg)
 {
     /// TODO add pre-format
     std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(int)msg.type], msg.payload);
-    for( auto &entry : log_signal_)
-    {
-        Flag flag = entry.first;
-        auto &log_sig = entry.second;
 
-        if((uint32_t)flag & (uint32_t)toFlag(msg.type))
-        {
-            log_sig.emit(payload.data(), payload.size());
-        }
-    }
+    onLog(msg.type, payload);
 }
 
 template <>

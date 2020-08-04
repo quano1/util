@@ -23,6 +23,7 @@ int main(int argc, char const *argv[])
     TLL_GLOGTF();
     {
         TLL_GLOGT(MAIN);
+        logger.remove("console");
         // tll::log::Entity console_ent{
         //                 .name = "console",
         //                 .flag = tll::log::Flag::kAll,
@@ -33,7 +34,7 @@ int main(int argc, char const *argv[])
                         {
                             if(handle == nullptr)
                             {
-                                // printf("%.*s", (int)size, buff);
+                                printf("%.*s", (int)size, buff);
                                 return;
                             }
                             static_cast<std::ofstream*>(handle)->write((const char *)buff, size);
@@ -51,7 +52,6 @@ int main(int argc, char const *argv[])
                             handle = nullptr;
                         }};
         logger.add(file_ent1);
-
         {
             tll::util::Guard{timer("starting")};
             logger.start();
