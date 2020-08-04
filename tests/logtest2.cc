@@ -18,7 +18,7 @@ int write_cnt=0;
 int main(int argc, char const *argv[])
 {
     auto &logger = tll::log::Node::instance();
-    auto ptr = logger.connectLog(tll::log::Flag::kAll, std::bind(printf, "%.*s", std::placeholders::_2, std::placeholders::_1));
+    // auto ptr = logger.connectLog(tll::log::Flag::kAll, std::bind(printf, "%.*s", std::placeholders::_2, std::placeholders::_1));
     tll::time::List<> timer;
     TLL_GLOGTF();
     {
@@ -68,6 +68,7 @@ int main(int argc, char const *argv[])
                     TLL_GLOGI("Some information");
                     TLL_GLOGW("A warning!!!");
                     TLL_GLOGF("Ooops!!! fatal logging");
+                    std::this_thread::sleep_for(std::chrono::milliseconds(std::stoi(argv[2])));
                 }
             }
         }
@@ -79,9 +80,9 @@ int main(int argc, char const *argv[])
     }
 
     TLL_GLOGD("Write Count: %d", write_cnt);
-    TLL_GLOGD("start: %.3f", timer("starting").total());
-    TLL_GLOGD("log: %.3f", timer("do logging").total());
-    TLL_GLOGD("stop: %.3f", timer("stopping").total());
+    TLL_GLOGD("starting: %.3f", timer("starting").total());
+    TLL_GLOGD("do logging: %.3f", timer("do logging").total());
+    TLL_GLOGD("stopping: %.3f", timer("stopping").total());
     TLL_GLOGD("%.3f", timer().elapse());
 
     return 0;

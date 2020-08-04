@@ -134,7 +134,7 @@ inline uint32_t nextPowerOf2(uint32_t val)
     return val;
 }
 
-inline bool powerOf2(uint32_t val)
+inline bool isPowerOf2(uint32_t val)
 {
     return (val & (val - 1)) == 0;
 }
@@ -153,28 +153,99 @@ T timestamp(typename C::time_point &&t = C::now())
     return std::chrono::duration_cast<std::chrono::duration<T,D>>(std::forward<typename C::time_point>(t).time_since_epoch()).count();
 }
 
-struct RingBuffer
-{
-public:
-    inline void push(char *data, size_t size)
-    {
+/// single thread
+/// no overrun/underrun check
+// struct ContiRB
+// {
+// public:
+//     ContiRB(size_t size) : head(0), tail(0)
+//     {
+//         wmark = isPowerOf2(size) ? size : nextPowerOf2(size);
+//         buffer(wmark);
+//     }
 
-    }
-    inline void pop(char *data, size_t size)
-    {
+//     inline bool push(/*char *data, */size_t size)
+//     {
+//         /// 1) wrap & real: head < tail < wmark (*)
+//         /// 2)        real: head < wmark < tail
+//         ///           wrap: tail < head < wmark
+//         /// 3) real & wrap: wmark < head < tail (*)
+//         assert(size < size());
+//         size_t next_tail = tail + size;
+//         /// TODO: overrun checking
+//         if(tail <= wmark) /// 1)
+//         {
+//             if(next_tail > wmark) /// rollover
+//             {
+//                 wmark = tail;
+//                 next_tail += unused();
+//             }
+//         }
+//         else /// 2 & 3)
+//         {
+//             if(head >= wmark) /// 3)
+//             {
+//                 /// move wmark to the end of the buffer
+//                 wmark = tail + buffer.size() - wrap(tail);
+//             }
+//         }
 
-    }
-    inline size_t size() 
-    { 
-        return (tail >= head) ? tail - head : wmark - head + tail;
-    }
+//         tail = next_tail;
+//         return true;
+//     }
 
-    inline bool empty() { return tail == head; }
+//     inline size_t pop(size_t size)
+//     {
+//         /// 1) wrap & real: head < tail < wmark (*)
+//         /// 2)        real: head < wmark < tail
+//         ///           wrap: tail < head < wmark
+//         /// 3) real & wrap: wmark < head < tail (*)
+//         size_t next_head;
+//         if(tail <= wmark) /// 1)
+//         {
+//             size = size > size() ? size() : size;
+//             next_head = head + size;
+//         }
+//         else /// 2 & 3)
+//         {
+//             if(head < wmark) /// 2)
+//             {
+//                 size = size > (wmark - head) ? (wmark - head) : size;
+//                 next_head = head + size;
+//             }
+//             else /// 3) rollover
+//             {
+//                 size_t begin = tail - wrap(tail);
+//                 size = size > size() ? size() : size;
+//                 next_head = begin + size;
+//             }
+//         }
 
-    size_t capacity, head, tail, wmark;
-    // size_t size_of_chunk_;
-    // size_t number_of_chunks_;
-};
+//         head = next_head == wmark ? 0 : next_head;
+//         return size;
+//     }
+
+//     inline size_t size()
+//     { 
+//         return tail - head - unused();
+//     }
+
+//     inline size_t unused()
+//     {
+//         return head <= wmark ? buffer.size() - wmark : 0;
+//     }
+
+//     inline size_t wrap(size_t index)
+//     {
+//         return index & (buffer.size() - 1);
+//     }
+
+//     inline bool isEmpty() { return size() == 0; }
+//     inline bool isFull() { return size() == (buffer.size() - unused()); }
+
+//     size_t head, tail, wmark;
+//     std::vector<char> buffer;
+// };
 
 /// lock-free queue
 template <typename T, size_t const kELemSize=sizeof(T)>
@@ -183,7 +254,7 @@ class LFQueue
 public:
     LFQueue(uint32_t num_of_elem) : prod_tail_(0), prod_head_(0), cons_tail_(0), cons_head_(0)
     {
-        capacity_ = powerOf2(num_of_elem) ? num_of_elem : nextPowerOf2(num_of_elem);
+        capacity_ = isPowerOf2(num_of_elem) ? num_of_elem : nextPowerOf2(num_of_elem);
         buffer_.resize(capacity_ * kELemSize);
     }
 
@@ -191,7 +262,7 @@ public:
     {
         cons_head = cons_head_.load(std::memory_order_relaxed);
 
-        for(;!empty();)
+        for(;!isEmpty();)
         {
             if (cons_head == prod_tail_.load(std::memory_order_relaxed))
                 return false;
@@ -218,7 +289,7 @@ public:
         uint32_t cons_head;
         while(!tryPop(cons_head)) 
         {
-            if (empty()) 
+            if (isEmpty()) 
                 return false;
 
             std::this_thread::yield();
@@ -236,7 +307,7 @@ public:
     template </*typename D,*/ typename F, typename ...Args>
     bool popBatch(uint32_t max_num, F &&onPopBatch, Args &&...args)
     {
-        if (empty())
+        if (isEmpty())
             return false;
 
         uint32_t cons_head = cons_head_.load(std::memory_order_relaxed);
@@ -261,7 +332,7 @@ public:
     {
         prod_head = prod_head_.load(std::memory_order_relaxed);
 
-        for(;!full();)
+        for(;!isFull();)
         {
             if (prod_head == (cons_tail_.load(std::memory_order_relaxed) + capacity_))
                 return false;
@@ -288,7 +359,7 @@ public:
         prod_head = prod_head_.load(std::memory_order_relaxed);
         while(!tryPush(prod_head))
         {
-            if(full()) return false;
+            if(isFull()) return false;
             std::this_thread::yield();
         }
 
@@ -313,11 +384,11 @@ public:
         return capacity_;
     }
 
-    TLL_INLINE bool empty() const {
+    TLL_INLINE bool isEmpty() const {
         return size() == 0;
     }
 
-    TLL_INLINE bool full() const {
+    TLL_INLINE bool isFull() const {
         return size() == capacity();
     }
 
@@ -401,6 +472,8 @@ public:
 private:
     std::list<Slot> slots_;
 };
+
+template <class T> class Guard;
 
 template <class T>
 class Guard

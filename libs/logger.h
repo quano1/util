@@ -229,11 +229,11 @@ public:
     Node() = default;
 
     template < typename ... LogEnts>
-    Node(uint32_t max_log_in_queue, uint32_t wait_ms,
+    Node(uint32_t max_log_in_queue,
            LogEnts ...ents) :
         ents_{},
-        ring_queue_{max_log_in_queue},
-        wait_ms_{wait_ms}
+        ring_queue_{max_log_in_queue}
+        // wait_ms_{wait_ms}
     {
         add_(ents...);
     }
@@ -265,25 +265,28 @@ public:
     template <Mode mode>
     TLL_INLINE void log(Message);
 
-    TLL_INLINE void start(size_t chunk_size = 0x400) /// 1 Kb
+    TLL_INLINE void start(size_t chunk_size = 0x400, uint32_t period_ms=500) /// 1 Kb, 500 ms
     {
         bool val = false;
         if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
             return;
 
-        broadcast_ = std::thread([this, chunk_size]()
+        broadcast_ = std::thread([this, chunk_size, period_ms]()
         {
+            time::List<std::chrono::duration<uint32_t, std::ratio<1, 1000>>> timer;
             auto buff_list = start_(chunk_size);
+            uint32_t total_delta = 0;
+
             while(isRunning())
             {
-                if(ring_queue_.empty())
-                {
-                    std::unique_lock<std::mutex> lock(mtx_);
-                    /// wait timeout
-                    bool wait_status = pop_wait_.wait_for(lock, std::chrono::milliseconds(wait_ms_), [this] {
-                        return !isRunning() || !this->ring_queue_.empty();
-                    });
+                uint32_t delta = timer().restart().count();
+                total_delta += delta;
 
+                if(total_delta >= period_ms)
+                {
+                    total_delta -= period_ms;
+                    /// flushing the buffer list
+                    LOGD("Flushing all");
                     for(auto &entry : buff_list)
                     {
                         auto &flag = entry.first;
@@ -291,6 +294,15 @@ public:
                         this->log_signal_[flag].emit(buff.data(), buff.size());
                         buff.resize(0);
                     }
+                }
+
+                if(ring_queue_.isEmpty())
+                {
+                    std::unique_lock<std::mutex> lock(mtx_);
+                    /// wait timeout
+                    bool wait_status = pop_wait_.wait_for(lock, std::chrono::milliseconds(period_ms - total_delta), [this] {
+                        return !isRunning() || !this->ring_queue_.isEmpty();
+                    });
                     /// wait timeout or running == false
                     if( !wait_status || !isRunning())
                     {
@@ -438,7 +450,7 @@ public:
         join_wait_.wait(lock, [this] 
         {
             pop_wait_.notify_one();
-            return !isRunning() || ring_queue_.empty();
+            return !isRunning() || ring_queue_.isEmpty();
         });
     }
 
@@ -486,7 +498,7 @@ private:
                 "console",
                 Flag::kAll, 
                 std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)}}}*/;
-    uint32_t wait_ms_{100};
+    // uint32_t wait_ms_{100};
     std::thread broadcast_;
 
     std::unordered_map<Flag, util::Signal<void (const char*, size_t)>> log_signal_;
