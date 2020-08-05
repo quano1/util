@@ -15,8 +15,6 @@
 #include <algorithm>
 #include <cassert>
 
-#include "timer.h"
-
 #ifndef STATIC_LIB
 #define TLL_INLINE inline
 #else

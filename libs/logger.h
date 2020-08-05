@@ -43,18 +43,18 @@
 
 #define TLL_LOGF(plog, format, ...) (plog)->log((tll::log::Type::kFatal), "%s{" format "}\n", LOG_HEADER_ + LOG_DBG_ , ##__VA_ARGS__)
 
-#define TLL_LOGT(plog, ID) tll::log::Tracer<> trace_##ID##__([plog](std::string const &log_msg){(plog)->log((tll::log::Type::kTrace), "%s", log_msg);}, (LOG_HEADER_ + LOG_DBG_), (/*(Node).log((tll::log::Type::kTrace), "%s\n", LOG_HEADER_ + LOG_DBG_),*/ tll::log::ContextMap::instance()().push_back(tll::util::fileName(__FILE__)), #ID))
+#define TLL_LOGT(plog, ID) tll::log::Tracer<> tracer_##ID##__([plog](std::string const &log_msg){(plog)->log((tll::log::Type::kTrace), "%s", log_msg);}, (LOG_HEADER_ + LOG_DBG_), (/*(Node).log((tll::log::Type::kTrace), "%s\n", LOG_HEADER_ + LOG_DBG_),*/ tll::log::ContextMap::instance()().push_back(tll::util::fileName(__FILE__)), #ID))
 
-#define TLL_LOGTF(plog) tll::log::Tracer<> trace__([plog](std::string const &log_msg){(plog)->log((tll::log::Type::kTrace), "%s", log_msg);}, (LOG_HEADER_ + LOG_DBG_), (/*(Node).log((tll::log::Type::kTrace), "%s\n", LOG_HEADER_ + LOG_DBG_),*/ tll::log::ContextMap::instance()().push_back(tll::util::fileName(__FILE__)), __FUNCTION__))
+#define TLL_LOGTF(plog) tll::log::Tracer<> tracer__([plog](std::string const &log_msg){(plog)->log((tll::log::Type::kTrace), "%s", log_msg);}, (LOG_HEADER_ + LOG_DBG_), (/*(Node).log((tll::log::Type::kTrace), "%s\n", LOG_HEADER_ + LOG_DBG_),*/ tll::log::ContextMap::instance()().push_back(tll::util::fileName(__FILE__)), __FUNCTION__))
 
 #define TLL_GLOGD(...) TLL_LOGD(&tll::log::Node::instance(), ##__VA_ARGS__)
 #define TLL_GLOGI(...) TLL_LOGI(&tll::log::Node::instance(), ##__VA_ARGS__)
 #define TLL_GLOGW(...) TLL_LOGW(&tll::log::Node::instance(), ##__VA_ARGS__)
 #define TLL_GLOGF(...) TLL_LOGF(&tll::log::Node::instance(), ##__VA_ARGS__)
-#define TLL_GLOGT(ID) tll::log::Tracer<> trace_##ID##__([](std::string const &log_msg){tll::log::Node::instance().log((tll::log::Type::kTrace), "%s", log_msg);}, (tll::log::ContextMap::instance()().push_back(tll::util::fileName(__FILE__)), LOG_HEADER_ + LOG_DBG_), (#ID))
+#define TLL_GLOGT(ID) tll::log::Tracer<> tracer_##ID##__([](std::string const &log_msg){tll::log::Node::instance().log((tll::log::Type::kTrace), "%s", log_msg);}, (tll::log::ContextMap::instance()().push_back(tll::util::fileName(__FILE__)), LOG_HEADER_ + LOG_DBG_), (#ID))
 
 // std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)
-#define TLL_GLOGTF() tll::log::Tracer<> trace__(std::bind(&tll::log::Node::log<std::string const &>, &tll::log::Node::instance(), (tll::log::Type::kTrace), "%s", std::placeholders::_1), (tll::log::ContextMap::instance()().push_back(tll::util::fileName(__FILE__)), LOG_HEADER_ + LOG_DBG_), (__FUNCTION__))
+#define TLL_GLOGTF() tll::log::Tracer<> tracer__(std::bind(&tll::log::Node::log<std::string const &>, &tll::log::Node::instance(), (tll::log::Type::kTrace), "%s", std::placeholders::_1), (tll::log::ContextMap::instance()().push_back(tll::util::fileName(__FILE__)), LOG_HEADER_ + LOG_DBG_), (__FUNCTION__))
 
 namespace tll::log
 {
@@ -386,7 +386,7 @@ public:
             pop_wait_.notify_one();
         }
         if(broadcast_.joinable()) broadcast_.join();
-        stop_signal_.emit();
+        // stop_signal_.emit();
         for(auto &ent_entry : ents_)
         {
             auto &ent = ent_entry.second;
@@ -395,32 +395,32 @@ public:
     }
 
     /// TODO remove duplicated code
-    TLL_INLINE uintptr_t connectStart(util::Signal<void()>::Slot start)
-    {
-        return isRunning() ? 0 : start_signal_.connect(start);
-    }
+    // TLL_INLINE uintptr_t connectStart(util::Signal<void()>::Slot start)
+    // {
+    //     return isRunning() ? 0 : start_signal_.connect(start);
+    // }
 
-    TLL_INLINE bool disconnectStart(uintptr_t id)
-    {
-        return isRunning() ? false : start_signal_.disconnect(id);
-    }
+    // TLL_INLINE bool disconnectStart(uintptr_t id)
+    // {
+    //     return isRunning() ? false : start_signal_.disconnect(id);
+    // }
 
-    TLL_INLINE uintptr_t connectStop(util::Signal<void()>::Slot stop)
-    {
-        return isRunning() ? 0 : stop_signal_.connect(stop);
-    }
+    // TLL_INLINE uintptr_t connectStop(util::Signal<void()>::Slot stop)
+    // {
+    //     return isRunning() ? 0 : stop_signal_.connect(stop);
+    // }
 
-    TLL_INLINE bool disconnectStop(uintptr_t id)
-    {
-        return isRunning() ? false : stop_signal_.disconnect(id);
-    }
+    // TLL_INLINE bool disconnectStop(uintptr_t id)
+    // {
+    //     return isRunning() ? false : stop_signal_.disconnect(id);
+    // }
 
-    TLL_INLINE uintptr_t connectLog(Flag flag, util::Signal<void(const char*, size_t)>::Slot log)
+    TLL_INLINE uintptr_t connect(Flag flag, util::Signal<void(const char*, size_t)>::Slot log)
     {
         return isRunning() ? 0 : log_signal_[flag].connect(log);
     }
 
-    TLL_INLINE bool disconnectLog(Flag flag, uintptr_t id)
+    TLL_INLINE bool disconnect(Flag flag, uintptr_t id)
     {
         return isRunning() ? false : log_signal_[flag].disconnect(id);
     }
@@ -504,7 +504,7 @@ private:
 
     TLL_INLINE std::unordered_map<Flag, std::vector<char>> start_(uint32_t chunk_size)
     {
-        start_signal_.emit();
+        // start_signal_.emit();
         std::unordered_map<Flag, std::vector<char>> buff_list;
         for(const auto &entry : log_signal_)
         {
@@ -556,8 +556,8 @@ private:
     std::thread broadcast_;
 
     std::unordered_map<Flag, util::Signal<void (const char*, size_t)>> log_signal_;
-    util::Signal<void()> start_signal_;
-    util::Signal<void()> stop_signal_;
+    // util::Signal<void()> start_signal_;
+    // util::Signal<void()> stop_signal_;
 
     std::condition_variable pop_wait_, join_wait_;
     std::mutex mtx_;

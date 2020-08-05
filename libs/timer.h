@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <set>
 #include <cassert>
+#include "utils.h"
 
 namespace tll::time {
 
@@ -16,49 +17,61 @@ public:
     using Duration = D;
     // using Type = typename Duration::rep;
     // using Ratio = typename Duration::period;
-    using Timepoint = typename Clock::time_point;
+    using Timepoint = std::chrono::time_point<C,D>;
     using Timepoints = std::pair<Timepoint, Timepoint>;
-    std::list<Timepoints> tps_lst = {{Clock::now(), Timepoint{}}};
+    Timepoint begin=std::chrono::time_point_cast<D>(Clock::now());
+    std::vector<Timepoints> tps_lst;
 
     Counter() = default;
     ~Counter() = default;
-    Counter(const Timepoints &tps) : tps_lst({tps})
-    {}
+    // Counter(const Timepoints &tps) : tps_lst({tps})
+    // {}
 
-    void start(Timepoint tp=Clock::now())
+    void start(Timepoint tp=std::chrono::time_point_cast<D>(Clock::now()))
     {
-        tps_lst.push_back({tp, tp});
+        begin = tp;
     }
 
     Duration stop()
     {
-        tps_lst.back().second = Clock::now();
-        return std::chrono::duration_cast<Duration>(tps_lst.back().second - tps_lst.back().first);
+        tps_lst.push_back({begin, std::chrono::time_point_cast<D>(Clock::now())});
+        return lastPeriod();
     }
 
     Duration restart()
     {
-        Duration ret = stop();
+        stop();
         start();
-        return ret;
+        return lastPeriod();
+    }
+
+    size_t size() const
+    {
+        return tps_lst.size();
     }
 
     Duration elapse() const
     {
-        return std::chrono::duration_cast<Duration>(Clock::now() - tps_lst.back().first);
+        return (std::chrono::time_point_cast<D>(Clock::now()) - begin);
     }
 
-    Duration last() const
+    Duration period(int idx) const
     {
-        return std::chrono::duration_cast<Duration>(tps_lst.back().second - tps_lst.back().first);
+        assert(idx < tps_lst.size());
+        return (tps_lst[idx].second - tps_lst[idx].first);
+    }
+
+    Duration lastPeriod() const
+    {
+        return (tps_lst.back().second - tps_lst.back().first);
     }
 
     Duration total() const
     {
-        Duration ret;
+        Duration ret = Duration{0};
         for (auto &tps : tps_lst)
         {
-            ret += std::chrono::duration_cast<Duration>(tps.second - tps.first);
+            ret += (tps.second - tps.first);
         }
 
         return ret;
@@ -69,37 +82,39 @@ template <typename D=std::chrono::duration<double, std::ratio<1>>, typename C=st
 class List
 {
 private:
+    using Duration = D;
     using Clock = typename Counter<D,C>::Clock;
-    const typename Clock::time_point begin_ = Clock::now();
-    std::unordered_map<std::string, Counter<D,C>> counters_ = {{"", Counter<D,C>{{begin_,begin_}}}};
+
+    const std::chrono::time_point<C,D> begin_ = std::chrono::time_point_cast<D>(Clock::now());
+    std::unordered_map<std::string, Counter<D,C>> counters_ = {{"", Counter<D,C>{}}};
 
 public:
     List() = default;
     ~List() = default;
-    List(const std::set<std::string> &tp_lst)
+    List(const std::set<std::string> &cnt_lst)
     {
-        for (const auto &tp_id : tp_lst)
-            counters_[tp_id].start(begin_);
+        for (const auto &cnt_id : cnt_lst)
+            counters_[cnt_id].start(begin_);
     }
 
-    Counter<D,C> const &operator()(const std::string tp_id="") const
+    Counter<D,C> const &operator()(const std::string cnt_id="") const
     {
-        return counters_.at(tp_id);
+        return counters_.at(cnt_id);
     }
 
-    Counter<D,C> &operator()(const std::string tp_id="")
+    Counter<D,C> &operator()(const std::string cnt_id="")
     {
-        return counters_[tp_id];
+        return counters_[cnt_id];
     }
 
-    Counter<D,C> const &counter(const std::string tp_id="") const
+    Counter<D,C> const &counter(const std::string cnt_id="") const
     {
-        return counters_.at(tp_id);
+        return counters_.at(cnt_id);
     }
 
-    Counter<D,C> &counter(const std::string tp_id="")
+    Counter<D,C> &counter(const std::string cnt_id="")
     {
-        return counters_[tp_id];
+        return counters_[cnt_id];
     }
 
 }; /// List

@@ -1,3 +1,4 @@
+#include <cmath>
 #include "../libs/logger.h"
 #include "../libs/utils.h"
 
@@ -25,13 +26,44 @@ bool testTimer()
 
     total_delta = time_lst("all").stop().count();
     LOGD("total: %d", total_delta);
+    LOGD("total2: %d", time_lst("all").total().count());
     LOGD("count: %d", count);
-    return count>(kLoop*0.9) && count<(kLoop*1.1);
+    // std::chrono::duration<double, std::ratio<1>>
+    return std::round(std::chrono::duration_cast<tll::time::Counter<>::Duration>(time_lst("all").total()).count()) == std::round(tracer__.timer().elapse().count());
+}
+
+bool testGuard()
+{
+    TLL_GLOGTF();
+    tll::time::List<> time_lst{};
+    {
+        tll::util::Guard time_guard{time_lst()};
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+
+    LOGD("total: %f", time_lst().total().count());
+    LOGD("last: %f", time_lst().lastPeriod().count());
+    LOGD("elapse: %f", time_lst().elapse().count());
+
+    {
+        time_lst().start();
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        time_lst().stop();
+    }
+
+    LOGD("total: %f", time_lst().total().count());
+    LOGD("last: %f", time_lst().lastPeriod().count());
+    LOGD("elapse: %f", time_lst().elapse().count());
+
+    return std::round(time_lst().total().count()) == std::round(tracer__.timer().elapse().count());
 }
 
 int main()
 {
-    bool rs = testTimer();
+    bool rs = false;
+    rs = testTimer();
     LOGD("testTimer: %s", rs?"Passed":"FAILED");
+    rs = testGuard();
+    LOGD("testGuard: %s", rs?"Passed":"FAILED");
     return 0;
 }

@@ -18,7 +18,7 @@ int write_cnt=0;
 int main(int argc, char const *argv[])
 {
     auto &logger = tll::log::Node::instance();
-    // auto ptr = logger.connectLog(tll::log::Flag::kAll, std::bind(printf, "%.*s", std::placeholders::_2, std::placeholders::_1));
+    // auto ptr = logger.connect(tll::log::Flag::kAll, std::bind(printf, "%.*s", std::placeholders::_2, std::placeholders::_1));
     tll::time::List<> timer;
     TLL_GLOGTF();
     {
@@ -53,7 +53,7 @@ int main(int argc, char const *argv[])
                         }};
         logger.add(file_ent1);
         {
-            tll::util::Guard{timer("starting")};
+            tll::util::Guard time_guard{timer("starting")};
             logger.start();
         }
         {
@@ -61,7 +61,7 @@ int main(int argc, char const *argv[])
             // #pragma omp parallel num_threads ( 16 )
             {
                 TLL_GLOGT(omp_parallel);
-                tll::util::Guard{timer("do logging")};
+                tll::util::Guard time_guard{timer("do logging")};
                 for(int i=0; i < std::stoi(argv[1]); i++)
                 {
                     TLL_GLOGD("this is debug logging");
@@ -70,20 +70,27 @@ int main(int argc, char const *argv[])
                     TLL_GLOGF("Ooops!!! fatal logging");
                     std::this_thread::sleep_for(std::chrono::milliseconds(std::stoi(argv[2])));
                 }
+                // LOGD("%.9f", cnt.elapse().count());
+                // cnt.stop();
             }
+            LOGD("%.9f", timer("do logging").lastPeriod().count());
+            LOGD("%.9f", timer("do logging").elapse().count());
+            LOGD("%.9f", timer("do logging").total().count());
         }
         // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         {
-            tll::util::Guard{timer("stopping")};
+            tll::util::Guard time_guard{timer("stopping")};
             logger.stop();
         }
+
+        logger.remove("file_ent1");
     }
 
     TLL_GLOGD("Write Count: %d", write_cnt);
-    TLL_GLOGD("starting: %.3f", timer("starting").total());
-    TLL_GLOGD("do logging: %.3f", timer("do logging").total());
-    TLL_GLOGD("stopping: %.3f", timer("stopping").total());
-    TLL_GLOGD("%.3f", timer().elapse());
+    TLL_GLOGD("starting: %.3f", timer("starting").total().count());
+    TLL_GLOGD("do logging: %.3f", timer("do logging").total().count());
+    TLL_GLOGD("stopping: %.3f", timer("stopping").total().count());
+    TLL_GLOGD("%.3f", timer().elapse().count());
 
     return 0;
 }
