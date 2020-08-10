@@ -206,7 +206,7 @@ struct Tracer
 
     ~Tracer()
     {
-        const auto duration = timer().stop();
+        const auto duration = timer().stop().total();
         if(on_log)
         {
             on_log(util::stringFormat("%s{%s}{%.6f(s)}\n",
@@ -217,6 +217,16 @@ struct Tracer
         }
         else if(!name.empty())
             printf(" (%.9f)~%s: %.6f (s)\n", util::timestamp(), name.data(), duration.count());
+    }
+
+    time::Counter<> &operator()(const std::string cnt_id="")
+    {
+        return timer(cnt_id);
+    }
+
+    time::Counter<> &operator()(const std::string cnt_id="") const
+    {
+        return timer(cnt_id);
     }
 
     std::string name = "";
@@ -277,10 +287,11 @@ public:
             time::List<std::chrono::duration<uint32_t, std::ratio<1, 1000>>> timer;
             auto buff_list = start_(chunk_size);
             uint32_t total_delta = 0;
+            std::vector<char> buff (chunk_size);
 
             while(isRunning())
             {
-                uint32_t delta = timer().restart().count();
+                uint32_t delta = timer().restart().last().count();
                 total_delta += delta;
 
                 if(total_delta >= period_ms)
@@ -290,9 +301,11 @@ public:
                     for(auto &buff_entry : buff_list)
                     {
                         auto &flag = buff_entry.first;
-                        auto &buff = buff_entry.second;
+                        auto &rb = buff_entry.second;
+                        size_t s = rb.pop(buff.data(), chunk_size);
+                        buff.resize(s);
                         onLog(flag, buff);
-                        buff.resize(0);
+                        // buff.resize(0);
                     }
                 }
 
@@ -319,19 +332,29 @@ public:
                 for(auto &buff_entry : buff_list)
                 {
                     auto &flag = buff_entry.first;
-                    auto &buff = buff_entry.second;
+                    auto &rb = buff_entry.second;
                     if((uint32_t)flag & (uint32_t)toFlag(log_msg.type))
                     {
                         std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(log_msg.type)], log_msg.payload);
-                        size_t const old_size = buff.size();
-                        size_t const new_size = old_size + payload.size();
-                        buff.resize(new_size);
-                        memcpy(buff.data() + old_size, payload.data(), payload.size());
+                        // size_t const old_size = rb.size();
+                        // rb.push();
+                        // rb.dump();
+                        // LOGD("%lu", rb.size());
+                        size_t const pushed = rb.push(payload.data(), payload.size());
+                        // rb.dump();
+                        // LOGD("%lu", rb.size());
+                        // buff.resize(new_size);
+                        // memcpy(buff.data() + old_size, payload.data(), payload.size());
                         /// TODO log exactly chunk_size
-                        if(new_size >= chunk_size)
+                        while(rb.size() >= chunk_size)
                         {
+                            // rb.dump();
+                            // LOGD("%lu", rb.size());
+                            buff.resize(chunk_size);
+                            size_t s = rb.pop(buff.data(), chunk_size);
+                            buff.resize(s);
                             onLog(flag, buff);
-                            buff.resize(0); /// avoid elem's destructor
+                            // buff.resize(0); /// avoid elem's destructor
                         }
                     }
                 }
@@ -347,21 +370,30 @@ public:
                 // }
             }
             /// TODO: popBatch
-            ring_queue_.popBatch(~0u, [this, &buff_list](uint32_t index, uint32_t elem_num, uint32_t) {
+            ring_queue_.popBatch(~0u, [this, &buff_list, &buff, chunk_size](uint32_t index, uint32_t elem_num, uint32_t) {
                 for(auto &entry : buff_list)
                 {
+                    auto &flag = entry.first;
+                    auto &rb = entry.second;
                     for(int i=0; i<elem_num; i++)
                     {
                         Message &log_msg = ring_queue_.elemAt(index + i);
-                        auto &flag = entry.first;
-                        auto &buff = entry.second;
                         if((uint32_t)flag & (uint32_t)toFlag(log_msg.type))
                         {
                             std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(log_msg.type)], log_msg.payload);
-                            size_t const old_size = buff.size();
-                            size_t const new_size = old_size + payload.size();
-                            buff.resize(new_size);
-                            memcpy(buff.data() + old_size, payload.data(), payload.size());
+                            // size_t const old_size = rb.size();
+                            // size_t const new_size = old_size + payload.size();
+                            // buff.resize(new_size);
+                            // memcpy(buff.data() + old_size, payload.data(), payload.size());
+                            rb.push(payload.data(), payload.size());
+
+                            while(rb.size() >= chunk_size)
+                            {
+                                buff.resize(chunk_size);
+                                size_t s = rb.pop(buff.data(), chunk_size);
+                                buff.resize(s);
+                                onLog(flag, buff);
+                            }
                         }
                     }
                 }
@@ -370,8 +402,16 @@ public:
             for(auto &buff_entry : buff_list)
             {
                 auto &flag = buff_entry.first;
-                auto &buff = buff_entry.second;
-                onLog(flag, buff);
+                auto &rb = buff_entry.second;
+            //     // while(!rb.isEmpty())
+                // {
+                    // LOGD("");
+                    buff.resize(chunk_size);
+                    size_t s = rb.pop(buff.data(), chunk_size);
+                    buff.resize(s);
+                    onLog(flag, buff);
+                // }
+            //     // assert (rb.isEmpty());
             }
         });
     }
@@ -415,15 +455,15 @@ public:
     //     return isRunning() ? false : stop_signal_.disconnect(id);
     // }
 
-    TLL_INLINE uintptr_t connect(Flag flag, util::Signal<void(const char*, size_t)>::Slot log)
-    {
-        return isRunning() ? 0 : log_signal_[flag].connect(log);
-    }
+    // TLL_INLINE uintptr_t connect(Flag flag, util::Signal<void(const char*, size_t)>::Slot log)
+    // {
+    //     return isRunning() ? 0 : log_signal_[flag].connect(log);
+    // }
 
-    TLL_INLINE bool disconnect(Flag flag, uintptr_t id)
-    {
-        return isRunning() ? false : log_signal_[flag].disconnect(id);
-    }
+    // TLL_INLINE bool disconnect(Flag flag, uintptr_t id)
+    // {
+    //     return isRunning() ? false : log_signal_[flag].disconnect(id);
+    // }
 
     TLL_INLINE bool isRunning() const 
     {
@@ -468,9 +508,9 @@ public:
 
 private:
 
-    TLL_INLINE void onLog(Flag flag, const std::vector<char> buff) const
+    TLL_INLINE void onLog(Flag flag, const std::vector<char> &buff) const
     {
-        this->log_signal_.at(flag).emit(buff.data(), buff.size());
+        // this->log_signal_.at(flag).emit(buff.data(), buff.size());
         for(auto &ent_entry : ents_)
         {
             auto &ent = ent_entry.second;
@@ -479,18 +519,18 @@ private:
         }
     }
 
-    TLL_INLINE void onLog(Type type, const std::string payload) const
+    TLL_INLINE void onLog(Type type, const std::string &payload) const
     {
-        for( auto &entry : log_signal_)
-        {
-            Flag flag = entry.first;
-            auto &log_sig = entry.second;
+        // for( auto &entry : log_signal_)
+        // {
+        //     Flag flag = entry.first;
+        //     auto &log_sig = entry.second;
 
-            if((uint32_t)flag & (uint32_t)toFlag(type))
-            {
-                log_sig.emit(payload.data(), payload.size());
-            }
-        }
+        //     if((uint32_t)flag & (uint32_t)toFlag(type))
+        //     {
+        //         log_sig.emit(payload.data(), payload.size());
+        //     }
+        // }
 
         for( auto &entry : ents_)
         {
@@ -502,23 +542,24 @@ private:
         }
     }
 
-    TLL_INLINE std::unordered_map<Flag, std::vector<char>> start_(uint32_t chunk_size)
+    // TLL_INLINE std::unordered_map<Flag, std::vector<char>> start_(uint32_t chunk_size)
+    TLL_INLINE std::unordered_map<Flag, util::ContiRB> start_(uint32_t chunk_size)
     {
         // start_signal_.emit();
-        std::unordered_map<Flag, std::vector<char>> buff_list;
-        for(const auto &entry : log_signal_)
-        {
-            auto flag = entry.first;
-            buff_list[flag].reserve(chunk_size);
-        }
+        std::unordered_map<Flag, util::ContiRB> buff_list;
+        // for(const auto &entry : log_signal_)
+        // {
+        //     auto flag = entry.first;
+        //     buff_list[flag].reserve(chunk_size);
+        // }
 
         for(auto &entry : ents_)
         {
             auto &ent = entry.second;
             auto flag = ent.flag;
-            log_signal_[flag];
+            // log_signal_[flag];
             ent.start();
-            buff_list[flag].reserve(chunk_size);
+            buff_list[flag].reserve(chunk_size * 0x100);
         }
         return buff_list;
     }
@@ -555,7 +596,7 @@ private:
     // uint32_t wait_ms_{100};
     std::thread broadcast_;
 
-    std::unordered_map<Flag, util::Signal<void (const char*, size_t)>> log_signal_;
+    // std::unordered_map<Flag, util::Signal<void (const char*, size_t)>> log_signal_;
     // util::Signal<void()> start_signal_;
     // util::Signal<void()> stop_signal_;
 

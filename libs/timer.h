@@ -15,39 +15,36 @@ class Counter
 public:
     using Clock = C;
     using Duration = D;
-    // using Type = typename Duration::rep;
-    // using Ratio = typename Duration::period;
+    using Type = typename Duration::rep;
+    using Ratio = typename Duration::period;
     using Timepoint = std::chrono::time_point<C,D>;
     using Timepoints = std::pair<Timepoint, Timepoint>;
     Timepoint begin=std::chrono::time_point_cast<D>(Clock::now());
-    std::vector<Timepoints> tps_lst;
+    std::vector<Duration> duration_lst;
 
     Counter() = default;
     ~Counter() = default;
-    // Counter(const Timepoints &tps) : tps_lst({tps})
-    // {}
 
-    void start(Timepoint tp=std::chrono::time_point_cast<D>(Clock::now()))
+    auto &start(Timepoint tp=std::chrono::time_point_cast<D>(Clock::now()))
     {
         begin = tp;
+        return *this;
     }
 
-    Duration stop()
+    auto &stop()
     {
-        tps_lst.push_back({begin, std::chrono::time_point_cast<D>(Clock::now())});
-        return lastPeriod();
+        duration_lst.push_back(elapse());
+        return *this;
     }
 
-    Duration restart()
+    auto &restart()
     {
-        stop();
-        start();
-        return lastPeriod();
+        return stop().start();
     }
 
     size_t size() const
     {
-        return tps_lst.size();
+        return duration_lst.size();
     }
 
     Duration elapse() const
@@ -57,21 +54,24 @@ public:
 
     Duration period(int idx) const
     {
-        assert(idx < tps_lst.size());
-        return (tps_lst[idx].second - tps_lst[idx].first);
+        assert(idx < duration_lst.size());
+        return duration_lst[idx];
+        // return (tps_lst[idx].second - tps_lst[idx].first);
     }
 
-    Duration lastPeriod() const
+    Duration last() const
     {
-        return (tps_lst.back().second - tps_lst.back().first);
+        assert(!duration_lst.empty());
+        return duration_lst.back();
+        // return (tps_lst.back().second - tps_lst.back().first);
     }
 
     Duration total() const
     {
         Duration ret = Duration{0};
-        for (auto &tps : tps_lst)
+        for (auto &duration : duration_lst)
         {
-            ret += (tps.second - tps.first);
+            ret += duration;
         }
 
         return ret;

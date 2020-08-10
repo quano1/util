@@ -153,97 +153,116 @@ T timestamp(typename C::time_point &&t = C::now())
 
 /// single thread
 /// no overrun/underrun check
-// struct ContiRB
-// {
-// public:
-//     ContiRB(size_t size) : head(0), tail(0)
-//     {
-//         wmark = isPowerOf2(size) ? size : nextPowerOf2(size);
-//         buffer(wmark);
-//     }
+struct ContiRB
+{
+public:
+    ContiRB() = default;
 
-//     inline bool push(/*char *data, */size_t size)
-//     {
-//         /// 1) wrap & real: head < tail < wmark (*)
-//         /// 2)        real: head < wmark < tail
-//         ///           wrap: tail < head < wmark
-//         /// 3) real & wrap: wmark < head < tail (*)
-//         assert(size < size());
-//         size_t next_tail = tail + size;
-//         /// TODO: overrun checking
-//         if(tail <= wmark) /// 1)
-//         {
-//             if(next_tail > wmark) /// rollover
-//             {
-//                 wmark = tail;
-//                 next_tail += unused();
-//             }
-//         }
-//         else /// 2 & 3)
-//         {
-//             if(head >= wmark) /// 3)
-//             {
-//                 /// move wmark to the end of the buffer
-//                 wmark = tail + buffer.size() - wrap(tail);
-//             }
-//         }
+    ContiRB(size_t size) : head(0), tail(0), wmark(0)
+    {
+        size = isPowerOf2(size) ? size : nextPowerOf2(size);
+        buffer.resize(size);
+    }
 
-//         tail = next_tail;
-//         return true;
-//     }
+    inline void dump() const
+    {
+        LOGD("%ld %ld %ld", head, tail, wmark);
+    }
 
-//     inline size_t pop(size_t size)
-//     {
-//         /// 1) wrap & real: head < tail < wmark (*)
-//         /// 2)        real: head < wmark < tail
-//         ///           wrap: tail < head < wmark
-//         /// 3) real & wrap: wmark < head < tail (*)
-//         size_t next_head;
-//         if(tail <= wmark) /// 1)
-//         {
-//             size = size > size() ? size() : size;
-//             next_head = head + size;
-//         }
-//         else /// 2 & 3)
-//         {
-//             if(head < wmark) /// 2)
-//             {
-//                 size = size > (wmark - head) ? (wmark - head) : size;
-//                 next_head = head + size;
-//             }
-//             else /// 3) rollover
-//             {
-//                 size_t begin = tail - wrap(tail);
-//                 size = size > size() ? size() : size;
-//                 next_head = begin + size;
-//             }
-//         }
+    inline void reserve(size_t size)
+    {
+        size = isPowerOf2(size) ? size : nextPowerOf2(size);
+        buffer.resize(size);
+    }
 
-//         head = next_head == wmark ? 0 : next_head;
-//         return size;
-//     }
+    inline size_t push(const char *data, size_t size)
+    {
+        /// 1) wrap & real: head >> tail >> wmrk (!)
 
-//     inline size_t size()
-//     { 
-//         return tail - head - unused();
-//     }
+        /// 2)        real: head >> wmrk >> tail
+        ///           wrap: tail >> head >> wmrk
+        /// 3) real & wrap: wmrk >> head >> tail (*)
+        if(isFull()) return 0;
+        // assert(size < this->size());
+        size_t offset = 0;
+        if(size > next(tail))
+        {
+            // size = next(tail);
+            offset = next(tail);
+        }
 
-//     inline size_t unused()
-//     {
-//         return head <= wmark ? buffer.size() - wmark : 0;
-//     }
+        if(size <= buffer.size() - this->size() - offset)
+        {
+            /// do copy;
+            memcpy(buffer.data() + wrap(tail + offset), data, size);
+            if(offset) {
+                wmark = tail;
+            }
+            tail = tail + offset + size;
+        }
+        else
+        {
+            /// overrun
+            LOGD("Ooops! overrun");
+            size = 0;
+        }
 
-//     inline size_t wrap(size_t index)
-//     {
-//         return index & (buffer.size() - 1);
-//     }
+        return size;
+    }
 
-//     inline bool isEmpty() { return size() == 0; }
-//     inline bool isFull() { return size() == (buffer.size() - unused()); }
+    inline size_t pop(char *data, size_t size)
+    {
+        if(isEmpty()) return 0;
+        size_t offset = 0;
+        if(head < wmark)
+        {
+            if(size >= (wmark - head))
+            {
+                size = wmark - head;
+                offset = unused();
+            }
+        }
+        else
+        {
+            if(size > (tail - head))
+            {
+                size = tail - head;
+            }
+        }
 
-//     size_t head, tail, wmark;
-//     std::vector<char> buffer;
-// };
+        memcpy(data, buffer.data() + wrap(head), size);
+        head += size + offset;
+        return size;
+    }
+
+    inline size_t size() const
+    {
+
+        return tail - head - unused();
+    }
+
+    inline size_t unused() const
+    {
+        return head < wmark ? buffer.size() - wrap(wmark) : 0;
+    }
+
+    inline size_t wrap(size_t index) const
+    {
+        return index & (buffer.size() - 1);
+    }
+
+    inline size_t next(size_t index) const
+    {
+        return buffer.size() - wrap(index);
+    }
+
+    inline bool isEmpty() { return this->size() == 0; }
+    inline bool isFull() { return this->size() == (buffer.size() - unused()); }
+
+    size_t head, tail, wmark;
+    std::vector<char> buffer;
+    std::mutex mtx;
+};
 
 /// lock-free queue
 template <typename T, size_t const kELemSize=sizeof(T)>
@@ -448,6 +467,7 @@ public:
 
     bool disconnect(uintptr_t id)
     {
+        std::lock_guard<std::mutex> guard{mtx_};
         auto it = std::find_if(slots_.begin(), slots_.end(),
             [id](const Slot &slot)
             {return id == (uintptr_t)(&slot);}
@@ -457,8 +477,9 @@ public:
         return true;
     }
 
-    void emit(Args &&...args) const
+    void emit(Args &&...args)
     {
+        std::lock_guard<std::mutex> guard{mtx_};
         for(auto &slot : slots_)
         {
             if(slot)
@@ -469,6 +490,7 @@ public:
     }
 private:
     std::list<Slot> slots_;
+    std::mutex mtx_;
 };
 
 template <class T> class Guard;
