@@ -235,6 +235,31 @@ public:
         return size;
     }
 
+    inline char *popHalf(size_t &size, size_t &offset)
+    {
+        if(isEmpty()) return 0;
+        offset = 0;
+        if(head < wmark)
+        {
+            if(size >= (wmark - head))
+            {
+                size = wmark - head;
+                offset = unused();
+            }
+        }
+        else
+        {
+            if(size > (tail - head))
+            {
+                size = tail - head;
+            }
+        }
+
+        // memcpy(data, buffer.data() + wrap(head), size);
+        // head += size + offset;
+        return buffer.data() + wrap(head);
+    }
+
     inline size_t size() const
     {
 

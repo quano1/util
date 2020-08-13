@@ -323,41 +323,72 @@ public:
                     }
                 }
 
-                Message log_msg;
-                ring_queue_.pop([this, chunk_size, &buff_list, &log_msg](Message &elem, uint32_t) {
-                    log_msg = std::move(elem);
-                    // buff_list[msg.flag]
-                });
-
-                for(auto &buff_entry : buff_list)
+                ring_queue_.popBatch(~0u, [this, &buff_list, &buff, chunk_size](uint32_t index, uint32_t elem_num, uint32_t)
                 {
-                    auto &flag = buff_entry.first;
-                    auto &rb = buff_entry.second;
-                    if((uint32_t)flag & (uint32_t)toFlag(log_msg.type))
+                    for(auto &entry : buff_list)
                     {
-                        std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(log_msg.type)], log_msg.payload);
-                        // size_t const old_size = rb.size();
-                        // rb.push();
-                        // rb.dump();
-                        // LOGD("%lu", rb.size());
-                        size_t const pushed = rb.push(payload.data(), payload.size());
-                        // rb.dump();
-                        // LOGD("%lu", rb.size());
-                        // buff.resize(new_size);
-                        // memcpy(buff.data() + old_size, payload.data(), payload.size());
-                        /// TODO log exactly chunk_size
-                        while(rb.size() >= chunk_size)
+                        auto &flag = entry.first;
+                        auto &rb = entry.second;
+                        for(int i=0; i<elem_num; i++)
                         {
-                            // rb.dump();
-                            // LOGD("%lu", rb.size());
-                            buff.resize(chunk_size);
-                            size_t s = rb.pop(buff.data(), chunk_size);
-                            buff.resize(s);
-                            onLog(flag, buff);
-                            // buff.resize(0); /// avoid elem's destructor
+                            Message &log_msg = ring_queue_.elemAt(index + i);
+                            if((uint32_t)flag & (uint32_t)toFlag(log_msg.type))
+                            {
+                                std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(log_msg.type)], log_msg.payload);
+                                rb.push(payload.data(), payload.size());
+                            }
                         }
                     }
+                });
+
+                for(auto &entry : buff_list)
+                {
+                    auto &flag = entry.first;
+                    auto &rb = entry.second;
+                    while(rb.size() >= chunk_size)
+                    {
+                        buff.resize(chunk_size);
+                        size_t s = rb.pop(buff.data(), chunk_size);
+                        buff.resize(s);
+                        onLog(flag, buff);
+                    }
                 }
+
+                // Message log_msg;
+                // ring_queue_.pop([this, chunk_size, &buff_list, &log_msg](Message &elem, uint32_t) {
+                //     log_msg = std::move(elem);
+                //     // buff_list[msg.flag]
+                // });
+
+                // for(auto &buff_entry : buff_list)
+                // {
+                //     auto &flag = buff_entry.first;
+                //     auto &rb = buff_entry.second;
+                //     if((uint32_t)flag & (uint32_t)toFlag(log_msg.type))
+                //     {
+                //         std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(log_msg.type)], log_msg.payload);
+                //         // size_t const old_size = rb.size();
+                //         // rb.push();
+                //         // rb.dump();
+                //         // LOGD("%lu", rb.size());
+                //         size_t const pushed = rb.push(payload.data(), payload.size());
+                //         // rb.dump();
+                //         // LOGD("%lu", rb.size());
+                //         // buff.resize(new_size);
+                //         // memcpy(buff.data() + old_size, payload.data(), payload.size());
+                //         /// TODO log exactly chunk_size
+                //         while(rb.size() >= chunk_size)
+                //         {
+                //             // rb.dump();
+                //             // LOGD("%lu", rb.size());
+                //             buff.resize(chunk_size);
+                //             size_t s = rb.pop(buff.data(), chunk_size);
+                //             buff.resize(s);
+                //             onLog(flag, buff);
+                //             // buff.resize(0); /// avoid elem's destructor
+                //         }
+                //     }
+                // }
 
                 // #pragma omp parallel num_threads(2)
                 // {
