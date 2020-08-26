@@ -28,7 +28,7 @@ int main(int argc, char const *argv[])
         //                 .name = "console",
         //                 .flag = tll::log::Flag::kAll,
         //                 .on_log = std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)};
-        tll::log::Entity file_ent1{
+        tll::log::Entity file_ent{
                         .name = "file", .flag = tll::log::Flag::kAll,
                         .on_log= [](void *handle, const char *buff, size_t size)
                         {
@@ -43,7 +43,7 @@ int main(int argc, char const *argv[])
                         .on_start = []()
                         {
                             write_cnt=0;
-                            return static_cast<void*>(new std::ofstream("file_ent1.log", std::ios::out | std::ios::binary));
+                            return static_cast<void*>(new std::ofstream("file_ent.log", std::ios::out | std::ios::binary));
                         }, 
                         .on_stop = [](void *&handle)
                         {
@@ -52,14 +52,14 @@ int main(int argc, char const *argv[])
                             delete static_cast<std::ofstream*>(handle);
                             handle = nullptr;
                         }};
-        logger.add(file_ent1);
+        logger.add(file_ent);
         {
             tll::util::Guard time_guard{tracer__("starting")};
             logger.start();
         }
         {
             TLL_GLOGT(log);
-            // #pragma omp parallel num_threads ( 16 )
+            #pragma omp parallel num_threads ( 16 )
             {
                 TLL_GLOGT(omp_parallel);
                 tll::util::Guard time_guard{tracer__("do logging")};
@@ -79,7 +79,7 @@ int main(int argc, char const *argv[])
             logger.stop();
         }
 
-        logger.remove("file_ent1");
+        logger.remove("file_ent");
     }
 
     TLL_GLOGD("Write Count: %d", write_cnt);

@@ -35,7 +35,7 @@ bool testTimer()
 bool testGuard()
 {
     TLL_GLOGTF();
-    tll::time::List<> time_lst{};
+    tll::time::List<tll::time::List<>::Duration, std::chrono::system_clock> time_lst{};
     {
         tll::util::Guard time_guard{time_lst()};
         std::this_thread::sleep_for(std::chrono::milliseconds(750));
@@ -95,8 +95,8 @@ int main()
     bool rs = false;
     // rs = testTimer();
     // LOGD("testTimer: %s", rs?"Passed":"FAILED");
-    // rs = testGuard();
-    // LOGD("testGuard: %s", rs?"Passed":"FAILED");
+    rs = testGuard();
+    LOGD("testGuard: %s", rs?"Passed":"FAILED");
 
     rs = testContiRB();
     LOGD("testContiRB: %s", rs?"Passed":"FAILED");

@@ -1,19 +1,20 @@
 #pragma once
 
-#include <vector>
-#include <chrono>
-#include <thread>
-#include <unordered_map>
+#include <cstring>
+#include <cassert>
 #include <string>
 #include <sstream>
-#include <atomic>
-#include <cstring>
 
+#include <vector>
+#include <list>
+
+#include <chrono>
+#include <thread>
+#include <atomic>
+#include <mutex>
 #include <memory>
 #include <functional>
-#include <list>
 #include <algorithm>
-#include <cassert>
 
 #ifndef STATIC_LIB
 #define TLL_INLINE inline
@@ -47,7 +48,7 @@ constexpr auto make_array(T && value)
     return make_array_impl<T, N>(std::forward<T>(value), std::make_index_sequence<N>{});
 }
 
-// template <typename... Args>
+
 inline std::thread::id tid()
 {
     return std::this_thread::get_id();
@@ -60,6 +61,21 @@ inline std::string fileName(const std::string &path)
         return path.substr(pos + 1);
     return path;
 }
+
+template <typename T>
+inline std::string to_string(T val)
+{
+    std::stringstream ss;
+    ss << val;
+    return ss.str();
+}
+
+template <typename T=double, typename D=std::ratio<1,1>, typename C=std::chrono::system_clock>
+T timestamp(typename C::time_point &&t = C::now())
+{
+    return std::chrono::duration_cast<std::chrono::duration<T,D>>(std::forward<typename C::time_point>(t).time_since_epoch()).count();
+}
+
 
 /// format
 template <typename T>
@@ -135,20 +151,6 @@ inline uint32_t nextPowerOf2(uint32_t val)
 inline bool isPowerOf2(uint32_t val)
 {
     return (val & (val - 1)) == 0;
-}
-
-template <typename T>
-inline std::string to_string(T val)
-{
-    std::stringstream ss;
-    ss << val;
-    return ss.str();
-}
-
-template <typename T=double, typename D=std::ratio<1,1>, typename C=std::chrono::system_clock>
-T timestamp(typename C::time_point &&t = C::now())
-{
-    return std::chrono::duration_cast<std::chrono::duration<T,D>>(std::forward<typename C::time_point>(t).time_since_epoch()).count();
 }
 
 /// single thread

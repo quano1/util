@@ -1,26 +1,21 @@
 #pragma once
 
-#include <fstream>
+#include <string>
+#include <cassert>
+#include <cstring>
+
 #include <vector>
-#include <mutex>
+#include <unordered_map>
+
 #include <chrono>
 #include <thread>
-#include <sstream>
-#include <string>
-#include <unordered_set>
-#include <cassert>
-#include <cstdarg>
-#include <functional>
-#include <array>
-#include <unordered_map>
 #include <atomic>
-#include <cstring>
 #include <memory>
-#include <list>
-#include <algorithm>
-#include <omp.h>
-#include <set>
+#include <mutex>
 #include <condition_variable>
+
+#include <omp.h>
+
 #include "utils.h"
 #include "timer.h"
 
@@ -325,13 +320,13 @@ public:
 
                 ring_queue_.popBatch(~0u, [this, &buff_list, &buff, chunk_size](uint32_t index, uint32_t elem_num, uint32_t)
                 {
-                    for(auto &entry : buff_list)
+                    for(int i=0; i<elem_num; i++)
                     {
-                        auto &flag = entry.first;
-                        auto &rb = entry.second;
-                        for(int i=0; i<elem_num; i++)
+                        Message &log_msg = ring_queue_.elemAt(index + i);
+                        for(auto &entry : buff_list)
                         {
-                            Message &log_msg = ring_queue_.elemAt(index + i);
+                            auto &flag = entry.first;
+                            auto &rb = entry.second;
                             if((uint32_t)flag & (uint32_t)toFlag(log_msg.type))
                             {
                                 std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(log_msg.type)], log_msg.payload);
@@ -590,7 +585,7 @@ private:
             auto flag = ent.flag;
             // log_signal_[flag];
             ent.start();
-            buff_list[flag].reserve(chunk_size * 0x100);
+            buff_list[flag].reserve(chunk_size * 0x400);
         }
         return buff_list;
     }
@@ -619,7 +614,7 @@ private:
     }
 
     std::atomic<bool> is_running_{false};
-    util::LFQueue<Message> ring_queue_{0x1000};
+    util::LFQueue<Message> ring_queue_{0x10000};
     std::unordered_map<std::string, Entity> ents_ = {{"console", Entity{
                 "console",
                 Flag::kAll, 
@@ -650,13 +645,14 @@ TLL_INLINE void Node::log<Mode::kAsync>(Message msg)
     if(!isRunning())
     {
         log<Mode::kSync>(msg);
-        /// FIXME: force push?
+        /// TODO: force push?
     }
     else
     {
-        ring_queue_.push([](Message &elem, uint32_t size, Message msg) {
+        bool rs = ring_queue_.push([](Message &elem, uint32_t size, Message msg) {
             elem = std::move(msg);
         }, msg);
+        assert(rs);
 
         pop_wait_.notify_one();
     }
