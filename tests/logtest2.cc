@@ -10,16 +10,43 @@
 
 // #include "../libs/SimpleSignal.hpp"
 // #include "../libs/utils.h"
-#include "../libs/logger.h"
+#include "../libs/log.h"
 // #include "../libs/exporterudp.h"
 
 int write_cnt=0;
 
 int main(int argc, char const *argv[])
 {
-    auto &logger = tll::log::Node::instance();
+    auto &logger = tll::log::Node::instance<0x10000>();
     // auto ptr = logger.connect(tll::log::Flag::kAll, std::bind(printf, "%.*s", std::placeholders::_2, std::placeholders::_1));
     // tll::time::List<> timer;
+
+#undef TLL_GLOGTF
+#undef TLL_GLOGT
+#undef TLL_GLOGD
+#undef TLL_GLOGI
+#undef TLL_GLOGW
+#undef TLL_GLOGF
+#define TLL_GLOGTF() TLL_LOGTF(&logger)
+#define TLL_GLOGT(...) TLL_LOGT(&logger, ##__VA_ARGS__)
+#define TLL_GLOGD(...) TLL_LOGD(&logger, ##__VA_ARGS__)
+#define TLL_GLOGI(...) TLL_LOGI(&logger, ##__VA_ARGS__)
+#define TLL_GLOGW(...) TLL_LOGW(&logger, ##__VA_ARGS__)
+#define TLL_GLOGF(...) TLL_LOGF(&logger, ##__VA_ARGS__)
+LOGD("");
+tll::log::ContextMap::instance()();
+LOGD("");
+auto str = (tll::log::ContextMap::instance()(), tll::util::stringFormat("{%.9f}{%s}{%d}{%s}{%s}",\
+  tll::util::timestamp<double>(),\
+  tll::util::to_string(tll::util::tid()),\
+  tll::log::ContextMap::instance().level(),\
+  tll::log::ContextMap::instance().get<tll::log::ContextMap::Prev>(),\
+  tll::log::ContextMap::instance().get<tll::log::ContextMap::Curr>()));
+
+LOGD("");
+TLL_GLOGD("");
+LOGD("");
+
     TLL_GLOGTF();
     {
         TLL_GLOGT(MAIN);
@@ -54,7 +81,7 @@ int main(int argc, char const *argv[])
                         }};
         logger.add(file_ent);
         {
-            tll::util::Guard time_guard{tracer__("starting")};
+            tll::util::Guard<tll::time::Counter<>> time_guard{tracer__("starting")};
             logger.start();
         }
         {
@@ -62,20 +89,20 @@ int main(int argc, char const *argv[])
             #pragma omp parallel num_threads ( 16 )
             {
                 TLL_GLOGT(omp_parallel);
-                tll::util::Guard time_guard{tracer__("do logging")};
+                tll::util::Guard<tll::time::Counter<>> time_guard{tracer__("do logging")};
                 for(int i=0; i < std::stoi(argv[1]); i++)
                 {
                     TLL_GLOGD("this is debug logging");
                     TLL_GLOGI("Some information");
                     TLL_GLOGW("A warning!!!");
                     TLL_GLOGF("Ooops!!! fatal logging");
-                    std::this_thread::sleep_for(std::chrono::milliseconds(std::stoi(argv[2])));
+                    std::this_thread::sleep_for(std::chrono::nanoseconds(std::stoi(argv[2])));
                 }
             }
         }
         // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         {
-            tll::util::Guard time_guard{tracer__("stopping")};
+            tll::util::Guard<tll::time::Counter<>> time_guard{tracer__("stopping")};
             logger.stop();
         }
 

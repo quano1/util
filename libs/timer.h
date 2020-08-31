@@ -7,7 +7,7 @@
 #include <cassert>
 #include <mutex>
 
-namespace tll::time {
+namespace tll{ namespace time{
 
 template <typename D=std::chrono::duration<double, std::ratio<1>>, typename C=std::chrono::steady_clock>
 class Counter
@@ -123,4 +123,4 @@ public:
 
 }; /// List
 
-} /// tll::time
+}} /// tll::time
