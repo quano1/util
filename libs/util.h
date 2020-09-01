@@ -22,6 +22,8 @@
 #define TLL_INLINE
 #endif
 
+#define ASSERTM(exp, msg) assert(((void)msg, exp))
+
 #define LOGPD(format, ...) printf("(D)(%.9f)(%s)(%s:%s:%d)(" format ")\n", tll::util::timestamp(), tll::util::to_string(tll::util::tid()).data(), tll::util::fileName(__FILE__).data(), __PRETTY_FUNCTION__, __LINE__, ##__VA_ARGS__)
 #define LOGD(format, ...) printf("(D)(%.9f)(%s)(%s:%s:%d)(" format ")\n", tll::util::timestamp(), tll::util::to_string(tll::util::tid()).data(), tll::util::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__)
 #define LOGE(format, ...) printf("(E)(%.9f)(%s)(%s:%s:%d)(" format ")(%s)\n", tll::util::timestamp(), tll::util::to_string(tll::util::tid()).data(), tll::util::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__, strerror(errno))
@@ -180,7 +182,7 @@ public:
     {
         if(isEmpty()) return nullptr;
         offset = 0;
-
+        /// tail is rollover?
         if(head < wmark)
         {
             if(size >= (wmark - head))
@@ -207,7 +209,7 @@ public:
 
     inline char *pushHalf(size_t &size, size_t &offset)
     {
-        if(isFull()) return 0;
+        if(isFull()) return nullptr;
         offset = 0;
         /// rollover?
         if(size > next(tail))
@@ -222,7 +224,7 @@ public:
         else
         {
             /// overrun
-            LOGD("Ooops! overrun");
+            assert((false) && "Ooops! overrun");
         }
 
         return nullptr;

@@ -493,10 +493,10 @@ private:
 
     std::atomic<bool> is_running_{false};
     util::LFQueue<Message> ring_queue_{0x10000};
-    std::unordered_map<std::string, Entity> ents_ = {{"console", Entity{
+    std::unordered_map<std::string, Entity> ents_/* = {{"console", Entity{
                 "console",
                 Flag::kAll, 
-                std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)}}};
+                std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)}}}*/;
     std::thread broadcast_;
 
     std::condition_variable pop_wait_, join_wait_;

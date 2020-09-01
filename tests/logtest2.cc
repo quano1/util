@@ -65,11 +65,11 @@ LOGD("");
                                 return;
                             }
                             static_cast<std::ofstream*>(handle)->write((const char *)buff, size);
-                            write_cnt++;
+                            // write_cnt++;
                         },
                         .on_start = []()
                         {
-                            write_cnt=0;
+                            // write_cnt=0;
                             return static_cast<void*>(new std::ofstream("file_ent.log", std::ios::out | std::ios::binary));
                         }, 
                         .on_stop = [](void *&handle)
@@ -109,7 +109,7 @@ LOGD("");
         logger.remove("file_ent");
     }
 
-    TLL_GLOGD("Write Count: %d", write_cnt);
+    // TLL_GLOGD("Write Count: %d", write_cnt);
     TLL_GLOGD("starting: %.6f", tracer__("starting").total().count());
     TLL_GLOGD("do logging: %.6f", tracer__("do logging").total().count());
     TLL_GLOGD("stopping: %.6f", tracer__("stopping").total().count());
