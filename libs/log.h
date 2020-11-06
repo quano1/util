@@ -13,11 +13,12 @@
 #include <memory>
 #include <mutex>
 #include <condition_variable>
-
+#include <fstream>
 #include <omp.h>
 
 #include "util.h"
 #include "timer.h"
+extern char *__progname;
 
 #define LOG_HEADER_ (tll::log::ContextMap::instance()(), tll::util::stringFormat("{%.9f}{%s}{%d}{%s}{%s}",\
   tll::util::timestamp<double>(),\
@@ -91,10 +92,6 @@ constexpr Flag toFlag(Type type, Args ...args)
     return toFlag(type) | toFlag(args...);
 }
 
-typedef std::function<void *()> OnStart;
-typedef std::function<void(void *&)> OnStop;
-typedef std::function<void(void*, const char*, size_t)> OnLog;
-
 struct Message
 {
     Type type;
@@ -105,27 +102,27 @@ struct Entity
 {
     std::string name;
     Flag flag;
-    OnLog on_log;
-    OnStart on_start;
-    OnStop on_stop;
+    std::function<void(void*, const char*, size_t)> onLog;
+    std::function<void *()> onStart;
+    std::function<void(void *&)> onStop;
     void *handle;
 
 private:
     void start()
     {
-        if(handle == nullptr && on_start)
-            handle = on_start();
+        if(handle == nullptr && onStart)
+            handle = onStart();
     }
 
     void log(const char *buff, size_t size) const
     {
-        on_log(handle, buff, size);
+        onLog(handle, buff, size);
     }
 
     void stop()
     {
-        if(on_stop)
-            on_stop(handle);
+        if(onStop)
+            onStop(handle);
     }
 
     friend class Node;
@@ -189,16 +186,16 @@ struct Tracer
     Tracer(std::function<void(std::string const&)> logf, std::string header, std::string id="") : name(std::move(id))
     {
         // sig_log.connect(logf);
-        on_log = std::move(logf);
-        on_log(util::stringFormat("%s{%s}\n", header, name));
+        doLog = std::move(logf);
+        doLog(util::stringFormat("%s{%s}\n", header, name));
     }
 
     ~Tracer()
     {
         const auto duration = timer().elapse().count();
-        if(on_log)
+        if(doLog)
         {
-            on_log(util::stringFormat("%s{%s}{%.6f(s)}\n",
+            doLog(util::stringFormat("%s{%s}{%.6f(s)}\n",
                                       LOG_HEADER_,
                                       name,
                                       duration));
@@ -221,13 +218,17 @@ struct Tracer
     std::string name = "";
     time::Map<> timer;
 
-    std::function<void(std::string const&)> on_log;
+    std::function<void(std::string const&)> doLog;
 }; /// Tracer
 
 class Node
 {
 public:
-    Node() = default;
+    Node()
+    {
+        // start_(0);
+        start();
+    }
 
     Node(uint32_t queue_size) :
         ring_queue_{queue_size}
@@ -283,7 +284,7 @@ public:
 
             std::function<void(uint32_t, uint32_t, uint32_t)> onPopBatch{[this, &buff_list](uint32_t index, uint32_t elem_num, uint32_t)
             {
-                for(int i=0; i<elem_num; i++)
+                for(uint32_t i=0; i<elem_num; i++)
                 {
                     Message &log_msg = ring_queue_.elemAt(index + i);
                     for(auto &entry : buff_list)
@@ -314,7 +315,7 @@ public:
                         auto &rb = buff_entry.second;
                         size_t s = rb.pop(buff.data(), chunk_size);
                         buff.resize(s);
-                        onLog(flag, buff);
+                        log_(flag, buff);
                         // buff.resize(0);
                     }
                 }
@@ -344,7 +345,7 @@ public:
                         buff.resize(chunk_size);
                         size_t s = rb.pop(buff.data(), chunk_size);
                         buff.resize(s);
-                        onLog(flag, buff);
+                        log_(flag, buff);
                     }
                 }
             }
@@ -360,7 +361,7 @@ public:
                     buff.resize(chunk_size);
                     size_t s = rb.pop(buff.data(), chunk_size);
                     buff.resize(s);
-                    onLog(flag, buff);
+                    log_(flag, buff);
                 }
             }
         });
@@ -421,6 +422,7 @@ public:
         else
         {
             singleton.store(new Node{}, std::memory_order_release);
+            // singleton->start_(0);
         }
 
         return *singleton.load(std::memory_order_acquire);
@@ -440,7 +442,7 @@ public:
 
 private:
 
-    TLL_INLINE void onLog(Flag flag, const std::vector<char> &buff) const
+    TLL_INLINE void log_(Flag flag, const std::vector<char> &buff) const
     {
         for(auto &ent_entry : ents_)
         {
@@ -450,7 +452,7 @@ private:
         }
     }
 
-    TLL_INLINE void onLog(Type type, const std::string &payload) const
+    TLL_INLINE void log_(Type type, const std::string &payload) const
     {
         for( auto &entry : ents_)
         {
@@ -471,7 +473,10 @@ private:
             auto &ent = entry.second;
             auto flag = ent.flag;
             ent.start();
-            buff_list[flag].reserve(chunk_size * 0x400);
+            if(chunk_size > 0)
+            {
+                buff_list[flag].reserve(chunk_size * 0x400);
+            }
         }
         return buff_list;
     }
@@ -493,10 +498,32 @@ private:
 
     std::atomic<bool> is_running_{false};
     util::LFQueue<Message> ring_queue_{0x10000};
-    std::unordered_map<std::string, Entity> ents_ = {{"console", Entity{
-                "console",
-                Flag::kAll, 
-                std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)}}};
+    std::unordered_map<std::string, Entity> ents_ = {{"file", Entity{
+                .name = "file", .flag = tll::log::Flag::kAll,
+                [](void *handle, const char *buff, size_t size)
+                {
+                    if(handle == nullptr)
+                    {
+                        printf("%.*s", (int)size, buff);
+                        return;
+                    }
+                    static_cast<std::ofstream*>(handle)->write((const char *)buff, size);
+                },
+                []()
+                {
+                    auto const &file = util::stringFormat("/tmp/%s.log", __progname);
+                    LOGD("%s", file.data());
+                    return static_cast<void*>(new std::ofstream(file, std::ios::out | std::ios::binary));
+                }, 
+                [](void *&handle)
+                {
+                    LOGD("");
+                    static_cast<std::ofstream*>(handle)->flush();
+                    static_cast<std::ofstream*>(handle)->close();
+                    delete static_cast<std::ofstream*>(handle);
+                    handle = nullptr;
+                }
+            }}};
     std::thread broadcast_;
 
     std::condition_variable pop_wait_, join_wait_;
@@ -509,7 +536,7 @@ TLL_INLINE void Node::log<Mode::kSync>(Message msg)
     /// TODO add pre-format
     std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(int)msg.type], msg.payload);
 
-    onLog(msg.type, payload);
+    log_(msg.type, payload);
 }
 
 template <>

@@ -57,7 +57,7 @@ LOGD("");
         //                 .on_log = std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)};
         tll::log::Entity file_ent{
                         .name = "file", .flag = tll::log::Flag::kAll,
-                        .on_log= [](void *handle, const char *buff, size_t size)
+                        [](void *handle, const char *buff, size_t size)
                         {
                             if(handle == nullptr)
                             {
@@ -67,19 +67,19 @@ LOGD("");
                             static_cast<std::ofstream*>(handle)->write((const char *)buff, size);
                             // write_cnt++;
                         },
-                        .on_start = []()
+                        []()
                         {
                             // write_cnt=0;
                             return static_cast<void*>(new std::ofstream("file_ent.log", std::ios::out | std::ios::binary));
                         }, 
-                        .on_stop = [](void *&handle)
+                        [](void *&handle)
                         {
                             static_cast<std::ofstream*>(handle)->flush();
                             static_cast<std::ofstream*>(handle)->close();
                             delete static_cast<std::ofstream*>(handle);
                             handle = nullptr;
                         }};
-        logger.add(file_ent);
+        // logger.add(file_ent);
         {
             tll::util::Guard<tll::time::Counter<>> time_guard{tracer__("starting")};
             logger.start();
