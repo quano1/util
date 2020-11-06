@@ -1,61 +1,65 @@
 #include <cmath>
-#include "../libs/logger.h"
-#include "../libs/utils.h"
+#include "../libs/timer.h"
+#include "../libs/util.h"
+#include "../libs/log.h"
 
 bool testTimer()
 {
     TLL_GLOGTF();
-    tll::time::List<std::chrono::duration<uint32_t, std::ratio<1, 1000>>> time_lst{{"all"}};
+    typedef tll::time::Counter<std::chrono::duration<uint32_t, std::ratio<1, 1000000>>> UsCounter;
+    // tll::time::Map<std::chrono::duration<uint32_t, std::ratio<1, 1000>>> timer{{"all"}};
+    tll::time::Map<UsCounter> timer{{"all"}};
+
     uint32_t total_delta = 0;
-    constexpr uint32_t kPeriodMs = 5;
-    constexpr int kLoop = 100;
-    int count=0;
+    constexpr uint32_t kPeriodMs = 50000;
+    constexpr int kLoop = 10;
     for (int i=0; i<kLoop; i++)
     {
-        uint32_t delta = time_lst().restart().last().count();
+        uint32_t delta = timer().restart().duration().count();
         total_delta+=delta;
         if(total_delta >= kPeriodMs)
         {
             total_delta = total_delta%kPeriodMs;
-            count++;
         }
 
         uint32_t sleep_ms = kPeriodMs - total_delta;
-        std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
+        LOGD("sleep: %d (us)", sleep_ms);
+        std::this_thread::sleep_for(std::chrono::microseconds(sleep_ms));
     }
 
-    total_delta = time_lst("all").stop().last().count();
-    LOGD("total: %d", total_delta);
-    LOGD("total2: %d", time_lst("all").total().count());
-    LOGD("count: %d", count);
-    // std::chrono::duration<double, std::ratio<1>>
-    return std::round(std::chrono::duration_cast<tll::time::Counter<>::Duration>(time_lst("all").total()).count()) == std::round(tracer__.timer().elapse().count());
+    // total_delta = timer("all").stop().duration().count();
+    LOGD("total default: %d (us)", timer().stop().total().count());
+    LOGD("total all: %d (us)", timer("all").stop().total().count());
+
+    return timer("all").total().count() / 10000 == timer().total().count() / 10000;
 }
 
 bool testGuard()
 {
     TLL_GLOGTF();
-    tll::time::List<tll::time::List<>::Duration, std::chrono::system_clock> time_lst{};
+    // tll::time::Map<tll::time::Map<>::Duration, std::chrono::system_clock> timer{};
+    typedef tll::time::Counter<tll::time::Counter<>::Duration, std::chrono::system_clock> SystemCounter;
+    tll::time::Map<SystemCounter> timer{};
     {
-        tll::util::Guard time_guard{time_lst()};
+        tll::util::Guard<SystemCounter> time_guard{timer()};
         std::this_thread::sleep_for(std::chrono::milliseconds(750));
     }
 
-    LOGD("total: %f", time_lst().total().count());
-    LOGD("last: %f", time_lst().last().count());
-    LOGD("elapse: %f", time_lst().elapse().count());
+    LOGD("total: %f", timer().total().count());
+    LOGD("last: %f", timer().duration().count());
+    LOGD("elapse: %f", timer().elapse().count());
 
     {
-        time_lst().start();
+        timer().start();
         std::this_thread::sleep_for(std::chrono::milliseconds(750));
-        time_lst().stop();
+        timer().stop();
     }
 
-    LOGD("total: %f", time_lst().total().count());
-    LOGD("last: %f", time_lst().last().count());
-    LOGD("elapse: %f", time_lst().elapse().count());
+    LOGD("total: %f", timer().total().count());
+    LOGD("last: %f", timer().duration().count());
+    LOGD("elapse: %f", timer().elapse().count());
 
-    return std::round(time_lst().total().count()) == std::round(tracer__.timer().elapse().count()) && std::round(time_lst().period(0).count()) == std::round(time_lst().period(1).count());
+    return std::round(timer().total().count()) == std::round(tracer__.timer().elapse().count()) && std::round(timer().duration(0).count()) == std::round(timer().duration(1).count());
 }
 
 bool testContiRB()
@@ -93,8 +97,9 @@ bool testContiRB()
 int main()
 {
     bool rs = false;
-    // rs = testTimer();
-    // LOGD("testTimer: %s", rs?"Passed":"FAILED");
+    rs = testTimer();
+    LOGD("testTimer: %s", rs?"Passed":"FAILED");
+
     rs = testGuard();
     LOGD("testGuard: %s", rs?"Passed":"FAILED");
 

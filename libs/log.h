@@ -195,17 +195,17 @@ struct Tracer
 
     ~Tracer()
     {
-        const auto duration = timer().stop().total();
+        const auto duration = timer().elapse().count();
         if(on_log)
         {
             on_log(util::stringFormat("%s{%s}{%.6f(s)}\n",
                                       LOG_HEADER_,
                                       name,
-                                      duration.count()));
+                                      duration));
             log::ContextMap::instance()().pop_back();
         }
         else if(!name.empty())
-            printf(" (%.9f)~%s: %.6f (s)\n", util::timestamp(), name.data(), duration.count());
+            printf(" (%.9f)~%s: %.6f (s)\n", util::timestamp(), name.data(), duration);
     }
 
     time::Counter<> &operator()(const std::string cnt_id="")
@@ -219,7 +219,7 @@ struct Tracer
     }
 
     std::string name = "";
-    time::List<> timer;
+    time::Map<> timer;
 
     std::function<void(std::string const&)> on_log;
 }; /// Tracer
@@ -276,7 +276,7 @@ public:
 
         broadcast_ = std::thread([this, chunk_size, period_ms]()
         {
-            time::List<std::chrono::duration<uint32_t, std::ratio<1, 1000>>> timer;
+            time::Map<> timer;
             auto buff_list = start_(chunk_size);
             uint32_t total_delta = 0;
             std::vector<char> buff (chunk_size);
@@ -301,7 +301,7 @@ public:
 
             while(isRunning())
             {
-                uint32_t delta = timer().restart().last().count();
+                uint32_t delta = timer().restart().duration().count();
                 total_delta += delta;
 
                 if(total_delta >= period_ms)
@@ -493,10 +493,10 @@ private:
 
     std::atomic<bool> is_running_{false};
     util::LFQueue<Message> ring_queue_{0x10000};
-    std::unordered_map<std::string, Entity> ents_/* = {{"console", Entity{
+    std::unordered_map<std::string, Entity> ents_ = {{"console", Entity{
                 "console",
                 Flag::kAll, 
-                std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)}}}*/;
+                std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)}}};
     std::thread broadcast_;
 
     std::condition_variable pop_wait_, join_wait_;

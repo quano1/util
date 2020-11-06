@@ -9,6 +9,9 @@
 
 namespace tll{ namespace time{
 
+// template <typename, typename>
+// class Counter;
+
 template <typename D=std::chrono::duration<double, std::ratio<1>>, typename C=std::chrono::steady_clock>
 class Counter
 {
@@ -42,6 +45,17 @@ public:
         return stop().start();
     }
 
+    Duration elapse() const
+    {
+        return (std::chrono::time_point_cast<D>(Clock::now()) - begin_);
+    }
+
+    auto &clear()
+    {
+        duration_lst_.clear();
+        return *this;
+    }
+
     const Tp &begin() const
     {
         return begin_;
@@ -52,21 +66,18 @@ public:
         return duration_lst_.size();
     }
 
-    Duration elapse() const
+    Duration duration(size_t idx=-1) const
     {
-        return (std::chrono::time_point_cast<D>(Clock::now()) - begin_);
-    }
+        if (duration_lst_.empty())
+        {
+            return elapse();
+        }
+        else if (idx >= duration_lst_.size())
+        {
+            return duration_lst_.back();
+        }
 
-    Duration period(int idx) const
-    {
-        assert(idx < duration_lst_.size());
         return duration_lst_[idx];
-    }
-
-    Duration last() const
-    {
-        assert(!duration_lst_.empty());
-        return duration_lst_.back();
     }
 
     Duration total() const
@@ -81,42 +92,47 @@ public:
     }
 }; /// Counter
 
-template <typename D=std::chrono::duration<double, std::ratio<1>>, typename C=std::chrono::steady_clock>
-class List
+// template <typename D=std::chrono::duration<double, std::ratio<1>>, typename C=std::chrono::steady_clock>
+// template < template <typename D, typename C> class Cnt = Counter >
+
+// template <template <typename, typename> class> class Map;
+
+template <class Cnt=Counter<>>
+class Map 
 {
 public:
-    using Duration = D;
-    using Clock = typename Counter<D,C>::Clock;
+    using Duration = typename Cnt::Duration;
+    using Clock = typename Cnt::Clock;
 
 private:
-    const std::chrono::time_point<C,D> begin_ = std::chrono::time_point_cast<D>(Clock::now());
-    std::unordered_map<std::string, Counter<D,C>> counters_ = {{"", Counter<D,C>{}}};
+    const std::chrono::time_point<Clock, Duration> begin_ = std::chrono::time_point_cast<Duration>(Clock::now());
+    std::unordered_map<std::string, Cnt> counters_ = {{"", Cnt{}}};
 
 public:
-    List() = default;
-    ~List() = default;
-    List(const std::set<std::string> &cnt_lst)
+    Map() = default;
+    ~Map() = default;
+    Map(const std::set<std::string> &cnt_lst)
     {
         for (const auto &cnt_id : cnt_lst)
             counters_[cnt_id].start(begin_);
     }
 
-    Counter<D,C> const &operator()(const std::string cnt_id="") const
+    Cnt const &operator()(const std::string cnt_id="") const
     {
         return counters_.at(cnt_id);
     }
 
-    Counter<D,C> &operator()(const std::string cnt_id="")
+    Cnt &operator()(const std::string cnt_id="")
     {
         return counters_[cnt_id];
     }
 
-    Counter<D,C> const &counter(const std::string cnt_id="") const
+    Cnt const &get(const std::string cnt_id="") const
     {
         return counters_.at(cnt_id);
     }
 
-    Counter<D,C> &counter(const std::string cnt_id="")
+    Cnt &get(const std::string cnt_id="")
     {
         return counters_[cnt_id];
     }

@@ -550,12 +550,11 @@ static T &instance()
 {
     static std::atomic<T*> singleton{nullptr};
     static std::atomic<bool> init{false};
-    bool tmp = false;
 
     if (singleton.load(std::memory_order_relaxed))
         return *singleton.load(std::memory_order_acquire);
 
-    if(!init.compare_exchange_strong(tmp, true))
+    if(init.exchange(true))
     {
         while(!singleton.load(std::memory_order_relaxed)){}
     }
