@@ -15,9 +15,15 @@
 #include <condition_variable>
 #include <fstream>
 #include <omp.h>
+#include <unistd.h>
 
 #include "util.h"
 #include "timer.h"
+
+#ifndef TLL_DEFAULT_LOG_PATH
+#define TLL_DEFAULT_LOG_PATH "."
+#endif
+
 extern char *__progname;
 
 #define LOG_HEADER_ (tll::log::ContextMap::instance()(), tll::util::stringFormat("{%.9f}{%s}{%d}{%s}{%s}",\
@@ -382,6 +388,7 @@ public:
             auto &ent = ent_entry.second;
             ent.stop();
         }
+        LOGD("");
     }
 
     TLL_INLINE bool isRunning() const 
@@ -511,7 +518,8 @@ private:
                 },
                 []()
                 {
-                    auto const &file = util::stringFormat("/tmp/%s.log", __progname);
+                    auto log_path =std::getenv("TLL_LOG_PATH");
+                    auto const &file = util::stringFormat("%s/%s.%d.log", log_path ? log_path : TLL_DEFAULT_LOG_PATH, __progname, getpid());
                     LOGD("%s", file.data());
                     return static_cast<void*>(new std::ofstream(file, std::ios::out | std::ios::binary));
                 }, 
@@ -559,7 +567,6 @@ TLL_INLINE void Node::log<Mode::kAsync>(Message msg)
 }
 
 }} /// tll::log
-
 #ifdef STATIC_LIB
 #include "Node.cc"
 #endif

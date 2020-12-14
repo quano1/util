@@ -17,6 +17,11 @@
 #include <algorithm>
 #include <utility>
 
+#ifdef __ANDROID__
+#include <android/log.h>
+#define printf(...) __android_log_print(ANDROID_LOG_DEBUG, "TLL", __VA_ARGS__)
+#endif
+
 #ifndef STATIC_LIB
 #define TLL_INLINE inline
 #else

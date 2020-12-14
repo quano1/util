@@ -4,71 +4,71 @@
 # while [[ eof_ -eq 0 ]]; do
 # sort -t "}" -k2 | \
 
-[[ -z $4 ]] && color_enable=0 || color_enable=1
+color_enabled=${4:-0};
+sort_enabled=${5:-0};
 
 function parse()
 {
     # total_lines=`dd if=${1} iflag=skip_bytes,count_bytes,nonblock bs=${2} skip=${3} count=${4} | wc -l $1`;
     # sed -e 's#^.\(.*\).$#\1#g' | \
+    # echo $total_lines;
 
-    dd if=${1} iflag=skip_bytes,count_bytes,nonblock bs=${2} skip=${3} count=${4} 2> /tmp/null | \
-    sort -t "}" -k 2,2 -s | \
+    # dd if=${1} iflag=skip_bytes,count_bytes,nonblock bs=${2} skip=${3} count=${4} 2> /tmp/null | \
+    # ( ((sort_enabled)) && (sort -t "}" -nsk 2,2) ) | \
+
     gawk -F  "}{" '
     BEGIN {
         # print "BEGIN"
-        color_enable='"$color_enable"'
-        if (color_enable == 1) {
+        color_enabled='"$color_enabled"'
+        if (color_enabled == 1) {
             RESET="\033[0m"
             split("\033[91m;\033[92m;\033[93m;\033[94m;\033[95m;\033[96m;\033[97m;\033[31m;\033[32m;\033[33m;\033[34m;\033[35m;\033[36m;\033[37m;", colorlist, ";")
         }
-        tcolor = 1;
+        # tcolor = 1;
         total_size = 0;
     }
     {
         type_=$1
         time_=$2
-        thread_=$3
-        lvl_=$4
+        thread_=int($3)
+        lvl_=$4-1
         # split($5, ctxs, ":");
         prev_ctx=$5
         curr_ctx=$6
         # if (lvl_ > 4) next;
         # split($5, obj_, ":")
 
-        if (color_enable == 1) {
+        if (color_enabled == 1) {
             if (thread_color_[thread_] == "") {
-                thread_color_[thread_] = colorlist[tcolor];
-                tcolor+=1;
-                if(tcolor > length(colorlist)) {
-                    tcolor = 1;
-                }
+                index_ = (thread_%length(colorlist)) + 1;
+                # print "INDEX: " index_;
+                thread_color_[thread_] = colorlist[index_];
+                # tcolor+=1;
+                # if(tcolor > length(colorlist)) {
+                #     tcolor = 1;
+                # }
             }
 
             switch (type_) {
                 case "{T":
                     type_color_ = "\033[1;44m";
                     type_text_= RESET;
-                    lvl_-=1;
                     break;
                 case "{I":
                     type_color_ = "\033[1;42m";
                     type_text_= RESET;
-                    # lvl_++;
                     break;
                 case "{W":
                     type_color_ = "\033[1;43m"
                     type_text_= "\033[1m";
-                    # lvl_++;
                     break;
                 case "{F":
                     type_color_ = "\033[1;41m"
                     type_text_= "\033[7m";
-                    # lvl_++;
                     break;
                 default:
                     type_color_ = RESET;
                     type_text_= RESET;
-                    # lvl_++;
                     break;
             }
         }
@@ -86,19 +86,19 @@ function parse()
                 func_=$7;
                 line_=$8;
                 msg_=$9;
-
-                printf "{%s}%s%s}%s%s{%s}%2d%.*s{%s}{%s %s}%s %s{%s%s\n", 
+                if(type_ != "{T") lvl_+=1;
+                printf "{%20.9f}%s%s}%s%s{%s}%2d%.*s{%s}{%s %s}%s %s{%s%s\n", 
                     time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, (lvl_), "-----------------------------", 
                     curr_ctx, func_, line_, RESET, 
                     type_text_, msg_, RESET;
             }
             else if (NF == 8) {
-                if (color_enable == 1) {
+                if (color_enabled == 1) {
                     type_color_ = "\033[46m";
                 }
                 func_=$7
                 msg_=$8;
-                printf "{%s}%s%s}%s%s{%s}%2d%.*s{%s} %s%s {%s\n", 
+                printf "{%20.9f}%s%s}%s%s{%s}%2d%.*s{%s} %s%s {%s\n", 
                         time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, (lvl_), "-----------------------------", 
                         curr_ctx, RESET, func_, msg_;
                 # print $0
@@ -116,7 +116,7 @@ function parse()
         # print total_size;
         # print "END"
     }';
-    # echo $total_lines;
+
 }
 
 # total_size=`ls -l $1 | awk '{print $5}'`;
@@ -125,7 +125,13 @@ block_=1024;
 # cnt_=1024;
 
 # cnt_=1048576;
-parse $3 $block_ $1 $2;
+(dd if=${1} iflag=skip_bytes,count_bytes,nonblock bs=1024 skip=${2} count=${3} 2> /tmp/null ) | sort -t "}" -k 2,2 -s | parse;
+
+    # ( ((sort_enabled)) && ( sort -t "}" -nsk 2,2 | parse ) || parse)
+
+    # ((sort_enabled)) && ( sort -t "}" -nsk 2,2 | parse )
+
+# parse $1 $block_ $2 $3;
 # exit 1;
 
 # total_size=`expr $total_size - $block_`;
