@@ -1,7 +1,7 @@
 #!/bin/bash
 
 sed -i -e '
-/[^_a-zA-Z0-9]\(for_each\|while\|for\|if\|do\|switch\) *(/!{
+/[^_a-zA-Z0-9]\(#\|namespace\|for_each\|while\|for\|if\|do\|switch\) *(/!{
     /\/\{2,\}[ ]*\([_a-zA-Z0-9]\+[<>: ]*\) *[~_a-zA-Z0-9]\+(/{b;}
     /\([_a-zA-Z0-9]\+[<>: ]*\) *[~_a-zA-Z0-9]\+(.*)[,;]/{b;}
     /\([_a-zA-Z0-9]\+[<>: ]*\) *[~_a-zA-Z0-9]\+(/{
@@ -27,6 +27,6 @@ sed -i -e '
 
 if [[ ! -z "$2" ]]; then
     sed -i -e ':a;N;$!ba;
-        s#\(\#include.*\)*\(\#include[^\n]*\)#\1\2\n\#include '"$2"'\n#
+        s#\(\#include.*\)*\(\#include[^\n]*\)#\1\2\n\'"$2"'\n#
     ' $1
 fi

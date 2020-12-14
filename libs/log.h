@@ -216,7 +216,7 @@ struct Tracer
         return timer(cnt_id);
     }
 
-    time::Counter<> &operator()(const std::string cnt_id="") const
+    const time::Counter<> &operator()(const std::string cnt_id="") const
     {
         return timer(cnt_id);
     }
@@ -373,7 +373,7 @@ public:
         });
     }
 
-    TLL_INLINE void stop(bool wait=true)
+    TLL_INLINE void stop()
     {
         if(!isRunning()) return;
         
@@ -492,15 +492,12 @@ private:
     void add_(Entity ent, LogEnts ...ents)
     {
         ents_[ent.name] = ent;
-        auto &entity = ents_[ent.name];
-
         add_(ents...);
     }
 
     TLL_INLINE void add_(Entity ent)
     {
         ents_[ent.name] = ent;
-        auto &entity = ents_[ent.name];
     }
 
     std::atomic<bool> is_running_{false};
@@ -557,7 +554,7 @@ TLL_INLINE void Node::log<Mode::kAsync>(Message msg)
     }
     else
     {
-        bool rs = ring_queue_.push([](Message &elem, uint32_t size, Message msg) {
+        bool rs = ring_queue_.push([](Message &elem, uint32_t, Message msg) {
             elem = std::move(msg);
         }, msg);
         assert(rs);
