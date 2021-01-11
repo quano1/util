@@ -17,6 +17,8 @@
 #include <algorithm>
 #include <utility>
 
+#include "timer.h"
+
 #ifdef __ANDROID__
 #include <android/log.h>
 #define PRINTF(...) __android_log_print(ANDROID_LOG_DEBUG, "TLL", __VA_ARGS__)
@@ -44,6 +46,7 @@
 namespace tll{ namespace util{
 // #define THIS_THREAD_ID_ std::this_thread::get_id()
 // using this_tid std::this_thread::get_id();
+template <class T> class Guard;
 
 template<typename T, std::size_t N, std::size_t... I>
 constexpr auto make_array_impl(T && value, std::index_sequence<I...>)
@@ -81,7 +84,7 @@ inline std::string to_string(T val)
     return ss.str();
 }
 
-template <typename T=double, typename D=std::ratio<1,1>, typename C=std::chrono::system_clock>
+template <typename T=double, typename D=std::ratio<1,1>, typename C=std::chrono::steady_clock>
 T timestamp(typename C::time_point &&t = C::now())
 {
     return std::chrono::duration_cast<std::chrono::duration<T,D>>(std::forward<typename C::time_point>(t).time_since_epoch()).count();
@@ -530,8 +533,6 @@ private:
     std::list<Slot> slots_;
     std::mutex mtx_;
 };
-
-template <class T> class Guard;
 
 template <class T>
 class Guard

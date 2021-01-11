@@ -101,6 +101,7 @@ template <class Cnt=Counter<>>
 class Map 
 {
 public:
+    using CNT = Cnt;
     using Duration = typename Cnt::Duration;
     using Clock = typename Cnt::Clock;
 
@@ -114,7 +115,8 @@ public:
     Map(const std::set<std::string> &cnt_lst)
     {
         for (const auto &cnt_id : cnt_lst)
-            counters_[cnt_id].start(begin_);
+            counters_[cnt_id];
+            // counters_[cnt_id].start(begin_);
     }
 
     Cnt const &operator()(const std::string cnt_id="") const
@@ -137,6 +139,22 @@ public:
         return counters_[cnt_id];
     }
 
+    Duration allTotal() const
+    {
+        Duration ret{};
+        for (const auto &cnt : counters_)
+        {
+            ret += cnt.second.total();
+        }
+        return ret;
+    }
+
 }; /// List
 
 }} /// tll::time
+
+#ifdef PROF_LOG
+namespace prof {
+tll::time::Map<> timer{{"dolog", "open", "header", "node::log::async", "close"}};
+}
+#endif

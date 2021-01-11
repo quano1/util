@@ -9,6 +9,7 @@ bool testTimer()
     typedef tll::time::Counter<std::chrono::duration<uint32_t, std::ratio<1, 1000000>>> UsCounter;
     // tll::time::Map<std::chrono::duration<uint32_t, std::ratio<1, 1000>>> timer{{"all"}};
     tll::time::Map<UsCounter> timer{{"all"}};
+    timer("all").start();
 
     uint32_t total_delta = 0;
     constexpr uint32_t kPeriodMs = 50000;

@@ -26,12 +26,22 @@
 
 extern char *__progname;
 
+#ifdef PROF_LOG
+namespace prof {
+int asyncCnt = 0;
+int hdCnt = 0;
+int dologCnt = 0;
+}
+inline std::string getLogHeader();
+#define LOG_HEADER_ getLogHeader()
+#else
 #define LOG_HEADER_ (tll::log::ContextMap::instance()(), tll::util::stringFormat("{%.9f}{%s}{%d}{%s}{%s}",\
   tll::util::timestamp<double>(),\
   tll::util::to_string(tll::util::tid()),\
   tll::log::ContextMap::instance().level(),\
   tll::log::ContextMap::instance().get<tll::log::ContextMap::Prev>(),\
   tll::log::ContextMap::instance().get<tll::log::ContextMap::Curr>()))
+#endif
 
 #define LOG_DBG_ tll::util::stringFormat("{%s}{%d}",\
   __FUNCTION__,\
@@ -186,7 +196,7 @@ struct Tracer
     Tracer() = default;
     Tracer(std::string id) : name(std::move(id))
     {
-        printf(" (%.9f)%s\n", util::timestamp(), name.data());
+        printf(" (%.9f)%s\n", util::timestamp<double, std::ratio<1,1>, clock>(), name.data());
     }
 
     Tracer(std::function<void(std::string const&)> logf, std::string header, std::string id="") : name(std::move(id))
@@ -208,7 +218,7 @@ struct Tracer
             log::ContextMap::instance()().pop_back();
         }
         else if(!name.empty())
-            printf(" (%.9f)~%s: %.6f (s)\n", util::timestamp(), name.data(), duration);
+            printf(" (%.9f)~%s: %.6f (s)\n", util::timestamp<double, std::ratio<1,1>, clock>(), name.data(), duration);
     }
 
     time::Counter<> &operator()(const std::string cnt_id="")
@@ -284,7 +294,7 @@ public:
         broadcast_ = std::thread([this, chunk_size, period_ms]()
         {
             time::Map<> timer;
-            auto buff_list = start_(chunk_size);
+            auto buff_list = init_(chunk_size);
             uint32_t total_delta = 0;
             std::vector<char> buff (chunk_size);
 
@@ -429,7 +439,7 @@ public:
         else
         {
             singleton.store(new Node{}, std::memory_order_release);
-            // singleton->start_(0);
+            // singleton->init_(0);
         }
 
         return *singleton.load(std::memory_order_acquire);
@@ -459,6 +469,16 @@ private:
         }
     }
 
+    TLL_INLINE void log_(Flag flag, const void *buff, size_t size) const
+    {
+        for(auto &ent_entry : ents_)
+        {
+            auto &ent = ent_entry.second;
+            if(ent.flag == flag)
+                ent.log(buff, size);
+        }
+    }
+
     TLL_INLINE void log_(Type type, const std::string &payload) const
     {
         for( auto &entry : ents_)
@@ -471,8 +491,8 @@ private:
         }
     }
 
-    // TLL_INLINE std::unordered_map<Flag, std::vector<char>> start_(uint32_t chunk_size)
-    TLL_INLINE std::unordered_map<Flag, util::ContiRB> start_(uint32_t chunk_size)
+    // TLL_INLINE std::unordered_map<Flag, std::vector<char>> init_(uint32_t chunk_size)
+    TLL_INLINE std::unordered_map<Flag, util::ContiRB> init_(uint32_t chunk_size)
     {
         std::unordered_map<Flag, util::ContiRB> buff_list;
         for(auto &entry : ents_)
@@ -504,8 +524,12 @@ private:
     util::LFQueue<Message> ring_queue_{0x10000};
     std::unordered_map<std::string, Entity> ents_ = {{"file", Entity{
                 .name = "file", .flag = tll::log::Flag::kAll,
-                [](void *handle, const char *buff, size_t size)
+                [this](void *handle, const char *buff, size_t size)
                 {
+#ifdef PROF_LOG
+                    tll::util::Guard<tll::time::Map<>::CNT> guard(prof::timer("dolog"));
+                    prof::dologCnt++;
+#endif
                     if(handle == nullptr)
                     {
                         printf("%.*s", (int)size, buff);
@@ -513,22 +537,28 @@ private:
                     }
                     static_cast<std::ofstream*>(handle)->write((const char *)buff, size);
                 },
-                []()
+                [this]()
                 {
+#ifdef PROF_LOG
+                    tll::util::Guard<tll::time::Map<>::CNT> guard(prof::timer("open"));
+#endif
                     auto log_path =std::getenv("TLL_LOG_PATH");
                     auto const &file = util::stringFormat("%s/%s.%d.log", log_path ? log_path : TLL_DEFAULT_LOG_PATH, __progname, getpid());
                     LOGD("%s", file.data());
                     return static_cast<void*>(new std::ofstream(file, std::ios::out | std::ios::binary));
                 }, 
-                [](void *&handle)
+                [this](void *&handle)
                 {
-                    LOGD("");
+#ifdef PROF_LOG
+                    tll::util::Guard<tll::time::Map<>::CNT> guard(prof::timer("close"));
+#endif
                     static_cast<std::ofstream*>(handle)->flush();
                     static_cast<std::ofstream*>(handle)->close();
                     delete static_cast<std::ofstream*>(handle);
                     handle = nullptr;
                 }
             }}};
+
     std::thread broadcast_;
 
     std::condition_variable pop_wait_, join_wait_;
@@ -554,16 +584,41 @@ TLL_INLINE void Node::log<Mode::kAsync>(Message msg)
     }
     else
     {
+#ifdef PROF_LOG
+        tll::util::Guard<tll::time::Map<>::CNT> guard(prof::timer("node::log::async"));
+        prof::asyncCnt++;
+#endif
         bool rs = ring_queue_.push([](Message &elem, uint32_t, Message msg) {
             elem = std::move(msg);
         }, msg);
         assert(rs);
-
         pop_wait_.notify_one();
     }
 }
 
 }} /// tll::log
-#ifdef STATIC_LIB
-#include "Node.cc"
+
+
+#ifdef PROF_LOG
+std::string getLogHeader() {
+    tll::util::Guard<tll::time::Map<>::CNT> guard(prof::timer("header"));
+    prof::hdCnt++;
+    tll::log::ContextMap::instance()();
+    return tll::util::stringFormat(""
+                                   "{%.9f}"
+                                   "{%s}"
+                                   "{%d}"
+                                   "{%s}"
+                                   "{%s}"
+            ,tll::util::timestamp<>()
+            ,tll::util::to_string(tll::util::tid())
+            ,tll::log::ContextMap::instance().level()
+            ,tll::log::ContextMap::instance().get<tll::log::ContextMap::Prev>()
+            ,tll::log::ContextMap::instance().get<tll::log::ContextMap::Curr>()
+            );
+}
 #endif
+
+// #ifdef STATIC_LIB
+// #include "Node.cc"
+// #endif
