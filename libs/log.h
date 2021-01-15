@@ -469,7 +469,7 @@ private:
         }
     }
 
-    TLL_INLINE void log_(Flag flag, const void *buff, size_t size) const
+    TLL_INLINE void log_(Flag flag, const char *buff, size_t size) const
     {
         for(auto &ent_entry : ents_)
         {

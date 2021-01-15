@@ -174,15 +174,14 @@ struct ContiRB
 public:
     ContiRB() = default;
 
-    ContiRB(size_t size) : head(0), tail(0), wmark(0)
+    ContiRB(size_t size)
     {
-        size = isPowerOf2(size) ? size : nextPowerOf2(size);
-        buffer.resize(size);
+        reserve(size);
     }
 
     inline void dump() const
     {
-        LOGD("%ld %ld %ld", head, tail, wmark);
+        LOGD("h:%ld t:%ld w:%ld", head, tail, wmark);
     }
 
     inline void reserve(size_t size)
@@ -191,75 +190,97 @@ public:
         buffer.resize(size);
     }
 
-    inline char *popHalf(size_t &size, size_t &offset)
+    inline char *popHalf(size_t &size)
     {
-        if(isEmpty()) return nullptr;
-        offset = 0;
-        /// tail is rollover?
-        if(head < wmark)
+        char *ret = nullptr;
+        if(head == wmark)
+            head = next(head);
+
+        size_t rtc = (head < wmark) ? wmark - head : tail - head;
+        rsize_ = 0;
+        if(rtc > 0)
         {
-            if(size >= (wmark - head))
+            if(size > rtc)
             {
-                size = wmark - head;
-                offset = unused();
+                size = rtc;
+            }
+
+            rsize_ = size;
+            ret = buffer.data() + wrap(head);
+        }
+        return ret;
+    }
+
+    inline void completePop()
+    {
+        head += rsize_;
+        if(head == wmark && wrap(head) != 0)
+        {
+            head += buffer.size() - wrap(head);
+        }
+    }
+
+    inline char *pushHalf(size_t size)
+    {
+        if(size <= buffer.size() - unused() - (tail - head))
+        {
+            /// tail leads
+            if(wrap(tail) >= wrap(head))
+            {
+                /// not enough space left?
+                if(size > buffer.size() - wrap(tail))
+                {
+                    if(size <= wrap(head))
+                    {
+                        wmark = tail;
+                        tail = next(tail);
+                    }
+                    else
+                    {
+                        LOGD("OVERRUN");
+                        dump();
+                        return nullptr;
+                    }
+                }
+            }
+            /// head leads
+            else
+            {
+                if(size > wrap(head) - wrap(tail))
+                {
+                    LOGD("OVERRUN");
+                    dump();
+                    return nullptr;
+                }
             }
         }
         else
         {
-            if(size > (tail - head))
-            {
-                size = tail - head;
-            }
+            LOGD("OVERRUN");
+            dump();
+            return nullptr;
         }
 
-        return buffer.data() + wrap(head);
+        wsize_ = size;
+        return buffer.data() + wrap(tail);
     }
 
-    inline void completePop(size_t size, size_t offset)
+    inline void completePush()
     {
-        head += size + offset;
-    }
-
-    inline char *pushHalf(size_t &size, size_t &offset)
-    {
-        if(isFull()) return nullptr;
-        offset = 0;
-        /// rollover?
-        if(size > next(tail))
-        {
-            offset = next(tail);
-        }
-        /// enough space?
-        if(size <= buffer.size() - this->size() - offset)
-        {
-            return buffer.data() + wrap(tail + offset);
-        }
-        else
-        {
-            /// overrun
-            assert((false) && "Ooops! overrun");
-        }
-
-        return nullptr;
-    }
-
-    inline void completePush(size_t size, size_t offset)
-    {
-        if(offset) {
-            wmark = tail;
-        }
-        tail = tail + offset + size;
+        const size_t tmp = tail + wsize_;
+        if(wrap(tmp) == 0) wmark = tmp;
+        tail = tmp;
     }
 
 
     inline size_t push(const char *data, size_t size)
     {
-        size_t offset;
-        char *ptr = pushHalf(size, offset);
+        // size_t offset;
+        char *ptr = pushHalf(size);
         if(ptr)
         {
             memcpy(ptr, data, size);
-            completePush(size, offset);
+            completePush();
         }
 
         return size;
@@ -267,14 +288,19 @@ public:
 
     inline size_t pop(char *data, size_t size)
     {
-        size_t offset;
-        char *ptr = popHalf(size, offset);
+        // size_t offset;
+        char *ptr = popHalf(size);
         if(ptr != nullptr)
         {
             memcpy(data, ptr, size);
-            completePop(size, offset);
+            completePop();
         }
         return size;
+    }
+
+    inline size_t wrap(size_t index) const
+    {
+        return index & (buffer.size() - 1);
     }
 
     inline size_t size() const
@@ -287,20 +313,16 @@ public:
         return head < wmark ? buffer.size() - wrap(wmark) : 0;
     }
 
-    inline size_t wrap(size_t index) const
-    {
-        return index & (buffer.size() - 1);
-    }
-
     inline size_t next(size_t index) const
     {
-        return buffer.size() - wrap(index);
+        return wrap(index) ? index + (buffer.size() - wrap(index)) : index;
     }
 
-    inline bool isEmpty() { return this->size() == 0; }
-    inline bool isFull() { return this->size() == (buffer.size() - unused()); }
+    // inline bool isEmpty() { return this->size() == 0; }
+    // inline bool isFull() { return this->size() == (buffer.size() - unused()); }
 
-    size_t head, tail, wmark;
+    size_t head = 0, tail = 0, wmark = 0;
+    size_t rsize_ = 0, wsize_ = 0, woff_ = 0, roff_=0;
     std::vector<char> buffer;
     std::mutex mtx;
 };

@@ -67,32 +67,64 @@ bool testContiRB()
 {
     TLL_GLOGTF();
     constexpr int kSize = 8;
-    tll::util::ContiRB contiRB(kSize);
+    tll::util::ContiRB crb(kSize);
     std::vector<char> wt(kSize);
     std::vector<char> rd(kSize);
-    memset(wt.data(), 1, kSize);
+    memset(wt.data(), 0xF, kSize);
 
     size_t size;
+    bool ret = true;
 
-    size = contiRB.push(wt.data(), 3);
-    TLL_GLOGD("push: %ld", size);
-    size = contiRB.pop(rd.data(), size);
-    TLL_GLOGD("pop:  %ld", size);
-    size = contiRB.push(wt.data(), 3);
-    TLL_GLOGD("push: %ld", size);
-    size = contiRB.pop(rd.data(), size);
-    TLL_GLOGD("pop:  %ld", size);
-    size = contiRB.push(wt.data(), 3);
-    TLL_GLOGD("push: %ld", size);
-    size = contiRB.pop(rd.data(), size);
-    TLL_GLOGD("pop:  %ld", size);
+    for(int i=0; i<10; i++)
+    {
+        size = crb.push(wt.data(), 5);
+        LOGD("push: %ld", size);
+        crb.dump();
+        size = crb.pop(rd.data(), size);
+        LOGD(" - pop: %ld", size);
+        crb.dump();
+        if(memcmp(wt.data(), rd.data(), size))
+        {
+            ret = false;
+            break;
+        }
+    }
 
-    size = contiRB.push(wt.data(), 3);
-    TLL_GLOGD("push: %ld", size);
-    size = contiRB.pop(rd.data(), size);
-    TLL_GLOGD("pop:  %ld", size);
+    // size = crb.push(wt.data(), 3);
+    // LOGD("push: %ld", size);
+    // crb.dump();
 
-    return true;
+    // size = crb.pop(rd.data(), size);
+    // ret += memcmp(wt.data(), rd.data(), size);
+    // LOGD("pop:  %ld, %d", size, ret);
+    // crb.dump();
+
+    // size = crb.push(wt.data(), 3);
+    // LOGD("push: %ld", size);
+    // crb.dump();
+
+    // size = crb.pop(rd.data(), size);
+    // ret += memcmp(wt.data(), rd.data(), size);
+    // LOGD("pop:  %ld, %d", size, ret);
+    // crb.dump();
+
+    // // LOGD("pop:  %ld", size);
+    // size = crb.push(wt.data(), 3);
+    // LOGD("push: %ld", size);
+    // crb.dump();
+    
+    // size = crb.pop(rd.data(), size);
+    // ret += memcmp(wt.data(), rd.data(), size);
+    // LOGD("pop:  %ld, %d", size, ret);
+    // crb.dump();
+    // LOGD("pop:  %ld", size);
+
+    // size = crb.push(wt.data(), 3);
+    // LOGD("push: %ld", size);
+    // size = crb.pop(rd.data(), size);
+    // LOGD("pop:  %ld", size);
+
+    return ret;
 }
 
 int main()
