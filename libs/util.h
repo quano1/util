@@ -181,150 +181,208 @@ public:
 
     inline void dump() const
     {
-        LOGD("h:%ld t:%ld w:%ld", head, tail, wmark);
+        LOGD("sz:%ld ph:%ld pt:%ld wm:%ld ch:%ld ct:%ld", buffer_.size(), 
+             ph_.load(std::memory_order_relaxed), pt_.load(std::memory_order_relaxed), 
+             wm_.load(std::memory_order_relaxed), 
+             ch_.load(std::memory_order_relaxed), ct_.load(std::memory_order_relaxed));
     }
 
     inline void reserve(size_t size)
     {
         size = isPowerOf2(size) ? size : nextPowerOf2(size);
-        buffer.resize(size);
+        buffer_.resize(size);
     }
 
-    inline char *popHalf(size_t &size)
+    inline char *tryPop(size_t &cons, size_t &size)
     {
-        char *ret = nullptr;
-        if(head == wmark)
-            head = next(head);
-
-        size_t rtc = (head < wmark) ? wmark - head : tail - head;
-        rsize_ = 0;
-        if(rtc > 0)
+        cons = ch_.load(std::memory_order_relaxed);
+        for(;;)
         {
-            if(size > rtc)
+            size_t prod = pt_.load(std::memory_order_relaxed);
+            size_t wmark = wm_.load(std::memory_order_acquire);
+            /// underrun
+            if(cons == prod)
             {
-                size = rtc;
+                LOGD("Underrun!");
+                return nullptr;
+            }
+            /// prod leads
+            if(wrap(cons) < wrap(prod))
+            {
+                if(size > prod - cons)
+                {
+                    size = prod - cons;
+                }
+            }
+            else
+            {
+                /// TODO needs check h == wmark?
+                // ASSERTM(cons != wmark, "cons != wmark");
+                if(cons == wmark) 
+                {
+                    size_t tmp_size = size;
+                    if(tmp_size > wrap(prod))
+                        tmp_size = wrap(prod);
+
+                    if(!ch_.compare_exchange_weak(cons, next(cons) + tmp_size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                    size = tmp_size;
+                    return buffer_.data();
+                }
+
+                if(size > wmark - cons)
+                {
+                    size = wmark - cons;
+                }
             }
 
-            rsize_ = size;
-            ret = buffer.data() + wrap(head);
+            if(ch_.compare_exchange_weak(cons, cons + size, std::memory_order_relaxed, std::memory_order_relaxed)) break;
         }
-        return ret;
+
+        return buffer_.data() + wrap(cons);
     }
 
-    inline void completePop()
+    inline void completePop(size_t cons, size_t size)
     {
-        head += rsize_;
-        if(head == wmark && wrap(head) != 0)
-        {
-            head += buffer.size() - wrap(head);
-        }
+        for(;ct_.load(std::memory_order_relaxed) != cons;)
+        {}
+
+        if(cons == wm_.load(std::memory_order_relaxed))
+            ct_.store(next(cons) + size, std::memory_order_release);
+        else
+            ct_.store(cons + size, std::memory_order_release);
     }
 
-    inline char *pushHalf(size_t size)
+    inline char *tryPush(size_t &prod, size_t size)
     {
-        if(size <= buffer.size() - unused() - (tail - head))
+        prod = ph_.load(std::memory_order_relaxed);
+        size_t wmark = wm_.load(std::memory_order_acquire);
+        for(;;)
         {
-            /// tail leads
-            if(wrap(tail) >= wrap(head))
+            size_t cons = ct_.load(std::memory_order_relaxed);
+            if(size <= buffer_.size() - unused() - (prod - cons))
             {
-                /// not enough space left?
-                if(size > buffer.size() - wrap(tail))
+                /// prod leads
+                if(wrap(prod) >= wrap(cons))
                 {
-                    if(size <= wrap(head))
+                    /// not enough space    ?
+                    if(size > buffer_.size() - wrap(prod))
                     {
-                        wmark = tail;
-                        tail = next(tail);
+                        if(size <= wrap(cons))
+                        {
+                            // wmark = prod;
+                            // LOGD("");
+                            if(!wm_.compare_exchange_weak(wmark, prod, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                            if(!ph_.compare_exchange_weak(prod, next(prod) + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                            return buffer_.data() + wrap(next(prod));
+                        }
+                        else
+                        {
+                            LOGD("OVERRUN");
+                            dump();
+                            return nullptr;
+                        }
                     }
                     else
+                    {
+                        if(ph_.compare_exchange_weak(prod, prod + size, std::memory_order_relaxed, std::memory_order_relaxed)) break;
+                        else
+                            continue;
+                    }
+                }
+                /// cons leads
+                else
+                {
+                    if(size > wrap(cons) - wrap(prod))
                     {
                         LOGD("OVERRUN");
                         dump();
                         return nullptr;
                     }
+                    if(ph_.compare_exchange_weak(prod, prod + size, std::memory_order_relaxed, std::memory_order_relaxed)) break;
+                    else continue;
                 }
             }
-            /// head leads
             else
             {
-                if(size > wrap(head) - wrap(tail))
-                {
-                    LOGD("OVERRUN");
-                    dump();
-                    return nullptr;
-                }
+                LOGD("OVERRUN");
+                dump();
+                return nullptr;
             }
         }
+        // wsize_ = size;
+        return buffer_.data() + wrap(prod);
+    }
+
+    inline void completePush(size_t prod, size_t size)
+    {
+        for(;pt_.load(std::memory_order_relaxed) != prod;)
+        {}
+
+        if(wrap(prod) == 0) wm_.store(prod, std::memory_order_relaxed);
+
+        if(prod == wm_.load(std::memory_order_relaxed))
+            pt_.store(next(prod) + size, std::memory_order_release);
         else
-        {
-            LOGD("OVERRUN");
-            dump();
-            return nullptr;
-        }
-
-        wsize_ = size;
-        return buffer.data() + wrap(tail);
-    }
-
-    inline void completePush()
-    {
-        const size_t tmp = tail + wsize_;
-        if(wrap(tmp) == 0) wmark = tmp;
-        tail = tmp;
-    }
-
-
-    inline size_t push(const char *data, size_t size)
-    {
-        // size_t offset;
-        char *ptr = pushHalf(size);
-        if(ptr)
-        {
-            memcpy(ptr, data, size);
-            completePush();
-        }
-
-        return size;
+            pt_.store(prod + size, std::memory_order_release);
     }
 
     inline size_t pop(char *data, size_t size)
     {
         // size_t offset;
-        char *ptr = popHalf(size);
+        size_t cons;
+        char *ptr = tryPop(cons, size);
         if(ptr != nullptr)
         {
             memcpy(data, ptr, size);
-            completePop();
+            completePop(cons, size);
         }
         return size;
     }
 
+    inline size_t push(const char *data, size_t size)
+    {
+        // size_t offset;
+        size_t prod;
+        char *ptr = tryPush(prod, size);
+        if(ptr)
+        {
+            memcpy(ptr, data, size);
+            completePush(prod, size);
+        }
+
+        return size;
+    }
+
+
     inline size_t wrap(size_t index) const
     {
-        return index & (buffer.size() - 1);
+        return index & (buffer_.size() - 1);
     }
 
     inline size_t size() const
     {
-        return tail - head - unused();
+        return pt_.load(std::memory_order_relaxed) - ct_.load(std::memory_order_relaxed) - unused();
     }
 
     inline size_t unused() const
     {
-        return head < wmark ? buffer.size() - wrap(wmark) : 0;
+        size_t cons = ct_.load(std::memory_order_relaxed);
+        size_t wmark = wm_.load(std::memory_order_relaxed);
+        return cons < wmark ? buffer_.size() - wrap(wmark) : 0;
     }
 
     inline size_t next(size_t index) const
     {
-        return wrap(index) ? index + (buffer.size() - wrap(index)) : index;
+        return wrap(index) ? index + (buffer_.size() - wrap(index)) : index;
     }
 
     // inline bool isEmpty() { return this->size() == 0; }
     // inline bool isFull() { return this->size() == (buffer.size() - unused()); }
 
-    size_t head = 0, tail = 0, wmark = 0;
-    size_t rsize_ = 0, wsize_ = 0, woff_ = 0, roff_=0;
-    std::vector<char> buffer;
-    std::mutex mtx;
+    std::atomic<size_t> ph_{0}, pt_{0}, wm_{0}, ch_{0}, ct_{0};
+    // size_t rsize_ = 0, wsize_ = 0, woff_ = 0, roff_=0;
+    std::vector<char> buffer_{}; /// 1Kb
+    // std::mutex mtx;
 };
 
 /// lock-free queue
@@ -332,42 +390,42 @@ template <typename T, size_t const kELemSize=sizeof(T)>
 class LFQueue
 {
 public:
-    LFQueue(uint32_t num_of_elem) : prod_tail_(0), prod_head_(0), cons_tail_(0), cons_head_(0)
+    LFQueue(uint32_t num_of_elem)
     {
         capacity_ = isPowerOf2(num_of_elem) ? num_of_elem : nextPowerOf2(num_of_elem);
         buffer_.resize(capacity_ * kELemSize);
     }
 
-    TLL_INLINE bool tryPop(uint32_t &cons_head)
+    TLL_INLINE bool tryPop(uint32_t &cons)
     {
-        cons_head = cons_head_.load(std::memory_order_relaxed);
+        cons = ch_.load(std::memory_order_relaxed);
 
         for(;!isEmpty();)
         {
-            if (cons_head == prod_tail_.load(std::memory_order_relaxed))
+            if (cons == pt_.load(std::memory_order_relaxed))
                 return false;
 
-            if(cons_head_.compare_exchange_weak(cons_head, cons_head + 1, std::memory_order_acquire, std::memory_order_relaxed))
+            if(ch_.compare_exchange_weak(cons, cons + 1, std::memory_order_acquire, std::memory_order_relaxed))
                 return true;
         }
 
         return false;
     }
 
-    TLL_INLINE bool completePop(uint32_t cons_head)
+    TLL_INLINE bool completePop(uint32_t cons)
     {
-        if (cons_tail_.load(std::memory_order_relaxed) != cons_head)
+        if (ct_.load(std::memory_order_relaxed) != cons)
             return false;
 
-        cons_tail_.fetch_add(1, std::memory_order_release);
+        ct_.fetch_add(1, std::memory_order_release);
         return true;
     }
 
     template </*typename D,*/ typename F, typename ...Args>
     bool pop(F &&doPop, Args &&...args)
     {
-        uint32_t cons_head;
-        while(!tryPop(cons_head)) 
+        uint32_t cons;
+        while(!tryPop(cons)) 
         {
             if (isEmpty()) 
                 return false;
@@ -375,9 +433,9 @@ public:
             std::this_thread::yield();
         }
 
-        std::forward<F>(doPop)(elemAt(cons_head), kELemSize, std::forward<Args>(args)...);
+        std::forward<F>(doPop)(elemAt(cons), kELemSize, std::forward<Args>(args)...);
 
-        while(!completePop(cons_head)) 
+        while(!completePop(cons)) 
             std::this_thread::yield();
 
         return true;
@@ -390,61 +448,61 @@ public:
         if (isEmpty())
             return false;
 
-        uint32_t cons_head = cons_head_.load(std::memory_order_relaxed);
+        uint32_t cons = ch_.load(std::memory_order_relaxed);
         uint32_t elem_num = size();
 
         if(elem_num > max_num)
             elem_num = max_num;
 
-        while(cons_head + elem_num > prod_tail_.load(std::memory_order_relaxed))
+        while(cons + elem_num > pt_.load(std::memory_order_relaxed))
             std::this_thread::yield();
 
-        cons_head_.fetch_add(elem_num, std::memory_order_acquire);
+        ch_.fetch_add(elem_num, std::memory_order_acquire);
 
-        std::forward<F>(onPopBatch)(cons_head, elem_num, kELemSize, std::forward<Args>(args)...);
+        std::forward<F>(onPopBatch)(cons, elem_num, kELemSize, std::forward<Args>(args)...);
 
-        cons_tail_.fetch_add(elem_num, std::memory_order_release);
+        ct_.fetch_add(elem_num, std::memory_order_release);
 
         return true;
     }
 
-    TLL_INLINE bool tryPush(uint32_t &prod_head)
+    TLL_INLINE bool tryPush(uint32_t &prod)
     {
-        prod_head = prod_head_.load(std::memory_order_relaxed);
+        prod = ph_.load(std::memory_order_relaxed);
 
         for(;!isFull();)
         {
-            if (prod_head == (cons_tail_.load(std::memory_order_relaxed) + capacity_))
+            if (prod == (ct_.load(std::memory_order_relaxed) + capacity_))
                 return false;
 
-            if(prod_head_.compare_exchange_weak(prod_head, prod_head + 1, std::memory_order_acquire, std::memory_order_relaxed))
+            if(ph_.compare_exchange_weak(prod, prod + 1, std::memory_order_acquire, std::memory_order_relaxed))
                 return true;
         }
         return false;
     }
 
-    TLL_INLINE bool completePush(uint32_t prod_head)
+    TLL_INLINE bool completePush(uint32_t prod)
     {
-        if (prod_tail_.load(std::memory_order_relaxed) != prod_head)
+        if (pt_.load(std::memory_order_relaxed) != prod)
             return false;
 
-        prod_tail_.fetch_add(1, std::memory_order_release);
+        pt_.fetch_add(1, std::memory_order_release);
         return true;
     }
 
     template </*typename D, */typename F, typename ...Args>
     bool push(F &&doPush, Args&&...args)
     {
-        uint32_t prod_head;
-        prod_head = prod_head_.load(std::memory_order_relaxed);
-        while(!tryPush(prod_head))
+        uint32_t prod;
+        prod = ph_.load(std::memory_order_relaxed);
+        while(!tryPush(prod))
         {
             if(isFull()) return false;
             std::this_thread::yield();
         }
 
-        std::forward<F>(doPush)(elemAt(prod_head), kELemSize, std::forward<Args>(args)...);
-        while(!completePush(prod_head)) 
+        std::forward<F>(doPush)(elemAt(prod), kELemSize, std::forward<Args>(args)...);
+        while(!completePush(prod)) 
             std::this_thread::yield();
 
         return true;
@@ -452,7 +510,7 @@ public:
 
     TLL_INLINE uint32_t size() const
     {
-        return prod_head_.load(std::memory_order_relaxed) - cons_head_.load(std::memory_order_relaxed);
+        return ph_.load(std::memory_order_relaxed) - ch_.load(std::memory_order_relaxed);
     }
 
     TLL_INLINE uint32_t wrap(uint32_t index) const
@@ -489,9 +547,9 @@ public:
 
 private:
 
-    std::atomic<uint32_t> prod_tail_, prod_head_, cons_tail_, cons_head_;
-    uint32_t capacity_;
-    std::vector<T> buffer_;
+    std::atomic<uint32_t> pt_{0}, ph_{0}, ct_{0}, ch_{0};
+    uint32_t capacity_{0};
+    std::vector<T> buffer_{};
 }; /// LFQueue
 
 // template <typename Signature>

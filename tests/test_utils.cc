@@ -65,8 +65,8 @@ bool testGuard()
 
 bool testContiRB()
 {
-    TLL_GLOGTF();
-    constexpr int kSize = 8;
+    // TLL_GLOGTF();
+    constexpr int kSize = 16;
     tll::util::ContiRB crb(kSize);
     std::vector<char> wt(kSize);
     std::vector<char> rd(kSize);
@@ -75,19 +75,22 @@ bool testContiRB()
     size_t size;
     bool ret = true;
 
+    // #pragma omp parallel num_threads ( 4 )
     for(int i=0; i<10; i++)
     {
+        LOGD("");
         size = crb.push(wt.data(), 5);
-        LOGD("push: %ld", size);
+        // LOGD("push: %ld", size);
         crb.dump();
+        // LOGD("");
         size = crb.pop(rd.data(), size);
-        LOGD(" - pop: %ld", size);
+        // LOGD(" - pop: %ld", size);
         crb.dump();
-        if(memcmp(wt.data(), rd.data(), size))
-        {
-            ret = false;
-            break;
-        }
+        // if(memcmp(wt.data(), rd.data(), size))
+        // {
+        //     ret = false;
+        //     break;
+        // }
     }
 
     // size = crb.push(wt.data(), 3);
@@ -130,11 +133,11 @@ bool testContiRB()
 int main()
 {
     bool rs = false;
-    rs = testTimer();
-    LOGD("testTimer: %s", rs?"Passed":"FAILED");
+    // rs = testTimer();
+    // LOGD("testTimer: %s", rs?"Passed":"FAILED");
 
-    rs = testGuard();
-    LOGD("testGuard: %s", rs?"Passed":"FAILED");
+    // rs = testGuard();
+    // LOGD("testGuard: %s", rs?"Passed":"FAILED");
 
     rs = testContiRB();
     LOGD("testContiRB: %s", rs?"Passed":"FAILED");
