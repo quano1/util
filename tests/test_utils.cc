@@ -66,7 +66,7 @@ bool testGuard()
 bool testContiRB()
 {
     // TLL_GLOGTF();
-    constexpr int kSize = 16;
+    constexpr int kSize = 8;
     tll::util::ContiRB crb(kSize);
     std::vector<char> wt(kSize);
     std::vector<char> rd(kSize);
@@ -76,23 +76,27 @@ bool testContiRB()
     bool ret = true;
 
     // #pragma omp parallel num_threads ( 4 )
-    for(int i=0; i<10; i++)
+    for(int pop_size=1; pop_size<kSize; pop_size++)
     {
-        LOGD("");
-        size = crb.push(wt.data(), 5);
-        // LOGD("push: %ld", size);
-        crb.dump();
-        // LOGD("");
-        size = crb.pop(rd.data(), size);
-        // LOGD(" - pop: %ld", size);
-        crb.dump();
-        // if(memcmp(wt.data(), rd.data(), size))
-        // {
-        //     ret = false;
-        //     break;
-        // }
+        LOGD("pop_size: %d", pop_size);
+        crb.reset();
+        for(int i=0; i<kSize+1; i++)
+        {
+            size = pop_size;
+            size = crb.push(wt.data(), size);
+            // LOGD("push: %ld", size);
+            // crb.dump();
+            // LOGD("");
+            size = crb.pop(rd.data(), size);
+            // LOGD(" - pop: %ld", size);
+            crb.dump();
+            // if(memcmp(wt.data(), rd.data(), size))
+            // {
+            //     ret = false;
+            //     break;
+            // }
+        }
     }
-
     // size = crb.push(wt.data(), 3);
     // LOGD("push: %ld", size);
     // crb.dump();

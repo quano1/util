@@ -187,6 +187,17 @@ public:
              ch_.load(std::memory_order_relaxed), ct_.load(std::memory_order_relaxed));
     }
 
+    inline void reset(size_t new_size=0)
+    {
+        ph_.store(0,std::memory_order_relaxed);
+        ch_.store(0,std::memory_order_relaxed);
+        pt_.store(0,std::memory_order_relaxed);
+        ct_.store(0,std::memory_order_relaxed);
+        wm_.store(0,std::memory_order_relaxed);
+        if(new_size)
+            reserve(new_size);
+    }
+
     inline void reserve(size_t size)
     {
         size = isPowerOf2(size) ? size : nextPowerOf2(size);
@@ -200,42 +211,34 @@ public:
         {
             size_t prod = pt_.load(std::memory_order_relaxed);
             size_t wmark = wm_.load(std::memory_order_acquire);
+            size_t next_cons = cons;
             /// underrun
             if(cons == prod)
             {
                 LOGD("Underrun!");
                 return nullptr;
             }
-            /// prod leads
-            if(wrap(cons) < wrap(prod))
+
+            if(cons == wmark)
             {
-                if(size > prod - cons)
-                {
-                    size = prod - cons;
-                }
+                next_cons = next(cons);
+                // LOGD("%d", cons);
+                if(prod <= next_cons) return nullptr;
+                if(size > (prod - next_cons))
+                    size = prod - next_cons;
             }
-            else
+            else if(cons < wmark)
             {
-                /// TODO needs check h == wmark?
-                // ASSERTM(cons != wmark, "cons != wmark");
-                if(cons == wmark) 
-                {
-                    size_t tmp_size = size;
-                    if(tmp_size > wrap(prod))
-                        tmp_size = wrap(prod);
-
-                    if(!ch_.compare_exchange_weak(cons, next(cons) + tmp_size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
-                    size = tmp_size;
-                    return buffer_.data();
-                }
-
-                if(size > wmark - cons)
-                {
+                if(size > (wmark - cons))
                     size = wmark - cons;
-                }
+            }
+            else /// cons > wmark
+            {
+                if(size > (prod - cons))
+                    size = prod - cons;
             }
 
-            if(ch_.compare_exchange_weak(cons, cons + size, std::memory_order_relaxed, std::memory_order_relaxed)) break;
+            if(ch_.compare_exchange_weak(cons, next_cons + size, std::memory_order_relaxed, std::memory_order_relaxed)) break;
         }
 
         return buffer_.data() + wrap(cons);
@@ -271,8 +274,8 @@ public:
                         {
                             // wmark = prod;
                             // LOGD("");
-                            if(!wm_.compare_exchange_weak(wmark, prod, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
                             if(!ph_.compare_exchange_weak(prod, next(prod) + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                            if(!wm_.compare_exchange_weak(wmark, prod, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
                             return buffer_.data() + wrap(next(prod));
                         }
                         else
@@ -373,7 +376,9 @@ public:
 
     inline size_t next(size_t index) const
     {
-        return wrap(index) ? index + (buffer_.size() - wrap(index)) : index;
+        size_t tmp = buffer_.size() - 1;
+        return (index + tmp) & (~tmp);
+        // return wrap(index) ? index + (buffer_.size() - wrap(index)) : index;
     }
 
     // inline bool isEmpty() { return this->size() == 0; }
