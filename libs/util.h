@@ -215,7 +215,8 @@ public:
             /// underrun
             if(cons == prod)
             {
-                LOGD("Underrun!");
+                // LOGD("Underrun!");
+                size = 0;
                 return nullptr;
             }
 
@@ -223,7 +224,12 @@ public:
             {
                 next_cons = next(cons);
                 // LOGD("%d", cons);
-                if(prod <= next_cons) return nullptr;
+                if(prod <= next_cons)
+                {
+                    // LOGD("Underrun!");
+                    size = 0;
+                    return nullptr;
+                }
                 if(size > (prod - next_cons))
                     size = prod - next_cons;
             }
@@ -253,6 +259,19 @@ public:
             ct_.store(next(cons) + size, std::memory_order_release);
         else
             ct_.store(cons + size, std::memory_order_release);
+    }
+
+    inline size_t pop(char *data, size_t size)
+    {
+        // size_t offset;
+        size_t cons;
+        char *ptr = tryPop(cons, size);
+        if(ptr != nullptr)
+        {
+            memcpy(data, ptr, size);
+            completePop(cons, size);
+        }
+        return size;
     }
 
     inline char *tryPush(size_t &prod, size_t size)
@@ -287,9 +306,8 @@ public:
                     }
                     else
                     {
-                        if(ph_.compare_exchange_weak(prod, prod + size, std::memory_order_relaxed, std::memory_order_relaxed)) break;
-                        else
-                            continue;
+                        if(!ph_.compare_exchange_weak(prod, prod + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                        else break;
                     }
                 }
                 /// cons leads
@@ -301,8 +319,8 @@ public:
                         dump();
                         return nullptr;
                     }
-                    if(ph_.compare_exchange_weak(prod, prod + size, std::memory_order_relaxed, std::memory_order_relaxed)) break;
-                    else continue;
+                    if(!ph_.compare_exchange_weak(prod, prod + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                    else break;
                 }
             }
             else
@@ -327,19 +345,6 @@ public:
             pt_.store(next(prod) + size, std::memory_order_release);
         else
             pt_.store(prod + size, std::memory_order_release);
-    }
-
-    inline size_t pop(char *data, size_t size)
-    {
-        // size_t offset;
-        size_t cons;
-        char *ptr = tryPop(cons, size);
-        if(ptr != nullptr)
-        {
-            memcpy(data, ptr, size);
-            completePop(cons, size);
-        }
-        return size;
     }
 
     inline size_t push(const char *data, size_t size)
