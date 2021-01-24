@@ -1,3 +1,6 @@
+/// MIT License
+/// Copyright (c) 2021 Thanh Long Le (longlt00502@gmail.com)
+
 #include "logger.h"
 // #include <iostream>
 // #include <fstream>

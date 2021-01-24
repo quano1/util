@@ -1,4 +1,6 @@
 #!/bin/bash
+#MIT License
+#Copyright (c) 2021 Thanh Long Le (longlt00502@gmail.com)
 
 sed -i -e '
 /[^_a-zA-Z0-9]\(#\|namespace\|for_each\|while\|for\|if\|do\|switch\) *(/!{

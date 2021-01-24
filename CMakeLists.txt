@@ -1,3 +1,6 @@
+#MIT License
+#Copyright (c) 2021 Thanh Long Le (longlt00502@gmail.com)
+
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 project(lltlog VERSION 1.0.1)
 

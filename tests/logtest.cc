@@ -1,3 +1,6 @@
+/// MIT License
+/// Copyright (c) 2021 Thanh Long Le (longlt00502@gmail.com)
+
 #include <fstream>
 #include <iostream>
 #include <fcntl.h>    /* For O_RDWR */

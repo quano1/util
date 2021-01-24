@@ -1,4 +1,7 @@
 #!/bin/bash
+#MIT License
+#Copyright (c) 2021 Thanh Long Le (longlt00502@gmail.com)
+
 
 # head -n 9 test_lmngr.log | \
 # while [[ eof_ -eq 0 ]]; do

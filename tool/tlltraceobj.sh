@@ -1,4 +1,6 @@
 #!/bin/bash
+#MIT License
+#Copyright (c) 2021 Thanh Long Le (longlt00502@gmail.com)
 
 sed -e 's#^.\(.*\).$#\1#g' $1 | \
 gawk -F "}{" '{
