@@ -65,8 +65,9 @@ bool testGuard()
     return std::round(timer().total().count()) == std::round(tracer__.timer().elapse().count()) && std::round(timer().duration(0).count()) == std::round(timer().duration(1).count());
 }
 
-template <class CCB, int omp_thread_num=2>
-bool _testCCB(size_t buff_size = 0x100)
+template <class CCB, int omp_thread_num>
+bool __testCCB(size_t buff_size,
+              tll::time::Map<> &timer, const std::string &ccb_type)
 {
     buff_size *= omp_thread_num;
     CCB ccb(buff_size);
@@ -87,10 +88,11 @@ bool _testCCB(size_t buff_size = 0x100)
             int tid = omp_get_thread_num();
             int nts = omp_get_num_threads();
             assert(nts > 1);
-
             if((tid & 1) == 0)
             {
                 // LOGD("Producer: %d", tid);
+                auto &timer_w = timer(ccb_type + std::to_string(tid));
+                timer_w.start();
                 for(int i=0; i<buff_size/(nts/2) ; i++)
                 {
                     if(ccb.push((char*)(&kPushVal), push_size) == false)
@@ -103,6 +105,7 @@ bool _testCCB(size_t buff_size = 0x100)
                     }
                     std::this_thread::yield();
                 }
+                timer_w.stop();
                 // LOGD("Prod %d Done", tid);
             }
             else
@@ -111,6 +114,8 @@ bool _testCCB(size_t buff_size = 0x100)
                 size_t offset = ((tid)/2)*total_size;
                 // LOGD("Consumer: %d, total: %ld, offset: %ld", tid, total_size, offset);
                 /// consumer
+                auto &timer_r = timer(ccb_type + std::to_string(tid));
+                timer_r.start();
                 for(size_t pop_size=0; pop_size<(total_size) ;)
                 {
                     size_t ps = push_size;
@@ -121,6 +126,7 @@ bool _testCCB(size_t buff_size = 0x100)
                     }
                     std::this_thread::yield();
                 }
+                timer_r.stop();
                 // LOGD("Cons %d Done", tid);
             }
             // LOGD("total_w: %ld", total_w.load(std::memory_order_relaxed));
@@ -142,99 +148,67 @@ bool _testCCB(size_t buff_size = 0x100)
     return ret;
 }
 
-bool testCCB()
+template <int thread_num>
+bool _testCCB(int shift_init, int shift_max, tll::time::Map<> &timer)
 {
     bool mt_rs = true;
     bool lf_rs = true;
-    constexpr int kShift = 8;
+    printf("Thread Num: %d\n", thread_num);
+    double mt_tt_time = 0;
+    double lf_tt_time = 0;
+    for(int i=shift_init; i<shift_max; i++)
+    {
+        const size_t kSize = 0x100 << i;
+        timer("mt").start();
+        mt_rs = __testCCB<tll::mt::CCBuffer, thread_num>(kSize, timer, "mt");
+        timer("mt").stop();
+        timer("lf").start();
+        lf_rs = __testCCB<tll::lf::CCBuffer, thread_num>(kSize, timer, "lf");
+        timer("lf").stop();
+        if(!mt_rs || !lf_rs) return false;
+        mt_tt_time += timer("mt").duration().count();
+        lf_tt_time += timer("lf").duration().count();
+        printf(" size: %ld (0x%lx) mt: %.9f, lf: %.9f (%.3f)\n", kSize * thread_num, kSize * thread_num, timer("mt").duration().count(), timer("lf").duration().count(), timer("mt").duration().count() / timer("lf").duration().count());
+
+        double mt_time_push = 0;
+        double mt_time_pop = 0;
+        double lf_time_push = 0;
+        double lf_time_pop = 0;
+        for(int c=0; c<thread_num; c++)
+        {
+            if(c&1)
+            {
+                mt_time_pop += timer("mt" + std::to_string(c)).total().count();
+                lf_time_pop += timer("lf" + std::to_string(c)).total().count();
+            }
+            else
+            {
+                mt_time_push += timer("mt" + std::to_string(c)).total().count();
+                lf_time_push += timer("lf" + std::to_string(c)).total().count();
+            }
+        }
+        printf(" - mt push: %.9f, pop: %.9f (%.3f)\n", mt_time_push, mt_time_pop, mt_time_push/mt_time_pop);
+        printf(" - lf push: %.9f, pop: %.9f (%.3f)\n", lf_time_push, lf_time_pop, lf_time_push/lf_time_pop);
+    }
+    printf(" Total: mt: %.9f, lf: %.9f (%.3f)\n\n", mt_tt_time, lf_tt_time, mt_tt_time / lf_tt_time);
+
+    return true;
+}
+
+bool testCCB()
+{
+
+    constexpr int kInitShift = 8;
+    constexpr int kShift = 10;
     tll::time::Map<> timer{"lf", "mt"};
-    {
-        constexpr int kThreadNum = 2;
-        LOGD("Thread Num == %d", kThreadNum);
-        double mt_tt_time = 0;
-        double lf_tt_time = 0;
-        for(int i=0; i<kShift; i++)
-        {
-            const size_t kSize = 0x100 << i;
-            timer("mt").start();
-            mt_rs = _testCCB<tll::mt::CCBuffer, kThreadNum>(kSize);
-            timer("mt").stop();
-            timer("lf").start();
-            lf_rs = _testCCB<tll::lf::CCBuffer, kThreadNum>(kSize);
-            timer("lf").stop();
-            mt_tt_time += timer("mt").duration().count();
-            lf_tt_time += timer("lf").duration().count();
-            LOGD("size: %ld (0x%lx) mt: %.9f, lf: %.9f", kSize * kThreadNum, kSize * kThreadNum, timer("mt").duration().count(), timer("lf").duration().count());
-            if(!mt_rs || !lf_rs) return false;
-        }
-        LOGD("Total: mt: %.9f, lf: %.9f", mt_tt_time, lf_tt_time);
-    }
-
-    {
-        constexpr int kThreadNum = 4;
-        LOGD("Thread Num == %d", kThreadNum);
-        double mt_tt_time = 0;
-        double lf_tt_time = 0;
-        for(int i=0; i<kShift; i++)
-        {
-            const size_t kSize = 0x100 << i;
-            timer("mt").start();
-            mt_rs = _testCCB<tll::mt::CCBuffer, kThreadNum>(kSize);
-            timer("mt").stop();
-            timer("lf").start();
-            lf_rs = _testCCB<tll::lf::CCBuffer, kThreadNum>(kSize);
-            timer("lf").stop();
-            mt_tt_time += timer("mt").duration().count();
-            lf_tt_time += timer("lf").duration().count();
-            LOGD("size: %ld (0x%lx) mt: %.9f, lf: %.9f", kSize * kThreadNum, kSize * kThreadNum, timer("mt").duration().count(), timer("lf").duration().count());
-            if(!mt_rs || !lf_rs) return false;
-        }
-        LOGD("Total: mt: %.9f, lf: %.9f", mt_tt_time, lf_tt_time);
-    }
-
-    {
-        constexpr int kThreadNum = 6;
-        LOGD("Thread Num == %d", kThreadNum);
-        double mt_tt_time = 0;
-        double lf_tt_time = 0;
-        for(int i=0; i<kShift; i++)
-        {
-            const size_t kSize = 0x100 << i;
-            timer("mt").start();
-            mt_rs = _testCCB<tll::mt::CCBuffer, kThreadNum>(kSize);
-            timer("mt").stop();
-            timer("lf").start();
-            lf_rs = _testCCB<tll::lf::CCBuffer, kThreadNum>(kSize);
-            timer("lf").stop();
-            mt_tt_time += timer("mt").duration().count();
-            lf_tt_time += timer("lf").duration().count();
-            LOGD("size: %ld (0x%lx) mt: %.9f, lf: %.9f", kSize * kThreadNum, kSize * kThreadNum, timer("mt").duration().count(), timer("lf").duration().count());
-            if(!mt_rs || !lf_rs) return false;
-        }
-        LOGD("Total: mt: %.9f, lf: %.9f", mt_tt_time, lf_tt_time);
-    }
-
-    {
-        constexpr int kThreadNum = 8;
-        LOGD("Thread Num == %d", kThreadNum);
-        double mt_tt_time = 0;
-        double lf_tt_time = 0;
-        for(int i=0; i<kShift; i++)
-        {
-            const size_t kSize = 0x100 << i;
-            timer("mt").start();
-            mt_rs = _testCCB<tll::mt::CCBuffer, kThreadNum>(kSize);
-            timer("mt").stop();
-            timer("lf").start();
-            lf_rs = _testCCB<tll::lf::CCBuffer, kThreadNum>(kSize);
-            timer("lf").stop();
-            mt_tt_time += timer("mt").duration().count();
-            lf_tt_time += timer("lf").duration().count();
-            LOGD("size: %ld (0x%lx) mt: %.9f, lf: %.9f", kSize * kThreadNum, kSize * kThreadNum, timer("mt").duration().count(), timer("lf").duration().count());
-            if(!mt_rs || !lf_rs) return false;
-        }
-        LOGD("Total: mt: %.9f, lf: %.9f", mt_tt_time, lf_tt_time);
-    }
+    if(_testCCB<2>(kInitShift, kShift, timer) == false)
+        return false;
+    if(_testCCB<4>(kInitShift, kShift, timer) == false)
+        return false;
+    if(_testCCB<6>(kInitShift, kShift, timer) == false)
+        return false;
+    if(_testCCB<8>(kInitShift, kShift, timer) == false)
+        return false;
 
     int mt_win=0;
     int lf_win=0;
@@ -246,8 +220,7 @@ bool testCCB()
         if(timer("mt").duration(i) > timer("lf").duration(i)) lf_win++;
     }
 
-    LOGD("Draw: %d, Mutex win: %d, Lock-free win: %d", draw, mt_win, lf_win);
-    LOGD("Lock-free is faster %.2f times", (timer("mt").total().count() / timer("lf").total().count()));
+    printf("Draw: %d, Mutex win: %d, Lock-free win: %d\n", draw, mt_win, lf_win);
     return true;
 }
 
@@ -262,6 +235,6 @@ int main()
 
 
     rs = testCCB();
-    LOGD("testCCB: %s", rs?"Passed":"FAILED");
+    printf("testCCB: %s\n", rs?"Passed":"FAILED");
     return 0;
 }
