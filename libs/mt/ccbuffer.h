@@ -5,7 +5,7 @@
 #include <vector>
 #include "../util.h"
 
-namespace tll::lk {
+namespace tll::mt {
 /// Contiguous Circular Buffer
 struct CCBuffer
 {

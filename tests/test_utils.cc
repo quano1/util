@@ -65,11 +65,11 @@ bool testGuard()
     return std::round(timer().total().count()) == std::round(tracer__.timer().elapse().count()) && std::round(timer().duration(0).count()) == std::round(timer().duration(1).count());
 }
 
-template <class CRB, int omp_thread_num=2>
-bool testContiRB(size_t buff_size = 0x100)
+template <class CCB, int omp_thread_num=2>
+bool _testCCB(size_t buff_size = 0x100)
 {
     buff_size *= omp_thread_num;
-    CRB crb(buff_size);
+    CCB ccb(buff_size);
 
     bool ret = true;
     constexpr size_t kPushVal = 0xaaaaaaaaaaaaaaaau;
@@ -77,12 +77,12 @@ bool testContiRB(size_t buff_size = 0x100)
     for(size_t push_size=1; push_size<=8; push_size++) /// 2 4 6 8
     {
         rd.resize(buff_size * push_size);
-        crb.reset(buff_size);
+        ccb.reset(buff_size);
         memset(rd.data(), 0xff, rd.size());
         // LOGD("push_size: %ld", push_size);
         std::atomic<size_t> total_r{0};
         std::atomic<size_t> total_w{0};
-        #pragma omp parallel num_threads ( omp_thread_num ) shared(crb, rd, push_size)
+        #pragma omp parallel num_threads ( omp_thread_num ) shared(ccb, rd, push_size)
         {
             int tid = omp_get_thread_num();
             int nts = omp_get_num_threads();
@@ -93,7 +93,7 @@ bool testContiRB(size_t buff_size = 0x100)
                 // LOGD("Producer: %d", tid);
                 for(int i=0; i<buff_size/(nts/2) ; i++)
                 {
-                    if(crb.push((char*)(&kPushVal), push_size) == false)
+                    if(ccb.push((char*)(&kPushVal), push_size) == false)
                     {
                         i--;
                     }
@@ -114,7 +114,7 @@ bool testContiRB(size_t buff_size = 0x100)
                 for(size_t pop_size=0; pop_size<(total_size) ;)
                 {
                     size_t ps = push_size;
-                    if(crb.pop(rd.data() + pop_size + offset, ps))
+                    if(ccb.pop(rd.data() + pop_size + offset, ps))
                     {
                         pop_size += ps;
                         total_r.fetch_add(ps, std::memory_order_relaxed);
@@ -142,92 +142,90 @@ bool testContiRB(size_t buff_size = 0x100)
     return ret;
 }
 
-bool testCRB()
+bool testCCB()
 {
-    bool lk_rs = true;
+    bool mt_rs = true;
     bool lf_rs = true;
     constexpr int kShift = 10;
-    tll::time::Map<> timer{"lf", "lk"};
+    tll::time::Map<> timer{"lf", "mt"};
     {
         constexpr int kThreadNum = 2;
         LOGD("Thread Num == %d", kThreadNum);
+        double mt_tt_time = 0;
+        double lf_tt_time = 0;
         for(int i=0; i<kShift; i++)
         {
             const size_t kSize = 0x100 << i;
-            LOGD("size: %ld (0x%lx)", kSize * kThreadNum, kSize * kThreadNum);
-            timer("lk").start();
-            lk_rs = testContiRB<tll::lk::CCBuffer, kThreadNum>(kSize);
-            timer("lk").stop();
+            timer("mt").start();
+            mt_rs = _testCCB<tll::mt::CCBuffer, kThreadNum>(kSize);
+            timer("mt").stop();
             timer("lf").start();
-            lf_rs = testContiRB<tll::lf::CCBuffer, kThreadNum>(kSize);
+            lf_rs = _testCCB<tll::lf::CCBuffer, kThreadNum>(kSize);
             timer("lf").stop();
-            double lk_tt_time = timer("lk").duration().count();
-            double lf_tt_time = timer("lf").duration().count();
-            LOGD("lk: %.9f, lf: %.9f", lk_tt_time, lf_tt_time);
-            if(lk_tt_time == lf_tt_time) LOGD("draw");
-            if(lk_tt_time < lf_tt_time) LOGD("Mutex win");
-            if(lk_tt_time > lf_tt_time) LOGD("Lock-free win");
-            if(!lk_rs || !lf_rs) return false;
+            mt_tt_time += timer("mt").duration().count();
+            lf_tt_time += timer("lf").duration().count();
+            LOGD("size: %ld (0x%lx) mt: %.9f, lf: %.9f", kSize * kThreadNum, kSize * kThreadNum, timer("mt").duration().count(), timer("lf").duration().count());
+            if(!mt_rs || !lf_rs) return false;
         }
+        LOGD("Total: mt: %.9f, lf: %.9f", mt_tt_time, lf_tt_time);
     }
 
     {
         constexpr int kThreadNum = 4;
         LOGD("Thread Num == %d", kThreadNum);
+        double mt_tt_time = 0;
+        double lf_tt_time = 0;
         for(int i=0; i<kShift; i++)
         {
             const size_t kSize = 0x100 << i;
-            LOGD("size: %ld (0x%lx)", kSize * kThreadNum, kSize * kThreadNum);
-            timer("lk").start();
-            lk_rs = testContiRB<tll::lk::CCBuffer, kThreadNum>(kSize);
-            timer("lk").stop();
+            timer("mt").start();
+            mt_rs = _testCCB<tll::mt::CCBuffer, kThreadNum>(kSize);
+            timer("mt").stop();
             timer("lf").start();
-            lf_rs = testContiRB<tll::lf::CCBuffer, kThreadNum>(kSize);
+            lf_rs = _testCCB<tll::lf::CCBuffer, kThreadNum>(kSize);
             timer("lf").stop();
-            double lk_tt_time = timer("lk").duration().count();
-            double lf_tt_time = timer("lf").duration().count();
-            LOGD("lk: %.9f, lf: %.9f", lk_tt_time, lf_tt_time);
-            if(lk_tt_time == lf_tt_time) LOGD("draw");
-            if(lk_tt_time < lf_tt_time) LOGD("Mutex win");
-            if(lk_tt_time > lf_tt_time) LOGD("Lock-free win");
-            if(!lk_rs || !lf_rs) return false;
+            mt_tt_time += timer("mt").duration().count();
+            lf_tt_time += timer("lf").duration().count();
+            LOGD("size: %ld (0x%lx) mt: %.9f, lf: %.9f", kSize * kThreadNum, kSize * kThreadNum, timer("mt").duration().count(), timer("lf").duration().count());
+            if(!mt_rs || !lf_rs) return false;
         }
+        LOGD("Total: mt: %.9f, lf: %.9f", mt_tt_time, lf_tt_time);
     }
 
     {
         constexpr int kThreadNum = 8;
         LOGD("Thread Num == %d", kThreadNum);
+        double mt_tt_time = 0;
+        double lf_tt_time = 0;
         for(int i=0; i<kShift; i++)
         {
             const size_t kSize = 0x100 << i;
-            LOGD("size: %ld (0x%lx)", kSize * kThreadNum, kSize * kThreadNum);
-            timer("lk").start();
-            lk_rs = testContiRB<tll::lk::CCBuffer, kThreadNum>(kSize);
-            timer("lk").stop();
+            timer("mt").start();
+            mt_rs = _testCCB<tll::mt::CCBuffer, kThreadNum>(kSize);
+            timer("mt").stop();
             timer("lf").start();
-            lf_rs = testContiRB<tll::lf::CCBuffer, kThreadNum>(kSize);
+            lf_rs = _testCCB<tll::lf::CCBuffer, kThreadNum>(kSize);
             timer("lf").stop();
-            double lk_tt_time = timer("lk").duration().count();
-            double lf_tt_time = timer("lf").duration().count();
-            LOGD("lk: %.9f, lf: %.9f", lk_tt_time, lf_tt_time);
-            if(lk_tt_time == lf_tt_time) LOGD("draw");
-            if(lk_tt_time < lf_tt_time) LOGD("Mutex win");
-            if(lk_tt_time > lf_tt_time) LOGD("Lock-free win");
-            if(!lk_rs || !lf_rs) return false;
+            mt_tt_time += timer("mt").duration().count();
+            lf_tt_time += timer("lf").duration().count();
+            LOGD("size: %ld (0x%lx) mt: %.9f, lf: %.9f", kSize * kThreadNum, kSize * kThreadNum, timer("mt").duration().count(), timer("lf").duration().count());
+            if(!mt_rs || !lf_rs) return false;
         }
+        LOGD("Total: mt: %.9f, lf: %.9f", mt_tt_time, lf_tt_time);
     }
 
-    int lk_win=0;
+    int mt_win=0;
     int lf_win=0;
     int draw=0;
-    for(int i=0; i<timer("lk").size(); i++)
+    for(int i=0; i<timer("mt").size(); i++)
     {
-        if(timer("lk").duration(i) == timer("lf").duration(i)) draw++;
-        if(timer("lk").duration(i) < timer("lf").duration(i)) lk_win++;
-        if(timer("lk").duration(i) > timer("lf").duration(i)) lf_win++;
+        if(timer("mt").duration(i) == timer("lf").duration(i)) draw++;
+        if(timer("mt").duration(i) < timer("lf").duration(i)) mt_win++;
+        if(timer("mt").duration(i) > timer("lf").duration(i)) lf_win++;
     }
 
-    LOGD("draw: %d, Mutex win: %d, Lock-free win: %d", draw, lk_win, lf_win);
+    LOGD("Draw: %d, Mutex win: %d, Lock-free win: %d", draw, mt_win, lf_win);
+    LOGD("Lock-free is faster %.2f times", (timer("mt").total().count() / timer("lf").total().count()));
     return true;
 }
 
@@ -241,7 +239,7 @@ int main()
     // LOGD("testGuard: %s", rs?"Passed":"FAILED");
 
 
-    rs = testCRB();
-    LOGD("testContiRB: %s", rs?"Passed":"FAILED");
+    rs = testCCB();
+    LOGD("testCCB: %s", rs?"Passed":"FAILED");
     return 0;
 }
