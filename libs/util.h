@@ -207,15 +207,15 @@ public:
     inline char *tryPop(size_t &cons, size_t &size)
     {
         cons = ch_.load(std::memory_order_relaxed);
+        size_t next_cons = cons;
         for(;;)
         {
             size_t prod = pt_.load(std::memory_order_relaxed);
             size_t wmark = wm_.load(std::memory_order_acquire);
-            size_t next_cons = cons;
-            /// underrun
+            next_cons = cons;
             if(cons == prod)
             {
-                // LOGD("Underrun!");
+                // LOGE("Underrun!");dump();
                 size = 0;
                 return nullptr;
             }
@@ -223,10 +223,9 @@ public:
             if(cons == wmark)
             {
                 next_cons = next(cons);
-                // LOGD("%d", cons);
                 if(prod <= next_cons)
                 {
-                    // LOGD("Underrun!");
+                    // LOGE("Underrun!");dump();
                     size = 0;
                     return nullptr;
                 }
@@ -246,8 +245,7 @@ public:
 
             if(ch_.compare_exchange_weak(cons, next_cons + size, std::memory_order_relaxed, std::memory_order_relaxed)) break;
         }
-
-        return buffer_.data() + wrap(cons);
+        return buffer_.data() + wrap(next_cons);
     }
 
     inline void completePop(size_t cons, size_t size)
@@ -261,27 +259,30 @@ public:
             ct_.store(cons + size, std::memory_order_release);
     }
 
-    inline size_t pop(char *data, size_t size)
+    inline bool pop(char *dst, size_t &size)
     {
         // size_t offset;
         size_t cons;
-        char *ptr = tryPop(cons, size);
-        if(ptr != nullptr)
+        char *src = tryPop(cons, size);
+        if(src != nullptr)
         {
-            memcpy(data, ptr, size);
+            memcpy(dst, src, size);
             completePop(cons, size);
+
+            return true;
         }
-        return size;
+
+        return false;
     }
 
     inline char *tryPush(size_t &prod, size_t size)
     {
         prod = ph_.load(std::memory_order_relaxed);
-        size_t wmark = wm_.load(std::memory_order_acquire);
         for(;;)
         {
-            size_t cons = ct_.load(std::memory_order_relaxed);
-            if(size <= buffer_.size() - unused() - (prod - cons))
+            size_t wmark = wm_.load(std::memory_order_relaxed);
+            size_t cons = ct_.load(std::memory_order_acquire);
+            if((prod - cons + unused() < buffer_.size()) && (size <= buffer_.size() - unused() - (prod - cons)))
             {
                 /// prod leads
                 if(wrap(prod) >= wrap(cons))
@@ -291,16 +292,13 @@ public:
                     {
                         if(size <= wrap(cons))
                         {
-                            // wmark = prod;
-                            // LOGD("");
                             if(!ph_.compare_exchange_weak(prod, next(prod) + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
                             if(!wm_.compare_exchange_weak(wmark, prod, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
                             return buffer_.data() + wrap(next(prod));
                         }
                         else
                         {
-                            LOGD("OVERRUN");
-                            dump();
+                            // LOGE("OVERRUN");dump();
                             return nullptr;
                         }
                     }
@@ -315,8 +313,7 @@ public:
                 {
                     if(size > wrap(cons) - wrap(prod))
                     {
-                        LOGD("OVERRUN");
-                        dump();
+                        // LOGE("OVERRUN");dump();
                         return nullptr;
                     }
                     if(!ph_.compare_exchange_weak(prod, prod + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
@@ -325,8 +322,7 @@ public:
             }
             else
             {
-                LOGD("OVERRUN");
-                dump();
+                // LOGE("OVERRUN");dump();
                 return nullptr;
             }
         }
@@ -345,20 +341,22 @@ public:
             pt_.store(next(prod) + size, std::memory_order_release);
         else
             pt_.store(prod + size, std::memory_order_release);
+        // dump();
     }
 
-    inline size_t push(const char *data, size_t size)
+    inline bool push(const char *src, size_t size)
     {
         // size_t offset;
         size_t prod;
-        char *ptr = tryPush(prod, size);
-        if(ptr)
+        char *dst = tryPush(prod, size);
+        if(dst)
         {
-            memcpy(ptr, data, size);
+            memcpy(dst, src, size);
             completePush(prod, size);
+            return true;
         }
 
-        return size;
+        return false;
     }
 
 
@@ -369,7 +367,12 @@ public:
 
     inline size_t size() const
     {
-        return pt_.load(std::memory_order_relaxed) - ct_.load(std::memory_order_relaxed) - unused();
+        return pt_.load(std::memory_order_relaxed) - ch_.load(std::memory_order_relaxed) - unused();
+    }
+
+    inline size_t freeSize() const
+    {
+        return buffer_.size() - ph_.load(std::memory_order_relaxed) - ct_.load(std::memory_order_relaxed) - unused();
     }
 
     inline size_t unused() const

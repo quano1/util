@@ -329,10 +329,13 @@ public:
                     {
                         auto &flag = buff_entry.first;
                         auto &rb = buff_entry.second;
-                        size_t s = rb.pop(buff.data(), chunk_size);
-                        buff.resize(s);
-                        log_(flag, buff);
-                        // buff.resize(0);
+                        size_t s = chunk_size;
+                        if(rb.pop(buff.data(), s))
+                        {
+                            buff.resize(s);
+                            log_(flag, buff);
+                            // buff.resize(0);
+                        }
                     }
                 }
 
@@ -359,9 +362,12 @@ public:
                     while(rb.size() >= chunk_size)
                     {
                         buff.resize(chunk_size);
-                        size_t s = rb.pop(buff.data(), chunk_size);
-                        buff.resize(s);
-                        log_(flag, buff);
+                        size_t s = chunk_size;
+                        if(rb.pop(buff.data(), s))
+                        {
+                            buff.resize(s);
+                            log_(flag, buff);
+                        }
                     }
                 }
             }
@@ -375,9 +381,12 @@ public:
                 while(rb.size() > 0)
                 {
                     buff.resize(chunk_size);
-                    size_t s = rb.pop(buff.data(), chunk_size);
-                    buff.resize(s);
-                    log_(flag, buff);
+                    size_t s = chunk_size;
+                    if(rb.pop(buff.data(), s))
+                    {
+                        buff.resize(s);
+                        log_(flag, buff);
+                    }
                 }
             }
         });

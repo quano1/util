@@ -66,7 +66,8 @@ bool testGuard()
 bool testContiRB()
 {
     // TLL_GLOGTF();
-    constexpr int kSize = 8;
+    // constexpr int kSize = 8;
+    constexpr int kSize = 0x100000;
     tll::util::ContiRB crb(kSize);
     
     bool ret = true;
@@ -91,43 +92,66 @@ bool testContiRB()
     }
 
     // #pragma omp parallel num_threads ( 4 )
-    constexpr int kSize2 = 4096;
-    int push_val = 0xAABBCCDD;
-    size_t push_size = sizeof(push_val);
-    crb.reset(kSize2);
-    std::vector<char> wt(kSize2 * push_size);
-    std::vector<char> rd(kSize2 * push_size);
-    // memset(rd.data(), 0, rd.size());
-    #pragma omp parallel num_threads ( 8 ) shared(crb, wt, rd, push_val, push_size)
+
+    constexpr size_t push_val = 0xaaaaaaaaaaaaaaaau;
+    // std::vector<char> wt(kSize * push_size);
+    std::vector<char> rd;
+    for(size_t push_size=2; push_size<=8; push_size+=2) /// 2 4 6 8
     {
-        int tid = omp_get_thread_num();
-        int nts = omp_get_num_threads();
+        rd.resize(kSize * push_size);
+        crb.reset(kSize);
+        memset(rd.data(), 0xff, rd.size());
+        LOGD("push_size: %ld", push_size);
+        LOGD("crb size: %ld, rd size: %ld", crb.buffer_.size(), rd.size());
 
-        if((tid & 1) == 0)
-        { 
-            LOGD("Thread: %d", tid);
-            /// producer
-            for(int i=0; i<kSize2/(nts/2) ; i++)
-            {
-                crb.push((char*)(&push_val), push_size);
-            }
-        }
-        else
+        #pragma omp parallel num_threads ( 8 ) shared(crb, rd, push_size)
         {
-            size_t tmp = rd.size()/(nts/2);
-            LOGD("Thread: %d: %ld", tid, ((tid/2)*tmp));
-            /// consumer
-            for(size_t pop_size=0; pop_size<(tmp) ;)
+            int tid = omp_get_thread_num();
+            int nts = omp_get_num_threads();
+            assert(nts > 1);
+
+            if((tid & 1) == 0)
+            { 
+                LOGD("Producer: %d", tid);
+                for(int i=0; i<kSize/(nts/2) ; i++)
+                {
+                    if(crb.push((char*)(&push_val), push_size) == false)
+                    {
+                        // LOGD("OVER...RUN");
+                        i--;
+                    }
+                    std::this_thread::yield();
+                }
+            }
+            else
             {
-                pop_size += crb.pop(rd.data() + pop_size + ((tid/2)*tmp), push_size);
-                std::this_thread::yield();
-                // pop_size += rs;
+                size_t total_size = rd.size()/(nts/2);
+                size_t offset = ((tid)/2)*total_size;
+                LOGD("Consumer: %d, total: %ld, offset: %ld", tid, total_size, offset);
+                /// consumer
+                for(size_t pop_size=0; pop_size<(total_size) ;)
+                {
+                    size_t ps = push_size;
+                    if(crb.pop(rd.data() + pop_size + offset, ps))
+                    {
+                        pop_size += ps;
+                    }
+                    std::this_thread::yield();
+                }
             }
         }
-    }
 
-    LOGD("%x", *((int *)(rd.data())));
-    LOGD("memcmp: %d", memcmp(rd.data(), rd.data() + push_size, rd.size() - push_size));
+        LOGD("rd[0]: %x", *((uint8_t *)(rd.data())));
+        int cmp = memcmp(rd.data(), rd.data() + 1, rd.size() - 1);
+        LOGD("memcmp: %d", cmp);
+        if(cmp && kSize <= 0x100)
+        {
+            for(int i=0; i<rd.size(); i++)
+                printf("%x", *(uint8_t*)&rd[i]);
+            printf("\n");
+        }
+        printf("\n");
+    }
     return ret;
 }
 
