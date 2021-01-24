@@ -146,7 +146,7 @@ bool testCCB()
 {
     bool mt_rs = true;
     bool lf_rs = true;
-    constexpr int kShift = 10;
+    constexpr int kShift = 8;
     tll::time::Map<> timer{"lf", "mt"};
     {
         constexpr int kThreadNum = 2;
@@ -172,6 +172,28 @@ bool testCCB()
 
     {
         constexpr int kThreadNum = 4;
+        LOGD("Thread Num == %d", kThreadNum);
+        double mt_tt_time = 0;
+        double lf_tt_time = 0;
+        for(int i=0; i<kShift; i++)
+        {
+            const size_t kSize = 0x100 << i;
+            timer("mt").start();
+            mt_rs = _testCCB<tll::mt::CCBuffer, kThreadNum>(kSize);
+            timer("mt").stop();
+            timer("lf").start();
+            lf_rs = _testCCB<tll::lf::CCBuffer, kThreadNum>(kSize);
+            timer("lf").stop();
+            mt_tt_time += timer("mt").duration().count();
+            lf_tt_time += timer("lf").duration().count();
+            LOGD("size: %ld (0x%lx) mt: %.9f, lf: %.9f", kSize * kThreadNum, kSize * kThreadNum, timer("mt").duration().count(), timer("lf").duration().count());
+            if(!mt_rs || !lf_rs) return false;
+        }
+        LOGD("Total: mt: %.9f, lf: %.9f", mt_tt_time, lf_tt_time);
+    }
+
+    {
+        constexpr int kThreadNum = 6;
         LOGD("Thread Num == %d", kThreadNum);
         double mt_tt_time = 0;
         double lf_tt_time = 0;

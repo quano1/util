@@ -27,6 +27,7 @@ public:
 
     inline void reset(size_t new_size=0)
     {
+        std::scoped_lock lock(push_mtx_, pop_mtx_);
         ph_ = 0;
         ch_ = 0;
         pt_ = 0;
@@ -38,6 +39,7 @@ public:
 
     inline void reserve(size_t size)
     {
+        std::scoped_lock lock(push_mtx_, pop_mtx_);
         size = util::isPowerOf2(size) ? size : util::nextPowerOf2(size);
         buffer_.resize(size);
     }
