@@ -282,7 +282,7 @@ public:
         {
             size_t wmark = wm_.load(std::memory_order_relaxed);
             size_t cons = ct_.load(std::memory_order_acquire);
-            if((prod - cons + unused() < buffer_.size()) && (size <= buffer_.size() - unused() - (prod - cons)))
+            if(size <= buffer_.size() - (prod - cons - unused()))
             {
                 /// prod leads
                 if(wrap(prod) >= wrap(cons))
@@ -372,7 +372,7 @@ public:
 
     inline size_t freeSize() const
     {
-        return buffer_.size() - ph_.load(std::memory_order_relaxed) - ct_.load(std::memory_order_relaxed) - unused();
+        return buffer_.size() - (ph_.load(std::memory_order_relaxed) - ct_.load(std::memory_order_relaxed) - unused());
     }
 
     inline size_t unused() const
