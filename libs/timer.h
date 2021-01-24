@@ -4,8 +4,6 @@
 #include <chrono>
 #include <unordered_map>
 #include <set>
-#include <cassert>
-#include <mutex>
 
 namespace tll{ namespace time{
 
@@ -112,6 +110,10 @@ private:
 public:
     Map() = default;
     ~Map() = default;
+    template <typename ...Args>
+    Map(Args... args) : Map{{std::forward<std::string>(args)...}}
+    {}
+
     Map(const std::set<std::string> &cnt_lst)
     {
         for (const auto &cnt_id : cnt_lst)
