@@ -121,7 +121,8 @@ public:
         // {
             size_t wmark = wm_;
             size_t cons = ct_;
-            if(size <= buffer_.size() - (prod - cons - unused()))
+            // if(size <= buffer_.size() - (prod - cons - unused()))
+            if(size <= buffer_.size() - (prod - cons))
             {
                 /// prod leads
                 if(wrap(prod) >= wrap(cons))

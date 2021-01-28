@@ -24,6 +24,7 @@ public:
     using Tp = std::chrono::time_point<C,D>;
 private:
     Tp begin_=std::chrono::time_point_cast<D>(Clock::now());
+    Duration total_elapsed_{0};
     std::vector<Duration> duration_lst_;
 public:
     Counter() = default;
@@ -41,20 +42,21 @@ public:
         return *this;
     }
 
-    auto &restart()
+    auto &elapsed()
     {
-        return stop().start();
-    }
-
-    Duration elapse() const
-    {
-        return (std::chrono::time_point_cast<D>(Clock::now()) - begin_);
+        total_elapsed_ += elapse();
+        return *this;
     }
 
     auto &clear()
     {
         duration_lst_.clear();
         return *this;
+    }
+
+    Duration elapse() const
+    {
+        return std::chrono::time_point_cast<D>(Clock::now()) - begin_;
     }
 
     const Tp &begin() const
@@ -90,6 +92,11 @@ public:
         }
 
         return ret;
+    }
+
+    Duration totalElapsed() const
+    {
+        return total_elapsed_;
     }
 }; /// Counter
 

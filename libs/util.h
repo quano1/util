@@ -675,4 +675,18 @@ static T &instance()
 
 };
 
+void dump(const char *ptr, size_t size, size_t off=0, size_t hl=-1)
+{
+    for(size_t i=off; i<size; i++)
+    {
+        if(i == hl)
+            printf("[%x]", ptr[i]);
+        else if(ptr[i] != 0)
+            printf("%2x", ptr[i]);
+        else
+            printf("..");
+    }
+    printf("\n");
+}
+
 }} /// tll::util

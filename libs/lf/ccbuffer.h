@@ -109,7 +109,7 @@ public:
         {
             memcpy(dst, src, size);
             completePop(cons, size);
-
+            
             return true;
         }
 
@@ -123,7 +123,8 @@ public:
         {
             size_t wmark = wm_.load(std::memory_order_relaxed);
             size_t cons = ct_.load(std::memory_order_acquire);
-            if(size <= buffer_.size() - (prod - cons - unused()))
+            // if(size <= buffer_.size() - (prod - cons - unused()))
+            if(size <= buffer_.size() - (prod - cons))
             {
                 /// prod leads
                 if(wrap(prod) >= wrap(cons))
@@ -182,7 +183,6 @@ public:
             pt_.store(next(prod) + size, std::memory_order_release);
         else
             pt_.store(prod + size, std::memory_order_release);
-        // dump();
     }
 
     inline bool push(const char *src, size_t size)
@@ -231,7 +231,7 @@ public:
     }
 
     std::atomic<size_t> ph_{0}, pt_{0}, wm_{0}, ch_{0}, ct_{0};
-    std::vector<char> buffer_{}; /// 1Kb
+    std::vector<char> buffer_; /// 1Kb
 };
 
 } /// tll::lf

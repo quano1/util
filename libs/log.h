@@ -321,7 +321,7 @@ public:
 
             while(isRunning())
             {
-                uint32_t delta = timer().restart().duration().count();
+                uint32_t delta = timer().stop().start().duration().count();
                 total_delta += delta;
 
                 if(total_delta >= period_ms)
