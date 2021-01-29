@@ -679,12 +679,36 @@ void dump(const char *ptr, size_t size, size_t off=0, size_t hl=-1)
 {
     for(size_t i=off; i<size; i++)
     {
-        if(i == hl)
-            printf("[%x]", ptr[i]);
-        else if(ptr[i] != 0)
-            printf("%2x", ptr[i]);
-        else
-            printf("..");
+        switch (ptr[i])
+        {
+            case 0:
+            {
+                printf(".");
+            }
+            break;
+            case '(':
+            case ')':
+            case '|':
+            {
+                printf("%c", ptr[i]);
+            }
+            break;
+            default:
+            {
+                if(i == hl)
+                    printf("[%X]", ptr[i]);
+                else if(ptr[i] != 0)
+                    printf("%2X", ptr[i]);
+            }
+            break;
+        }
+
+        // if(i == hl)
+        //     printf("[%X]", ptr[i]);
+        // else if(ptr[i] != 0)
+        //     printf("%2X", ptr[i]);
+        // else
+        //     printf("..");
     }
     printf("\n");
 }

@@ -48,56 +48,64 @@ public:
     inline char *tryPop(size_t &cons, size_t &size)
     {
         cons = ch_.load(std::memory_order_relaxed);
-        size_t next_cons = cons;
+        size_t next_cons;
+        size_t prod;
+        size_t wmark;
+        size_t tmp_size;
         for(;;)
         {
-            size_t prod = pt_.load(std::memory_order_relaxed);
-            size_t wmark = wm_.load(std::memory_order_acquire);
             next_cons = cons;
-            if(cons == prod)
+            tmp_size = size;
+            prod = pt_.load(std::memory_order_relaxed);
+            wmark = wm_.load(std::memory_order_relaxed);
+            if(next_cons == prod)
             {
                 // LOGE("Underrun!");dump();
-                size = 0;
+                tmp_size = 0;
                 return nullptr;
             }
 
-            if(cons == wmark)
+            if(next_cons == wmark)
             {
-                next_cons = next(cons);
+                next_cons = next(next_cons);
                 if(prod <= next_cons)
                 {
                     // LOGE("Underrun!");dump();
-                    size = 0;
+                    tmp_size = 0;
                     return nullptr;
                 }
-                if(size > (prod - next_cons))
-                    size = prod - next_cons;
+                if(tmp_size > (prod - next_cons))
+                    tmp_size = prod - next_cons;
             }
-            else if(cons < wmark)
+            else if(next_cons < wmark)
             {
-                if(size > (wmark - cons))
-                    size = wmark - cons;
+                if(tmp_size > (wmark - next_cons))
+                    tmp_size = wmark - next_cons;
             }
             else /// cons > wmark
             {
-                if(size > (prod - cons))
-                    size = prod - cons;
+                if(tmp_size > (prod - next_cons))
+                {
+                    tmp_size = prod - next_cons;
+                }
             }
 
-            if(ch_.compare_exchange_weak(cons, next_cons + size, std::memory_order_relaxed, std::memory_order_relaxed)) break;
+            if(ch_.compare_exchange_weak(cons, next_cons + tmp_size, std::memory_order_acquire, std::memory_order_relaxed)) break;
         }
+
+        size = tmp_size;
         return buffer_.data() + wrap(next_cons);
     }
 
     inline void completePop(size_t cons, size_t size)
     {
         for(;ct_.load(std::memory_order_relaxed) != cons;)
-        {}
+        {std::this_thread::yield();}
 
         if(cons == wm_.load(std::memory_order_relaxed))
-            ct_.store(next(cons) + size, std::memory_order_release);
+            ct_.store(next(cons) + size, std::memory_order_relaxed);
         else
-            ct_.store(cons + size, std::memory_order_release);
+            ct_.store(cons + size, std::memory_order_relaxed);
     }
 
     inline bool pop(char *dst, size_t &size)
@@ -109,7 +117,6 @@ public:
         {
             memcpy(dst, src, size);
             completePop(cons, size);
-            
             return true;
         }
 
@@ -122,7 +129,7 @@ public:
         for(;;)
         {
             size_t wmark = wm_.load(std::memory_order_relaxed);
-            size_t cons = ct_.load(std::memory_order_acquire);
+            size_t cons = ct_.load(std::memory_order_relaxed);
             // if(size <= buffer_.size() - (prod - cons - unused()))
             if(size <= buffer_.size() - (prod - cons))
             {
@@ -175,7 +182,7 @@ public:
     inline void completePush(size_t prod, size_t size)
     {
         for(;pt_.load(std::memory_order_relaxed) != prod;)
-        {}
+        {std::this_thread::yield();}
 
         if(wrap(prod) == 0) wm_.store(prod, std::memory_order_relaxed);
 
@@ -194,6 +201,7 @@ public:
         {
             memcpy(dst, src, size);
             completePush(prod, size);
+            // LOGD("%ld", prod);
             return true;
         }
 

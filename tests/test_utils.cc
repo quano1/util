@@ -8,6 +8,31 @@
 
 #include "../libs/tll.h"
 
+bool verifyWithTemplate(int &index, const std::vector<char> &sb, const std::vector<char> temp_data [] )
+{
+    index=0;
+    for(; index<sb.size();)
+    {
+        const char val = sb[index];
+        if(val == 0)
+            break;
+        if(val == '(' || val == ')' || val == '|')
+        {
+            index++;
+            continue;
+        }
+
+        const auto &td = temp_data[val-1];
+        int rs = memcmp(sb.data() + index, td.data() + 1, val);
+        if(rs)
+            return false;
+
+        index += val;
+    }
+    return true;
+}
+
+
 // bool testTimer()
 // {
 //     TLL_GLOGTF();
@@ -68,144 +93,138 @@
 //     return std::round(timer().total().count()) == std::round(tracer__.timer().elapse().count()) && std::round(timer().duration(0).count()) == std::round(timer().duration(1).count());
 // }
 
-template <class CCB, int omp_thread_num>
-bool __testCCB(size_t buff_size,
-              tll::time::Map<> &timer, const std::string &ccb_type)
-{
-    buff_size *= omp_thread_num;
-    CCB ccb(buff_size);
+// template <class CCB, int omp_thread_num>
+// bool __testCCB(size_t buff_size,
+//               tll::time::Map<> &timer, const std::string &ccb_type)
+// {
+//     buff_size *= omp_thread_num;
+//     CCB ccb(buff_size);
 
-    bool ret = true;
-    constexpr size_t kPushVal = 0xaaaaaaaaaaaaaaaau;
-    std::vector<char> rd;
-    for(size_t push_size=1; push_size<=8; push_size++) /// 2 4 6 8
-    {
-        rd.resize(buff_size * push_size);
-        ccb.reset(buff_size);
-        memset(rd.data(), 0xff, rd.size());
-        // LOGD("push_size: %ld", push_size);
-        std::atomic<size_t> total_r{0};
-        std::atomic<size_t> total_w{0};
+//     bool ret = true;
+//     constexpr size_t kPushVal = 0xaaaaaaaaaaaaaaaau;
+//     std::vector<char> rd;
+//     for(size_t push_size=1; push_size<=8; push_size++) /// 2 4 6 8
+//     {
+//         rd.resize(buff_size * push_size);
+//         ccb.reset(buff_size);
+//         memset(rd.data(), 0xff, rd.size());
+//         // LOGD("push_size: %ld", push_size);
+//         std::atomic<size_t> total_r{0};
+//         std::atomic<size_t> total_w{0};
 
-        #pragma omp parallel num_threads ( omp_thread_num ) shared(ccb, rd, push_size)
-        {
-            int tid = omp_get_thread_num();
-            // int nts = omp_get_num_threads();
-            assert(omp_thread_num > 1);
-            if((tid & 1) == 0)
-            {
-                // LOGD("Producer: %d", tid);
-                auto &timer_w = timer(ccb_type + std::to_string(tid));
-                for(int i=0; i<buff_size/(omp_thread_num/2) ; i++)
-                {
-                    timer_w.start();
-                    if(ccb.push((char*)(&kPushVal), push_size) == false)
-                    {
-                        i--;
-                    }
-                    else
-                    {
-                        total_w.fetch_add(push_size, std::memory_order_relaxed);
-                        timer_w.elapsed();
-                    }
-                    std::this_thread::yield();
-                }
-                // LOGD("Prod %d Done", tid);
-            }
-            else
-            {
-                size_t total_size = rd.size()/(omp_thread_num/2);
-                size_t offset = ((tid)/2)*total_size;
-                // LOGD("Consumer: %d, total: %ld, offset: %ld", tid, total_size, offset);
-                /// consumer
-                auto &timer_r = timer(ccb_type + std::to_string(tid));
-                for(size_t pop_size=0; pop_size<(total_size) ;)
-                {
-                    size_t ps = push_size;
-                    timer_r.start();
-                    if(ccb.pop(rd.data() + pop_size + offset, ps))
-                    {
-                        pop_size += ps;
-                        total_r.fetch_add(ps, std::memory_order_relaxed);
-                        timer_r.elapsed();
-                    }
-                    std::this_thread::yield();
-                }
-                // LOGD("Cons %d Done", tid);
-            }
-            // LOGD("total_w: %ld", total_w.load(std::memory_order_relaxed));
-            // LOGD("total_r: %ld", total_r.load(std::memory_order_relaxed));
-        }
+//         #pragma omp parallel num_threads ( omp_thread_num ) shared(ccb, rd, push_size)
+//         {
+//             int tid = omp_get_thread_num();
+//             // int nts = omp_get_num_threads();
+//             assert(omp_thread_num > 1);
+//             if((tid & 1) == 0)
+//             {
+//                 // LOGD("Producer: %d", tid);
+//                 auto &timer_w = timer(ccb_type + std::to_string(tid));
+//                 for(int i=0; i<buff_size/(omp_thread_num/2) ; i++)
+//                 {
+//                     timer_w.start();
+//                     if(ccb.push((char*)(&kPushVal), push_size) == false)
+//                     {
+//                         i--;
+//                     }
+//                     else
+//                     {
+//                         total_w.fetch_add(push_size, std::memory_order_relaxed);
+//                         timer_w.elapsed();
+//                     }
+//                     std::this_thread::yield();
+//                 }
+//                 // LOGD("Prod %d Done", tid);
+//             }
+//             else
+//             {
+//                 size_t total_size = rd.size()/(omp_thread_num/2);
+//                 size_t offset = ((tid)/2)*total_size;
+//                 // LOGD("Consumer: %d, total: %ld, offset: %ld", tid, total_size, offset);
+//                 /// consumer
+//                 auto &timer_r = timer(ccb_type + std::to_string(tid));
+//                 for(size_t pop_size=0; pop_size<(total_size) ;)
+//                 {
+//                     size_t ps = push_size;
+//                     timer_r.start();
+//                     if(ccb.pop(rd.data() + pop_size + offset, ps))
+//                     {
+//                         pop_size += ps;
+//                         total_r.fetch_add(ps, std::memory_order_relaxed);
+//                         timer_r.elapsed();
+//                     }
+//                     std::this_thread::yield();
+//                 }
+//                 // LOGD("Cons %d Done", tid);
+//             }
+//             // LOGD("total_w: %ld", total_w.load(std::memory_order_relaxed));
+//             // LOGD("total_r: %ld", total_r.load(std::memory_order_relaxed));
+//         }
 
-        // LOGD("rd[0]: %x", *((uint8_t *)(rd.data())));
-        int cmp = memcmp(rd.data(), rd.data() + 1, rd.size() - 1);
-        // LOGD("memcmp: %d", cmp);
-        if(cmp && buff_size <= 0x100)
-        {
-            for(int i=0; i<rd.size(); i++)
-                printf("%x", *(uint8_t*)&rd[i]);
-            printf("\n");
-            ret = false;
-        }
-        // printf("\n");
-    }
-    return ret;
-}
+//         // LOGD("rd[0]: %x", *((uint8_t *)(rd.data())));
+//         int cmp = memcmp(rd.data(), rd.data() + 1, rd.size() - 1);
+//         // LOGD("memcmp: %d", cmp);
+//         if(cmp && buff_size <= 0x100)
+//         {
+//             for(int i=0; i<rd.size(); i++)
+//                 printf("%x", *(uint8_t*)&rd[i]);
+//             printf("\n");
+//             ret = false;
+//         }
+//         // printf("\n");
+//     }
+//     return ret;
+// }
 
-template <int thread_num>
-bool _testCCB(int shift_init, int shift_max, tll::time::Map<> &timer)
-{
-    constexpr int thread_num2 = thread_num * 2;
-    bool mt_rs = true;
-    bool lf_rs = true;
-    printf("Thread Num: %d\n", thread_num2);
-    double mt_tt_time = 0;
-    double lf_tt_time = 0;
-    for(int i=shift_init; i<shift_max; i++)
-    {
-        const size_t kSize = 0x100 << i;
-        timer("mt").start();
-        mt_rs = __testCCB<tll::mt::CCBuffer, thread_num2>(kSize, timer, "mt");
-        timer("mt").stop();
-        timer("lf").start();
-        lf_rs = __testCCB<tll::lf::CCBuffer, thread_num2>(kSize, timer, "lf");
-        timer("lf").stop();
-        if(!mt_rs || !lf_rs) return false;
-        mt_tt_time += timer("mt").duration().count();
-        lf_tt_time += timer("lf").duration().count();
-        printf(" size: %ld (0x%lx) mt: %.9f, lf: %.9f (%.3f)\n", kSize * thread_num2, kSize * thread_num2, timer("mt").duration().count(), timer("lf").duration().count(), timer("mt").duration().count() / timer("lf").duration().count());
+// template <int thread_num>
+// bool _testCCB(int shift_init, int shift_max, tll::time::Map<> &timer)
+// {
+//     constexpr int thread_num2 = thread_num * 2;
+//     bool mt_rs = true;
+//     bool lf_rs = true;
+//     printf("Thread Num: %d\n", thread_num2);
+//     double mt_tt_time = 0;
+//     double lf_tt_time = 0;
+//     for(int i=shift_init; i<shift_max; i++)
+//     {
+//         const size_t kSize = 0x100 << i;
+//         timer("mt").start();
+//         mt_rs = __testCCB<tll::mt::CCBuffer, thread_num2>(kSize, timer, "mt");
+//         timer("mt").stop();
+//         timer("lf").start();
+//         lf_rs = __testCCB<tll::lf::CCBuffer, thread_num2>(kSize, timer, "lf");
+//         timer("lf").stop();
+//         if(!mt_rs || !lf_rs) return false;
+//         mt_tt_time += timer("mt").duration().count();
+//         lf_tt_time += timer("lf").duration().count();
+//         printf(" size: %ld (0x%lx) mt: %.9f, lf: %.9f (%.3f)\n", kSize * thread_num2, kSize * thread_num2, timer("mt").duration().count(), timer("lf").duration().count(), timer("mt").duration().count() / timer("lf").duration().count());
 
-        double mt_time_push = 0;
-        double mt_time_pop = 0;
-        double lf_time_push = 0;
-        double lf_time_pop = 0;
-        for(int c=0; c<thread_num2; c++)
-        {
-            if(c&1)
-            {
-                mt_time_pop += timer("mt" + std::to_string(c)).totalElapsed().count();
-                lf_time_pop += timer("lf" + std::to_string(c)).totalElapsed().count();
-            }
-            else
-            {
-                mt_time_push += timer("mt" + std::to_string(c)).totalElapsed().count();
-                lf_time_push += timer("lf" + std::to_string(c)).totalElapsed().count();
-            }
-        }
-        printf(" - mt push: %.9f, pop: %.9f (%.3f)\n", mt_time_push, mt_time_pop, mt_time_push/mt_time_pop);
-        printf(" - lf push: %.9f, pop: %.9f (%.3f)\n", lf_time_push, lf_time_pop, lf_time_push/lf_time_pop);
-    }
-    printf(" Total: mt: %.9f, lf: %.9f (%.3f)\n\n", mt_tt_time, lf_tt_time, mt_tt_time / lf_tt_time);
+//         double mt_time_push = 0;
+//         double mt_time_pop = 0;
+//         double lf_time_push = 0;
+//         double lf_time_pop = 0;
+//         for(int c=0; c<thread_num2; c++)
+//         {
+//             if(c&1)
+//             {
+//                 mt_time_pop += timer("mt" + std::to_string(c)).totalElapsed().count();
+//                 lf_time_pop += timer("lf" + std::to_string(c)).totalElapsed().count();
+//             }
+//             else
+//             {
+//                 mt_time_push += timer("mt" + std::to_string(c)).totalElapsed().count();
+//                 lf_time_push += timer("lf" + std::to_string(c)).totalElapsed().count();
+//             }
+//         }
+//         printf(" - mt push: %.9f, pop: %.9f (%.3f)\n", mt_time_push, mt_time_pop, mt_time_push/mt_time_pop);
+//         printf(" - lf push: %.9f, pop: %.9f (%.3f)\n", lf_time_push, lf_time_pop, lf_time_push/lf_time_pop);
+//     }
+//     printf(" Total: mt: %.9f, lf: %.9f (%.3f)\n\n", mt_tt_time, lf_tt_time, mt_tt_time / lf_tt_time);
 
-    return true;
-}
+//     return true;
+// }
 
-template <class CCB, int omp_thread_num>
-bool __testCCB2(size_t buff_size,
-              tll::time::Map<> &timer, const std::string &ccb_type)
-{
-
-}
 
 template <int thread_num, class CCB>
 bool _testCCB2(const std::string &ccb_type, size_t ccb_size, size_t buff_size, tll::time::Map<> &timer)
@@ -224,14 +243,14 @@ bool _testCCB2(const std::string &ccb_type, size_t ccb_size, size_t buff_size, t
     }
 
     const std::vector<char> temp_data[] = {
-        {1},
-        {2,2},
-        {3,3,3},
-        {4,4,4,4},
-        {5,5,5,5,5},
-        {6,6,6,6,6,6},
-        {7,7,7,7,7,7,7},
-        {8,8,8,8,8,8,8,8}
+        {'(', 1, ')'},
+        {'(', 2,2, ')'},
+        {'(', 3,3,3, ')'},
+        {'(', 4,4,4,4, ')'},
+        {'(', 5,5,5,5,5, ')'},
+        {'(', 6,6,6,6,6,6, ')'},
+        {'(', 7,7,7,7,7,7,7, ')'},
+        {'(', 8,8,8,8,8,8,8,8, ')'},
     };
 
     std::atomic<size_t> total_w{0};
@@ -243,9 +262,10 @@ bool _testCCB2(const std::string &ccb_type, size_t ccb_size, size_t buff_size, t
     {
         int tid = omp_get_thread_num();
         auto &counter = timer(ccb_type + std::to_string(tid));
-        if((tid & 1) == 0)
+        // if(!(tid & 1))
+        if((tid == 0))
         {
-            // LOGD("Producer: %d", tid);
+            LOGD("Producer: %d", tid);
             int i=0;
             for(;total_w.load(std::memory_order_relaxed) < (buff_size);)
             {
@@ -254,6 +274,7 @@ bool _testCCB2(const std::string &ccb_type, size_t ccb_size, size_t buff_size, t
                 {
                     counter.elapsed();
                     total_w.fetch_add(temp_data[i].size(), std::memory_order_relaxed);
+                    // LOGD("push: %ld", temp_data[i].size() - 2);
                     (++i) &= 7;
                 }
                 else
@@ -264,20 +285,26 @@ bool _testCCB2(const std::string &ccb_type, size_t ccb_size, size_t buff_size, t
             }
 
             w_threads.fetch_add(1, std::memory_order_relaxed);
+            LOGD("          %d Done", tid);
         }
-        else
+        else if (tid & 1)
         {
-            /// consumer
+            LOGD("Consumer: %d(%d)", tid, tid/2);
             size_t pop_size=0;
-            for(;w_threads.load(std::memory_order_relaxed) < thread_num || total_w.load(std::memory_order_relaxed) > total_r.load(std::memory_order_relaxed);)
+            for(;w_threads.load(std::memory_order_relaxed) < thread_num - (thread_num + 1) / 2
+                || total_w.load(std::memory_order_relaxed) > total_r.load(std::memory_order_relaxed);)
+                // || total_w.load(std::memory_order_relaxed) < buff_size;)
             {
                 size_t ps = ccb_size;
                 counter.start();
                 if(ccb.pop(store_buff[tid/2].data() + pop_size, ps))
                 {
                     counter.elapsed();
-                    pop_size += ps;
                     total_r.fetch_add(ps, std::memory_order_relaxed);
+                    // LOGD("pop: %ld", ps);
+                    pop_size += ps;
+                    store_buff[tid/2][pop_size] = '|';
+                    pop_size++;
                 }
                 else
                 {
@@ -285,15 +312,17 @@ bool _testCCB2(const std::string &ccb_type, size_t ccb_size, size_t buff_size, t
                     std::this_thread::yield();
                 }
             }
+            LOGD("          %d Done", tid);
         }
-        // LOGD("          %d Done", tid);
     }
 
+    // tll::util::dump(ccb.buffer_.data(), ccb.buffer_.size());
     /// threads end
-    // for(int i=0; i<thread_num; i++)
-    // {
-    //     tll::util::dump(store_buff[i].data(), store_buff[i].size());
-    // }
+    for(int i=0; i<thread_num; i++)
+    {
+        LOGD("%d", i);
+        tll::util::dump(store_buff[i].data(), store_buff[i].size());
+    }
 
     printf(" - w:%ld r:%ld\n", total_w.load(std::memory_order_relaxed), total_r.load(std::memory_order_relaxed));
     if(total_w.load(std::memory_order_relaxed) != total_r.load(std::memory_order_relaxed))
@@ -301,34 +330,15 @@ bool _testCCB2(const std::string &ccb_type, size_t ccb_size, size_t buff_size, t
          return false;
     }
 
-    size_t tt_size=0;
-    for(int i=0; i<thread_num; i++)
+    // size_t tt_size=0;
+    bool ret = true;
+    for(int t=0; t<thread_num; t++)
     {
-        const auto &sb = store_buff[i];
-        int i_=0;
-        for(; i_<sb.size();)
+        int index;
+        if(!verifyWithTemplate(index, store_buff[t], temp_data))
         {
-            const char val = sb[i_];
-            if(val == 0)
-            {
-                break;
-            }
-            const auto &td = temp_data[val-1];
-            int rs = memcmp(sb.data() + i_, td.data(), val);
-            if(rs)
-            {
-                LOGD("t%d: i:%d v:%d r:%d", i, i_, val, rs);
-                for(int t=0; t<thread_num; t++)
-                {
-                    if(i == t)
-                        tll::util::dump(store_buff[t].data(), store_buff[t].size(),0,i_);
-                    else
-                        tll::util::dump(store_buff[t].data(), store_buff[t].size());
-                }
-                return false;
-            }
-            i_+=val;
-            tt_size+=val;
+            tll::util::dump(store_buff[t].data(), store_buff[t].size(),0,index);
+            ret = false;
         }
     }
     // LOGD("%ld", tt_size);
@@ -350,7 +360,7 @@ bool _testCCB2(const std::string &ccb_type, size_t ccb_size, size_t buff_size, t
 
     printf(" Total: %.6f\n\n", time_push + time_pop);
 
-    return true;
+    return ret;
 }
 
 bool testCCB()
@@ -359,13 +369,13 @@ bool testCCB()
     constexpr int kInitShift = 0;
     constexpr int kShift = 1;
     tll::time::Map<> timer{"lf", "mt"};
-    constexpr size_t ccp_size = 0x80;
-    constexpr size_t buf_size = 0x100;
+    constexpr size_t ccp_size = 0x100;
+    constexpr size_t buf_size = 0x200;
     // if(!_testCCB2<1, tll::mt::CCBuffer>("mt", ccp_size, buf_size, timer)) return false;
     // if(!_testCCB2<1, tll::lf::CCBuffer>("lf", ccp_size, buf_size, timer)) return false;
 
-    if(!_testCCB2<2, tll::mt::CCBuffer>("mt", ccp_size, buf_size, timer)) return false;
-    // if(!_testCCB2<2, tll::lf::CCBuffer>("lf", ccp_size, buf_size, timer)) return false;
+    // if(!_testCCB2<2, tll::mt::CCBuffer>("mt", ccp_size, buf_size, timer)) return false;
+    if(!_testCCB2<3, tll::lf::CCBuffer>("lf", ccp_size, buf_size, timer)) return false;
 
     // printf("mt/lf: %.3f\n", timer("mt").duration().count() / timer("lf").duration().count());
 
