@@ -54,6 +54,7 @@ public:
         size_t next_cons = cons;
         size_t prod = pt_;
         size_t wmark = wm_;
+        pop_count++;
         if(cons == prod)
         {
             // LOGE("Underrun!");dump();
@@ -95,6 +96,8 @@ public:
             ct_ = next(cons) + size;
         else
             ct_ = cons + size;
+        pop_hit_count++;
+        pop_size+=size;
     }
 
     inline bool pop(char *dst, size_t &size)
@@ -117,54 +120,49 @@ public:
     {
         std::scoped_lock lock(push_mtx_);
         prod = ph_;
-        // for(;;)
-        // {
-            // size_t wmark = wm_;
-            size_t cons = ct_;
-            // if(size <= buffer_.size() - (prod - cons - unused()))
-            if(size <= buffer_.size() - (prod - cons))
+        size_t cons = ct_;
+        push_count++;
+        if(size <= buffer_.size() - (prod - cons))
+        {
+            /// prod leads
+            if(wrap(prod) >= wrap(cons))
             {
-                /// prod leads
-                if(wrap(prod) >= wrap(cons))
+                /// not enough space    ?
+                if(size > buffer_.size() - wrap(prod))
                 {
-                    /// not enough space    ?
-                    if(size > buffer_.size() - wrap(prod))
+                    if(size <= wrap(cons))
                     {
-                        if(size <= wrap(cons))
-                        {
-                            ph_ = next(prod) + size;
-                            // wm_ = prod;
-                            return buffer_.data() + wrap(next(prod));
-                        }
-                        else
-                        {
-                            // LOGE("OVERRUN");dump();
-                            return nullptr;
-                        }
+                        ph_ = next(prod) + size;
+                        // wm_ = prod;
+                        return buffer_.data() + wrap(next(prod));
                     }
                     else
-                    {
-                        ph_ = prod + size;
-                    }
-                }
-                /// cons leads
-                else
-                {
-                    if(size > wrap(cons) - wrap(prod))
                     {
                         // LOGE("OVERRUN");dump();
                         return nullptr;
                     }
+                }
+                else
+                {
                     ph_ = prod + size;
                 }
             }
+            /// cons leads
             else
             {
-                // LOGE("OVERRUN");dump();
-                return nullptr;
+                if(size > wrap(cons) - wrap(prod))
+                {
+                    // LOGE("OVERRUN");dump();
+                    return nullptr;
+                }
+                ph_ = prod + size;
             }
-        // }
-        // wsize_ = size;
+        }
+        else
+        {
+            // LOGE("OVERRUN");dump();
+            return nullptr;
+        }
         return buffer_.data() + wrap(prod);
     }
 
@@ -180,6 +178,8 @@ public:
         }
         else
             pt_ = prod + size;
+        push_hit_count++;
+        push_size += size;
     }
 
     inline bool push(const char *src, size_t size)
@@ -223,6 +223,20 @@ public:
         size_t tmp = buffer_.size() - 1;
         return (index + tmp) & (~tmp);
     }
+
+    inline StatCCI stat() const
+    {
+        return StatCCI{
+            .push_size = push_size, .pop_size = pop_size,
+            .push_count = push_count, .pop_count = pop_count,
+            .push_hit_count = push_hit_count, .pop_hit_count = pop_hit_count,
+            .push_miss_count = 0, .pop_miss_count = 0,
+        };
+    }
+
+    size_t push_size=0, pop_size=0;
+    size_t push_count=0, pop_count=0;
+    size_t push_hit_count=0, pop_hit_count=0;
 
     size_t ph_=0, pt_=0, ch_=0, ct_=0, wm_=0;
     std::vector<char> buffer_{}; /// 1Kb
