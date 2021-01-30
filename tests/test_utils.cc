@@ -33,7 +33,6 @@ bool verifyWithTemplate(int &index, const std::vector<char> &sb, const std::vect
     return true;
 }
 
-
 // bool testTimer()
 // {
 //     TLL_GLOGTF();
@@ -145,8 +144,8 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t buff_size, tl
         timer(ccb_type + std::to_string(i+thread_num));
     }
 
-    std::atomic<size_t> total_w{0};
-    std::atomic<size_t> total_r{0};
+    // std::atomic<size_t> total_w{0};
+    // std::atomic<size_t> total_r{0};
     std::atomic<int> w_threads{0};
     // std::atomic<size_t> w_gud_count{0};
     // std::atomic<size_t> w_bad_count{0};
@@ -163,13 +162,13 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t buff_size, tl
         {
             // LOGD("Producer: %d", tid);
             int i=0;
-            for(;total_w.load(std::memory_order_relaxed) < (buff_size);)
+            for(;ccb.stat().push_size < (buff_size);)
             {
                 counter.start();
                 if(ccb.push(temp_data[i].data(), temp_data[i].size()))
                 {
                     counter.elapsed();
-                    total_w.fetch_add(temp_data[i].size(), std::memory_order_relaxed);
+                    // total_w.fetch_add(temp_data[i].size(), std::memory_order_relaxed);
                     // w_gud_count.fetch_add(1, std::memory_order_relaxed);
                     // (++i) &= 7;
                 }
@@ -189,7 +188,7 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t buff_size, tl
             // LOGD("Consumer: %d(%d)", tid, tid/2);
             size_t pop_size=0;
             for(;w_threads.load(std::memory_order_relaxed) < thread_num /*- (thread_num + 1) / 2*/
-                || total_w.load(std::memory_order_relaxed) > total_r.load(std::memory_order_relaxed);)
+                || ccb.stat().push_size > ccb.stat().pop_size;)
                 // || total_w.load(std::memory_order_relaxed) < buff_size;)
             {
                 size_t ps = ccb_size;
@@ -197,7 +196,7 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t buff_size, tl
                 if(ccb.pop(store_buff[tid/2].data() + pop_size, ps))
                 {
                     counter.elapsed();
-                    total_r.fetch_add(ps, std::memory_order_relaxed);
+                    // total_r.fetch_add(ps, std::memory_order_relaxed);
                     pop_size += ps;
                     store_buff[tid/2][pop_size] = '|';
                     pop_size++;
@@ -238,7 +237,7 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t buff_size, tl
     // }
 
     // printf(" - w:%ld r:%ld\n", total_w.load(std::memory_order_relaxed), total_r.load(std::memory_order_relaxed));
-    if(total_w.load(std::memory_order_relaxed) != total_r.load(std::memory_order_relaxed))
+    if(ccb.stat().push_size != ccb.stat().pop_size)
     {
          return false;
     }
@@ -255,6 +254,8 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t buff_size, tl
             ret = false;
         }
     }
+
+    ccb.dumpStat();
 
     // LOGD("%ld", tt_size);
 
@@ -367,8 +368,12 @@ bool testCCB()
     if(!_testCCB<3, tll::lf::GCCC<char>>("lfg", ccb_size, buff_size, timer, counts)) return false;
     analyze(3, {"mt", "lf", "lfg"}, timer, counts);
 
-    // if(!_testCCB<4, tll::mt::CCBuffer>("mt", ccb_size, buff_size, timer)) return false;
-    // if(!_testCCB<4, tll::lf::CCBuffer>("lf", ccb_size, buff_size, timer)) return false;
+    counts.clear();
+    printf("threads: 4\n");
+    if(!_testCCB<4, tll::mt::CCBuffer>("mt", ccb_size, buff_size, timer, counts)) return false;
+    if(!_testCCB<4, tll::lf::CCBuffer>("lf", ccb_size, buff_size, timer, counts)) return false;
+    if(!_testCCB<4, tll::lf::GCCC<char>>("lfg", ccb_size, buff_size, timer, counts)) return false;
+    analyze(4, {"mt", "lf", "lfg"}, timer, counts);
 
     // printf("mt/lf: %.3f\n", timer("mt").duration().count() / timer("lf").duration().count());
 

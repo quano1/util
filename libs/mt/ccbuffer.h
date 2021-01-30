@@ -28,6 +28,21 @@ public:
              wrap(ch_), ch_, wrap(ct_), ct_);
     }
 
+    inline void dumpStat() const
+    {
+        StatCCI statistic = stat();
+        double push_hit_rate = static_cast<double>(statistic.push_hit_count)/statistic.push_count*100;
+        double push_miss_rate = static_cast<double>(statistic.push_miss_count)/statistic.push_count*100;
+        printf("push: (%9ld|%6.2f%%|%6.2f%%) %ld\n",
+               statistic.push_count, push_hit_rate, push_miss_rate,
+               statistic.push_size);
+        double pop_hit_rate = static_cast<double>(statistic.pop_hit_count)/statistic.pop_count*100;
+        double pop_miss_rate = static_cast<double>(statistic.pop_miss_count)/statistic.pop_count*100;
+        printf("pop : (%9ld|%6.2f%%|%6.2f%%) %ld\n",
+               statistic.pop_count, pop_hit_rate, pop_miss_rate,
+               statistic.pop_size);
+    }
+
     inline void reset(size_t new_size=0)
     {
         std::scoped_lock lock(push_mtx_, pop_mtx_);

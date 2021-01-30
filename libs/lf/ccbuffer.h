@@ -28,7 +28,7 @@ public:
 
     inline void dump() const
     {
-        LOGD("sz:%ld ph:%ld pt:%ld wm:%ld ch:%ld ct:%ld", size_, 
+        printf("sz:%ld ph:%ld pt:%ld wm:%ld ch:%ld ct:%ld\n", size_, 
              ph_.load(std::memory_order_relaxed), pt_.load(std::memory_order_relaxed), 
              wm_.load(std::memory_order_relaxed), 
              ch_.load(std::memory_order_relaxed), ct_.load(std::memory_order_relaxed));
@@ -192,12 +192,12 @@ public:
         STAT_FETCH_ADD(push_size, size);
     }
 
-    inline size_t wrap(size_t index) const
+    inline size_t buffSize() const
     {
-        return index & (size_ - 1);
+        return size_;
     }
 
-    inline size_t size() const
+    inline size_t dataSize() const
     {
         return pt_.load(std::memory_order_relaxed) - ch_.load(std::memory_order_relaxed) - unused();
     }
@@ -214,16 +214,17 @@ public:
         return cons < wmark ? size_ - wrap(wmark) : 0;
     }
 
+    inline size_t wrap(size_t index) const
+    {
+        return index & (size_ - 1);
+    }
+
     inline size_t next(size_t index) const
     {
         size_t tmp = size_ - 1;
         return (index + tmp) & (~tmp);
     }
 
-    inline size_t buffSize() const
-    {
-        return size_;
-    }
 
     inline StatCCI stat() const
     {
@@ -234,7 +235,7 @@ public:
             .push_miss_count = push_miss_count.load(std::memory_order_relaxed), .pop_miss_count = pop_miss_count.load(std::memory_order_relaxed),
         };
     }
-
+private:
     std::atomic<size_t> ph_{0}, pt_{0}, wm_{0}, ch_{0}, ct_{0};
     size_t size_;
     std::atomic<size_t> push_size{0}, pop_size{0};
@@ -260,6 +261,21 @@ public:
         cci_.dump();
     }
 
+    inline void dumpStat() const
+    {
+        StatCCI statistic = stat();
+        double push_hit_rate = static_cast<double>(statistic.push_hit_count)/statistic.push_count*100;
+        double push_miss_rate = static_cast<double>(statistic.push_miss_count)/statistic.push_count*100;
+        printf("push: (%9ld|%6.2f%%|%6.2f%%) %ld\n",
+               statistic.push_count, push_hit_rate, push_miss_rate,
+               statistic.push_size);
+        double pop_hit_rate = static_cast<double>(statistic.pop_hit_count)/statistic.pop_count*100;
+        double pop_miss_rate = static_cast<double>(statistic.pop_miss_count)/statistic.pop_count*100;
+        printf("pop : (%9ld|%6.2f%%|%6.2f%%) %ld\n",
+               statistic.pop_count, pop_hit_rate, pop_miss_rate,
+               statistic.pop_size);
+    }
+
     inline void reset(size_t new_size=0)
     {
         cci_.reset(new_size);
@@ -268,7 +284,7 @@ public:
     inline void reserve(size_t size)
     {
         cci_.reserve(size);
-        buffer_.resize(cci_.size_);
+        buffer_.resize(cci_.buffSize());
     }
 
     inline char *tryPop(size_t &cons, size_t &size)
@@ -326,14 +342,14 @@ public:
         return false;
     }
 
-    inline size_t wrap(size_t index) const
+    inline size_t buffSize() const
     {
-        return cci_.wrap(index);
+        return cci_.buffSize();
     }
 
-    inline size_t size() const
+    inline size_t dataSize() const
     {
-        return cci_.size();
+        return cci_.dataSize();
     }
 
     inline size_t freeSize() const
@@ -346,14 +362,14 @@ public:
         return cci_.unused();
     }
 
+    inline size_t wrap(size_t index) const
+    {
+        return cci_.wrap(index);
+    }
+
     inline size_t next(size_t index) const
     {
         return cci_.next(index);
-    }
-
-    inline size_t buffSize() const
-    {
-        return cci_.buffSize();
     }
 
     inline StatCCI stat() const
@@ -383,6 +399,21 @@ public:
         cci_.dump();
     }
 
+    inline void dumpStat() const
+    {
+        StatCCI statistic = stat();
+        double push_hit_rate = static_cast<double>(statistic.push_hit_count)/statistic.push_count*100;
+        double push_miss_rate = static_cast<double>(statistic.push_miss_count)/statistic.push_count*100;
+        printf("push: (%9ld|%6.2f%%|%6.2f%%) %ld\n",
+               statistic.push_count, push_hit_rate, push_miss_rate,
+               statistic.push_size*sizeof(T));
+        double pop_hit_rate = static_cast<double>(statistic.pop_hit_count)/statistic.pop_count*100;
+        double pop_miss_rate = static_cast<double>(statistic.pop_miss_count)/statistic.pop_count*100;
+        printf("pop : (%9ld|%6.2f%%|%6.2f%%) %ld\n",
+               statistic.pop_count, pop_hit_rate, pop_miss_rate,
+               statistic.pop_size*sizeof(T));
+    }
+
     inline void reset(size_t new_size=0)
     {
         cci_.reset(new_size);
@@ -391,7 +422,7 @@ public:
     inline void reserve(size_t size)
     {
         cci_.reserve(size);
-        buffer_.resize(cci_.size_);
+        buffer_.resize(cci_.buffSize());
     }
 
     inline T *tryPop(size_t &cons, size_t &size)
@@ -463,15 +494,9 @@ public:
         }, size);
     }
 
-
-    inline size_t wrap(size_t index) const
+    inline size_t dataSize() const
     {
-        return cci_.wrap(index);
-    }
-
-    inline size_t size() const
-    {
-        return cci_.size();
+        return cci_.dataSize();
     }
 
     inline size_t freeSize() const
@@ -479,9 +504,19 @@ public:
         return cci_.freeSize();
     }
 
+    inline size_t buffSize() const
+    {
+        return cci_.buffSize();
+    }
+
     inline size_t unused() const
     {
         return cci_.unused();
+    }
+
+    inline size_t wrap(size_t index) const
+    {
+        return cci_.wrap(index);
     }
 
     inline size_t next(size_t index) const
