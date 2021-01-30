@@ -22,10 +22,10 @@ public:
 
     inline void dump() const
     {
-        LOGD("sz:%ld ph:%ld pt:%ld wm:%ld ch:%ld ct:%ld", buffer_.size(), 
-             ph_, pt_, 
-             wm_, 
-             ch_, ct_);
+        LOGD("sz:%ld ph:%ld(%ld) pt:%ld(%ld) wm:%ld(%ld) ch:%ld(%ld) ct:%ld(%ld)", buffer_.size(), 
+             wrap(ph_), ph_, wrap(pt_), pt_, 
+             wrap(wm_), wm_, 
+             wrap(ch_), ch_, wrap(ct_), ct_);
     }
 
     inline void reset(size_t new_size=0)
@@ -109,7 +109,7 @@ public:
 
             return true;
         }
-
+        // dump();
         return false;
     }
 
@@ -119,7 +119,7 @@ public:
         prod = ph_;
         // for(;;)
         // {
-            size_t wmark = wm_;
+            // size_t wmark = wm_;
             size_t cons = ct_;
             // if(size <= buffer_.size() - (prod - cons - unused()))
             if(size <= buffer_.size() - (prod - cons))
@@ -133,7 +133,7 @@ public:
                         if(size <= wrap(cons))
                         {
                             ph_ = next(prod) + size;
-                            wm_ = prod;
+                            // wm_ = prod;
                             return buffer_.data() + wrap(next(prod));
                         }
                         else
@@ -171,10 +171,13 @@ public:
     inline void completePush(size_t prod, size_t size)
     {
         std::scoped_lock lock(push_mtx_);
-        if(wrap(prod) == 0) wm_ = prod;
-
-        if(prod == wm_)
+        // if(wrap(prod) == 0) wm_ = prod;
+        if(prod + size > next(prod))
+        {
+        // if(prod == wm_)
+            wm_ = prod;
             pt_ = next(prod) + size;
+        }
         else
             pt_ = prod + size;
     }
@@ -190,7 +193,7 @@ public:
             completePush(prod, size);
             return true;
         }
-
+        // dump();
         return false;
     }
 

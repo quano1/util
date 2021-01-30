@@ -51,17 +51,17 @@ public:
         size_t next_cons;
         size_t prod;
         size_t wmark;
-        size_t tmp_size;
+        size_t tmp_size = size;
         for(;;)
         {
             next_cons = cons;
-            tmp_size = size;
+            size = tmp_size;
             prod = pt_.load(std::memory_order_relaxed);
             wmark = wm_.load(std::memory_order_relaxed);
             if(next_cons == prod)
             {
                 // LOGE("Underrun!");dump();
-                tmp_size = 0;
+                size = 0;
                 return nullptr;
             }
 
@@ -71,29 +71,28 @@ public:
                 if(prod <= next_cons)
                 {
                     // LOGE("Underrun!");dump();
-                    tmp_size = 0;
+                    size = 0;
                     return nullptr;
                 }
-                if(tmp_size > (prod - next_cons))
-                    tmp_size = prod - next_cons;
+                if(size > (prod - next_cons))
+                    size = prod - next_cons;
             }
             else if(next_cons < wmark)
             {
-                if(tmp_size > (wmark - next_cons))
-                    tmp_size = wmark - next_cons;
+                if(size > (wmark - next_cons))
+                    size = wmark - next_cons;
             }
             else /// cons > wmark
             {
-                if(tmp_size > (prod - next_cons))
+                if(size > (prod - next_cons))
                 {
-                    tmp_size = prod - next_cons;
+                    size = prod - next_cons;
                 }
             }
 
-            if(ch_.compare_exchange_weak(cons, next_cons + tmp_size, std::memory_order_acquire, std::memory_order_relaxed)) break;
+            if(ch_.compare_exchange_weak(cons, next_cons + size, std::memory_order_acquire, std::memory_order_relaxed)) break;
         }
 
-        size = tmp_size;
         return buffer_.data() + wrap(next_cons);
     }
 
@@ -141,9 +140,15 @@ public:
                     {
                         if(size <= wrap(cons))
                         {
-                            if(!ph_.compare_exchange_weak(prod, next(prod) + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
-                            if(!wm_.compare_exchange_weak(wmark, prod, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
-                            return buffer_.data() + wrap(next(prod));
+                            size_t next_prod = next(prod);
+                            if(!ph_.compare_exchange_weak(prod, next_prod + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                            // auto wm2 = wm_.load(std::memory_order_relaxed);
+                            // LOGD("p:%ld s:%ld w:(%ld:%ld) c:%ld", prod, size, wmark, wm_.load(std::memory_order_relaxed), cons);
+                            // wm_.store(prod, std::memory_order_relaxed);
+                            // LOGD("p:%ld s:%ld w:(%ld:%ld) c:%ld", prod, size, wmark, wm2, cons);
+                            // LOGD("p:%ld s:%ld w:(%ld) c:%ld", prod, size, wmark, cons);
+                            // if(!wm_.compare_exchange_weak(wmark, prod, std::memory_order_relaxed, std::memory_order_relaxed)) {LOGD(""); continue;}
+                            return buffer_.data();
                         }
                         else
                         {
@@ -184,10 +189,14 @@ public:
         for(;pt_.load(std::memory_order_relaxed) != prod;)
         {std::this_thread::yield();}
 
-        if(wrap(prod) == 0) wm_.store(prod, std::memory_order_relaxed);
-
-        if(prod == wm_.load(std::memory_order_relaxed))
+        // if(wrap(prod) == 0) {wm_.store(prod, std::memory_order_relaxed);
+            // LOGD("%ld %ld", prod, ch_.load(std::memory_order_relaxed));}
+        if(prod + size > next(prod))
+        {
+        // if(prod == wm_.load(std::memory_order_relaxed))
+            wm_.store(prod, std::memory_order_relaxed);
             pt_.store(next(prod) + size, std::memory_order_release);
+        }
         else
             pt_.store(prod + size, std::memory_order_release);
     }

@@ -151,6 +151,21 @@ public:
         return counters_[cnt_id];
     }
 
+    auto find(const std::string cnt_id="")
+    {
+        return counters_.find(cnt_id);
+    }
+
+    auto begin()
+    {
+        return counters_.begin();
+    }
+
+    auto end()
+    {
+        return counters_.end();
+    }
+
     Duration allTotal() const
     {
         Duration ret{};

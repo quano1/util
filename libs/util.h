@@ -675,7 +675,7 @@ static T &instance()
 
 };
 
-void dump(const char *ptr, size_t size, size_t off=0, size_t hl=-1)
+void dump(const char *ptr, size_t size, size_t off=0, size_t hl=-1, bool p_zero=true)
 {
     for(size_t i=off; i<size; i++)
     {
@@ -683,11 +683,12 @@ void dump(const char *ptr, size_t size, size_t off=0, size_t hl=-1)
         {
             case 0:
             {
-                printf(".");
+                if(p_zero)
+                    printf(".");
             }
             break;
-            case '(':
-            case ')':
+            case '{':
+            case '}':
             case '|':
             {
                 printf("%c", ptr[i]);
@@ -696,9 +697,9 @@ void dump(const char *ptr, size_t size, size_t off=0, size_t hl=-1)
             default:
             {
                 if(i == hl)
-                    printf("[%X]", ptr[i]);
+                    printf("[%d]", ptr[i]);
                 else if(ptr[i] != 0)
-                    printf("%2X", ptr[i]);
+                    printf("%2d", ptr[i]);
             }
             break;
         }
