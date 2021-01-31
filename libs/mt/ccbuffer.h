@@ -39,54 +39,50 @@ public:
     {
         using namespace std::chrono;
         StatCCI st = stat();
-        double time_push_total = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_push_total)).count();
-        double time_push_try = duration_cast<duration<double>>(duration<size_t, std::ratio<1,1000000000>>(st.time_push_try)).count();
-        double time_push_complete = duration_cast<duration<double>>(duration<size_t, std::ratio<1,1000000000>>(st.time_push_complete)).count();
-        double time_push_try_rate = st.time_push_try*100.f/ st.time_push_total;
-        double time_push_complete_rate = st.time_push_complete*100.f/ st.time_push_total;
-        double time_push_one = st.time_push_total*1.f / st.push_total;
+        // double time_push_total = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_push_total)).count();
+        // double time_push_try = duration_cast<duration<double>>(duration<size_t, std::ratio<1,1000000000>>(st.time_push_try)).count();
+        // double time_push_complete = duration_cast<duration<double>>(duration<size_t, std::ratio<1,1000000000>>(st.time_push_complete)).count();
+        // double time_push_try_rate = st.time_push_try*100.f/ st.time_push_total;
+        // double time_push_complete_rate = st.time_push_complete*100.f/ st.time_push_total;
+        // double time_push_one = st.time_push_total*1.f / st.push_total;
 
-        double push_total = st.push_total * 1.f / 1000;
+        double push_total = st.push_total * 1.f / 1000000;
         double push_error_rate = (st.push_error*100.f)/st.push_total;
         double push_miss_rate = (st.push_miss*100.f)/st.push_total;
 
-        // double push_size = st.push_size*1.f / 0x100000;
+        // double push_size = st.push_size*sizeof(T)*1.f / 0x100000;
         
-        size_t push_success = st.push_total - st.push_error;
-        double push_success_size_one = st.push_size*1.f/push_success;
-        double push_speed = push_success_size_one / time_push_total;
+        // size_t push_success = st.push_total - st.push_error;
+        // double push_success_size_one = st.push_size*sizeof(T)*1.f/push_success;
+        // double push_speed = push_success_size_one / time_push_total;
         // LOGD("%ld %.f", push_success, push_success_size_one);
 
-        printf("        time(s)|try(%%)|com(%%)|one(ns)    count(k)|err(%%)|miss(%%) speed(success/B)\n");
-        printf(" push: (%7.3f|%6.2f|%6.2f|%8.3f) (%8.2f|%6.2f|%6.2f) %.2f\n",
-               time_push_total, time_push_try_rate, time_push_complete_rate, time_push_one,
-               push_total, push_error_rate, push_miss_rate,
-               push_speed);
+        printf("        count(m) | err(%%) | miss(%%)\n");
+        printf(" push: %9.3f | %6.2f | %6.2f\n",
+               push_total, push_error_rate, push_miss_rate);
 
-        double time_pop_total = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_total)).count();
-        double time_pop_try = duration_cast<duration<double>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_try)).count();
-        double time_pop_complete = duration_cast<duration<double>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_complete)).count();
-        double time_pop_try_rate = st.time_pop_try*100.f/ st.time_pop_total;
-        double time_pop_complete_rate = st.time_pop_complete*100.f/ st.time_pop_total;
-        double time_pop_one = st.time_pop_total*1.f / st.pop_total;
+        // double time_pop_total = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_total)).count();
+        // double time_pop_try = duration_cast<duration<double>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_try)).count();
+        // double time_pop_complete = duration_cast<duration<double>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_complete)).count();
+        // double time_pop_try_rate = st.time_pop_try*100.f/ st.time_pop_total;
+        // double time_pop_complete_rate = st.time_pop_complete*100.f/ st.time_pop_total;
+        // double time_pop_one = st.time_pop_total*1.f / st.pop_total;
 
-        double pop_total = st.pop_total * 1.f / 1000;
+        double pop_total = st.pop_total * 1.f / 1000000;
         double pop_error_rate = (st.pop_error*100.f)/st.pop_total;
         double pop_miss_rate = (st.pop_miss*100.f)/st.pop_total;
 
-        // double pop_size = st.pop_size*1.f / 0x100000;
+        // double pop_size = st.pop_size*sizeof(T)*1.f / 0x100000;
 
-        size_t pop_success = st.pop_total - st.pop_error;
-        double pop_success_size_one = st.pop_size*1.f/pop_success;
-        double pop_speed = pop_success_size_one / time_pop_total;
+        // size_t pop_success = st.pop_total - st.pop_error;
+        // double pop_success_size_one = st.pop_size*sizeof(T)*1.f/pop_success;
+        // double pop_speed = pop_success_size_one / time_pop_total;
 
         // printf("        time(s)|try(%%)|gud(%%)|one(ns)    count(k)|err(%%)|miss(%%) speed(Mbs)\n");
-        printf(" pop : (%7.3f|%6.2f|%6.2f|%8.3f) (%8.2f|%6.2f|%6.2f) %.2f\n",
-               time_pop_total, time_pop_try_rate, time_pop_complete_rate, time_pop_one,
-               pop_total, pop_error_rate, pop_miss_rate,
-               pop_speed);
+        printf(" pop : %9.3f | %6.2f | %6.2f\n",
+               pop_total, pop_error_rate, pop_miss_rate);
         // printf(" - Total time: %6.3f(s)\n", time_push_total + time_pop_total);
-        printf(" - push/pop speed: %.2f\n", push_speed / pop_speed);
+        // printf(" - push/pop speed: %.2f\n", push_speed / pop_speed);
     }
 
     inline void reset(size_t new_size=0)
