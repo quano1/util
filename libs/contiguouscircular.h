@@ -13,12 +13,18 @@ struct StatCCI
 };
 }
 
-#ifdef ENABLE_STAT
-#define STAT_COUNTER(counter) tll::time::Counter<std::chrono::duration<size_t, std::ratio<1, 1000000000>>, std::chrono::steady_clock> counter;counter.start()
+#ifdef ENABLE_STAT_TIME
+#define STAT_TIME(counter) tll::time::Counter<std::chrono::duration<size_t, std::ratio<1, 1000000000>>, std::chrono::steady_clock> counter;counter.start()
+#define STAT_TIME_ELAPSE(counter) counter.elapse().count()
 #else
-#define STAT_FETCH_ADD(...)
-#define STAT_COUNTER(...)
+#define STAT_TIME(...)
+#define STAT_TIME_ELAPSE(...) 0
 #endif
+
+#if !(defined ENABLE_STAT_COUNTER)
+#define STAT_FETCH_ADD(...)
+#endif
+
 
 #include "lf/ccbuffer.h"
 #include "mt/ccbuffer.h"

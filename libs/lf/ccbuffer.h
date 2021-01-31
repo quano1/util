@@ -8,7 +8,7 @@
 #include <vector>
 #include "../util.h"
 
-#ifdef ENABLE_STAT
+#ifdef ENABLE_STAT_COUNTER
     #ifdef STAT_FETCH_ADD
         #undef STAT_FETCH_ADD
     #endif
@@ -54,7 +54,7 @@ public:
 
     inline size_t tryPop(size_t &cons, size_t &size)
     {
-        STAT_COUNTER(counter);
+        STAT_TIME(timer);
         cons = ch_.load(std::memory_order_relaxed);
         size_t next_cons;
         size_t prod;
@@ -103,14 +103,14 @@ public:
             if(ch_.compare_exchange_weak(cons, next_cons + size, std::memory_order_acquire, std::memory_order_relaxed)) break;
         }
 
-        STAT_FETCH_ADD(time_pop_try, counter.elapse().count());
+        STAT_FETCH_ADD(time_pop_try, STAT_TIME_ELAPSE(timer));
         STAT_FETCH_ADD(stat_pop_total, 1);
         return next_cons;
     }
 
     inline void completePop(size_t cons, size_t size)
     {
-        STAT_COUNTER(counter);
+        STAT_TIME(timer);
         for(;ct_.load(std::memory_order_relaxed) != cons;)
         {std::this_thread::yield();}
 
@@ -118,30 +118,30 @@ public:
             ct_.store(next(cons) + size, std::memory_order_relaxed);
         else
             ct_.store(cons + size, std::memory_order_relaxed);
-        STAT_FETCH_ADD(time_pop_complete, counter.elapse().count());
+        STAT_FETCH_ADD(time_pop_complete, STAT_TIME_ELAPSE(timer));
         STAT_FETCH_ADD(stat_pop_size, size);
     }
 
     // template <typename ...Args>
     inline bool pop(const std::function<void(size_t, size_t)> &func, size_t &size)
     {
-        STAT_COUNTER(counter);
+        STAT_TIME(timer);
         size_t cons;
         size_t next_cons = tryPop(cons, size);
         if(size)
         {
             func(next_cons, size);
             completePop(cons, size);
-            STAT_FETCH_ADD(time_pop_total, counter.elapse().count());
+            STAT_FETCH_ADD(time_pop_total, STAT_TIME_ELAPSE(timer));
             return true;
         }
-        STAT_FETCH_ADD(time_pop_total, counter.elapse().count());
+        STAT_FETCH_ADD(time_pop_total, STAT_TIME_ELAPSE(timer));
         return false;
     }
 
     inline size_t tryPush(size_t &prod, size_t &size)
     {
-        STAT_COUNTER(counter);
+        STAT_TIME(timer);
         prod = ph_.load(std::memory_order_relaxed);
         size_t next_prod;
         for(;;STAT_FETCH_ADD(stat_push_miss, 1))
@@ -199,14 +199,14 @@ public:
                 break;
             }
         }
-        STAT_FETCH_ADD(time_push_try, counter.elapse().count());
+        STAT_FETCH_ADD(time_push_try, STAT_TIME_ELAPSE(timer));
         STAT_FETCH_ADD(stat_push_total, 1);
         return next_prod;
     }
 
     inline void completePush(size_t prod, size_t size)
     {
-        STAT_COUNTER(counter);
+        STAT_TIME(timer);
         for(;pt_.load(std::memory_order_relaxed) != prod;)
         {std::this_thread::yield();}
 
@@ -217,24 +217,24 @@ public:
         }
         else
             pt_.store(prod + size, std::memory_order_release);
-        STAT_FETCH_ADD(time_push_complete, counter.elapse().count());
+        STAT_FETCH_ADD(time_push_complete, STAT_TIME_ELAPSE(timer));
         STAT_FETCH_ADD(stat_push_size, size);
     }
 
     // template <typename ...Args>
     inline bool push(const std::function<void (size_t, size_t)> &func, size_t size)
     {
-        STAT_COUNTER(counter);
+        STAT_TIME(timer);
         size_t prod;
         size_t next_prod = tryPush(prod, size);
         if(size)
         {
             func(next_prod, size);
             completePush(prod, size);
-            STAT_FETCH_ADD(time_push_total, counter.elapse().count());
+            STAT_FETCH_ADD(time_push_total, STAT_TIME_ELAPSE(timer));
             return true;
         }
-        STAT_FETCH_ADD(time_push_total, counter.elapse().count());
+        STAT_FETCH_ADD(time_push_total, STAT_TIME_ELAPSE(timer));
         return false;
     }
 
@@ -326,15 +326,21 @@ public:
         double time_push_complete_rate = st.time_push_complete*100.f/ st.time_push_total;
         double time_push_one = st.time_push_total*1.f / st.push_total;
 
+        double push_total = st.push_total * 1.f / 1000;
         double push_error_rate = (st.push_error*100.f)/st.push_total;
         double push_miss_rate = (st.push_miss*100.f)/st.push_total;
 
-        double push_size = st.push_size*sizeof(T)*1.f / 0x100000;
-        double push_speed = push_size / time_push_total;
+        // double push_size = st.push_size*sizeof(T)*1.f / 0x100000;
+        
+        size_t push_success = st.push_total - st.push_error;
+        double push_success_size_one = st.push_size*sizeof(T)*1.f/push_success;
+        double push_speed = push_success_size_one / time_push_total;
+        // LOGD("%ld %.f", push_success, push_success_size_one);
 
-        printf("push: (%.6f(s)|%6.2f%%|%6.2f%%|%.3f(ns)) (%ld|%6.2f%%|%6.2f%%) %.2f(Mbs)\n",
+        printf("        time(s)|try(%%)|com(%%)|one(ns)    count(k)|err(%%)|miss(%%) speed(success/B)\n");
+        printf(" push: (%7.3f|%6.2f|%6.2f|%8.3f) (%8.2f|%6.2f|%6.2f) %.2f\n",
                time_push_total, time_push_try_rate, time_push_complete_rate, time_push_one,
-               st.push_total, push_error_rate, push_miss_rate,
+               push_total, push_error_rate, push_miss_rate,
                push_speed);
 
         double time_pop_total = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_total)).count();
@@ -344,16 +350,23 @@ public:
         double time_pop_complete_rate = st.time_pop_complete*100.f/ st.time_pop_total;
         double time_pop_one = st.time_pop_total*1.f / st.pop_total;
 
+        double pop_total = st.pop_total * 1.f / 1000;
         double pop_error_rate = (st.pop_error*100.f)/st.pop_total;
         double pop_miss_rate = (st.pop_miss*100.f)/st.pop_total;
 
-        double pop_size = st.pop_size*sizeof(T)*1.f / 0x100000;
-        double pop_speed = pop_size / time_pop_total;
+        // double pop_size = st.pop_size*sizeof(T)*1.f / 0x100000;
 
-        printf("pop: (%.6f(s)|%6.2f%%|%6.2f%%|%.3f(ns)) (%ld|%6.2f%%|%6.2f%%) %.2f(Mbs)\n",
+        size_t pop_success = st.pop_total - st.pop_error;
+        double pop_success_size_one = st.pop_size*sizeof(T)*1.f/pop_success;
+        double pop_speed = pop_success_size_one / time_pop_total;
+
+        // printf("        time(s)|try(%%)|gud(%%)|one(ns)    count(k)|err(%%)|miss(%%) speed(Mbs)\n");
+        printf(" pop : (%7.3f|%6.2f|%6.2f|%8.3f) (%8.2f|%6.2f|%6.2f) %.2f\n",
                time_pop_total, time_pop_try_rate, time_pop_complete_rate, time_pop_one,
-               st.pop_total, pop_error_rate, pop_miss_rate,
+               pop_total, pop_error_rate, pop_miss_rate,
                pop_speed);
+        // printf(" - Total time: %6.3f(s)\n", time_push_total + time_pop_total);
+        printf(" - push/pop speed: %.2f\n", push_speed / pop_speed);
     }
 
     inline void reset(size_t new_size=0)

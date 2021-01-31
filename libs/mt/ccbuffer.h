@@ -8,7 +8,7 @@
 #include <vector>
 #include "../util.h"
 
-#ifdef ENABLE_STAT
+#ifdef ENABLE_STAT_COUNTER
     #ifdef STAT_FETCH_ADD
         #undef STAT_FETCH_ADD
     #endif
@@ -46,15 +46,21 @@ public:
         double time_push_complete_rate = st.time_push_complete*100.f/ st.time_push_total;
         double time_push_one = st.time_push_total*1.f / st.push_total;
 
+        double push_total = st.push_total * 1.f / 1000;
         double push_error_rate = (st.push_error*100.f)/st.push_total;
         double push_miss_rate = (st.push_miss*100.f)/st.push_total;
 
-        double push_size = st.push_size*1.f / 0x100000;
-        double push_speed = push_size / time_push_total;
+        // double push_size = st.push_size*1.f / 0x100000;
+        
+        size_t push_success = st.push_total - st.push_error;
+        double push_success_size_one = st.push_size*1.f/push_success;
+        double push_speed = push_success_size_one / time_push_total;
+        // LOGD("%ld %.f", push_success, push_success_size_one);
 
-        printf("push: (%.6f(s)|%6.2f%%|%6.2f%%|%.3f(ns)) (%ld|%6.2f%%|%6.2f%%) %.2f(Mbs)\n",
+        printf("        time(s)|try(%%)|com(%%)|one(ns)    count(k)|err(%%)|miss(%%) speed(success/B)\n");
+        printf(" push: (%7.3f|%6.2f|%6.2f|%8.3f) (%8.2f|%6.2f|%6.2f) %.2f\n",
                time_push_total, time_push_try_rate, time_push_complete_rate, time_push_one,
-               st.push_total, push_error_rate, push_miss_rate,
+               push_total, push_error_rate, push_miss_rate,
                push_speed);
 
         double time_pop_total = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_total)).count();
@@ -64,16 +70,23 @@ public:
         double time_pop_complete_rate = st.time_pop_complete*100.f/ st.time_pop_total;
         double time_pop_one = st.time_pop_total*1.f / st.pop_total;
 
+        double pop_total = st.pop_total * 1.f / 1000;
         double pop_error_rate = (st.pop_error*100.f)/st.pop_total;
         double pop_miss_rate = (st.pop_miss*100.f)/st.pop_total;
 
-        double pop_size = st.pop_size*1.f / 0x100000;
-        double pop_speed = pop_size / time_pop_total;
+        // double pop_size = st.pop_size*1.f / 0x100000;
 
-        printf("pop: (%.6f(s)|%6.2f%%|%6.2f%%|%.3f(ns)) (%ld|%6.2f%%|%6.2f%%) %.2f(Mbs)\n",
+        size_t pop_success = st.pop_total - st.pop_error;
+        double pop_success_size_one = st.pop_size*1.f/pop_success;
+        double pop_speed = pop_success_size_one / time_pop_total;
+
+        // printf("        time(s)|try(%%)|gud(%%)|one(ns)    count(k)|err(%%)|miss(%%) speed(Mbs)\n");
+        printf(" pop : (%7.3f|%6.2f|%6.2f|%8.3f) (%8.2f|%6.2f|%6.2f) %.2f\n",
                time_pop_total, time_pop_try_rate, time_pop_complete_rate, time_pop_one,
-               st.pop_total, pop_error_rate, pop_miss_rate,
+               pop_total, pop_error_rate, pop_miss_rate,
                pop_speed);
+        // printf(" - Total time: %6.3f(s)\n", time_push_total + time_pop_total);
+        printf(" - push/pop speed: %.2f\n", push_speed / pop_speed);
     }
 
     inline void reset(size_t new_size=0)
@@ -97,7 +110,7 @@ public:
 
     inline char *tryPop(size_t &cons, size_t &size)
     {
-        STAT_COUNTER(counter);
+        STAT_TIME(timer);
         std::scoped_lock lock(pop_mtx_);
         cons = ch_;
         size_t next_cons = cons;
@@ -108,10 +121,9 @@ public:
             // LOGE("Underrun!");dump();
             size = 0;
             STAT_FETCH_ADD(stat_pop_error, 1);
-            return nullptr;
+            // return nullptr;
         }
-
-        if(next_cons == wmark)
+        else if(next_cons == wmark)
         {
             next_cons = next(cons);
             if(prod <= next_cons)
@@ -119,7 +131,7 @@ public:
                 // LOGE("Underrun!");dump();
                 size = 0;
                 STAT_FETCH_ADD(stat_pop_error, 1);
-                return nullptr;
+                // return nullptr;
             }
             if(size > (prod - next_cons))
                 size = prod - next_cons;
@@ -136,26 +148,26 @@ public:
         }
 
         ch_ = next_cons + size;
-        STAT_FETCH_ADD(time_pop_try, counter.elapse().count());
+        STAT_FETCH_ADD(time_pop_try, STAT_TIME_ELAPSE(timer));
         STAT_FETCH_ADD(stat_pop_total, 1);
         return buffer_.data() + wrap(next_cons);
     }
 
     inline void completePop(size_t cons, size_t size)
     {
-        STAT_COUNTER(counter);
+        STAT_TIME(timer);
         std::scoped_lock lock(pop_mtx_);
         if(cons == wm_)
             ct_ = next(cons) + size;
         else
             ct_ = cons + size;
-        STAT_FETCH_ADD(time_pop_complete, counter.elapse().count());
+        STAT_FETCH_ADD(time_pop_complete, STAT_TIME_ELAPSE(timer));
         STAT_FETCH_ADD(stat_pop_size, size);
     }
 
     inline bool pop(char *dst, size_t &size)
     {
-        STAT_COUNTER(counter);
+        STAT_TIME(timer);
         std::scoped_lock lock(pop_mtx_);
         size_t cons;
         char *src = tryPop(cons, size);
@@ -163,17 +175,17 @@ public:
         {
             memcpy(dst, src, size);
             completePop(cons, size);
-            STAT_FETCH_ADD(time_pop_total, counter.elapse().count());
+            STAT_FETCH_ADD(time_pop_total, STAT_TIME_ELAPSE(timer));
             return true;
         }
         // dump();
-        STAT_FETCH_ADD(time_pop_total, counter.elapse().count());
+        STAT_FETCH_ADD(time_pop_total, STAT_TIME_ELAPSE(timer));
         return false;
     }
 
     inline char *tryPush(size_t &prod, size_t &size)
     {
-        STAT_COUNTER(counter);
+        STAT_TIME(timer);
         std::scoped_lock lock(push_mtx_);
         prod = ph_;
         size_t next_prod = prod;
@@ -226,14 +238,14 @@ public:
             STAT_FETCH_ADD(stat_push_error, 1);
             // break;
         }
-        STAT_FETCH_ADD(time_push_try, counter.elapse().count());
+        STAT_FETCH_ADD(time_push_try, STAT_TIME_ELAPSE(timer));
         STAT_FETCH_ADD(stat_push_total, 1);
         return buffer_.data() + wrap(next_prod);
     }
 
     inline void completePush(size_t prod, size_t size)
     {
-        STAT_COUNTER(counter);
+        STAT_TIME(timer);
         std::scoped_lock lock(push_mtx_);
         if(prod + size > next(prod))
         {
@@ -242,13 +254,13 @@ public:
         }
         else
             pt_ = prod + size;
-        STAT_FETCH_ADD(time_push_complete, counter.elapse().count());
+        STAT_FETCH_ADD(time_push_complete, STAT_TIME_ELAPSE(timer));
         STAT_FETCH_ADD(stat_push_size, size);
     }
 
     inline bool push(const char *src, size_t size)
     {
-        STAT_COUNTER(counter);
+        STAT_TIME(timer);
         std::scoped_lock lock(push_mtx_);
         size_t prod;
         char *dst = tryPush(prod, size);
@@ -256,11 +268,11 @@ public:
         {
             memcpy(dst, src, size);
             completePush(prod, size);
-            STAT_FETCH_ADD(time_push_total, counter.elapse().count());
+            STAT_FETCH_ADD(time_push_total, STAT_TIME_ELAPSE(timer));
             return true;
         }
         // dump();]
-        STAT_FETCH_ADD(time_push_total, counter.elapse().count());
+        STAT_FETCH_ADD(time_push_total, STAT_TIME_ELAPSE(timer));
         return false;
     }
 
