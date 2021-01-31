@@ -95,7 +95,7 @@ bool verifyWithTemplate(int &index, const std::vector<char> &sb, const std::vect
 
 
 template <int thread_num, class CCB>
-bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t buff_size, tll::time::Map<> &timer, std::vector<size_t> &counts)
+bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t buff_size)
 {
     const std::vector<char> temp_data[] = {
 {'{',1,'}'},
@@ -140,23 +140,14 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t buff_size, tl
     {
         store_buff[i].resize(buff_size * 2);
         memset(store_buff[i].data(), 0, store_buff[i].size());
-        timer(ccb_type + std::to_string(i));
-        timer(ccb_type + std::to_string(i+thread_num));
     }
 
-    // std::atomic<size_t> total_w{0};
-    // std::atomic<size_t> total_r{0};
     std::atomic<int> w_threads{0};
-    // std::atomic<size_t> w_gud_count{0};
-    // std::atomic<size_t> w_bad_count{0};
-    // std::atomic<size_t> r_gud_count{0};
-    // std::atomic<size_t> r_bad_count{0};
 
     assert(omp_thread_num > 1);
     #pragma omp parallel num_threads ( omp_thread_num ) shared(ccb, store_buff, temp_data)
     {
         int tid = omp_get_thread_num();
-        auto &counter = timer(ccb_type + std::to_string(tid));
         if(!(tid & 1))
         // if(tid == 0)
         {
@@ -164,18 +155,13 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t buff_size, tl
             int i=0;
             for(;ccb.stat().push_size < (buff_size);)
             {
-                counter.start();
                 if(ccb.push(temp_data[i].data(), temp_data[i].size()))
                 {
-                    counter.elapsed();
-                    // total_w.fetch_add(temp_data[i].size(), std::memory_order_relaxed);
-                    // w_gud_count.fetch_add(1, std::memory_order_relaxed);
                     // (++i) &= 7;
                 }
                 else
                 {
                     /// overrun
-                    // w_bad_count.fetch_add(1, std::memory_order_relaxed);
                     std::this_thread::yield();
                 }
                 (++i) &= 7;
@@ -189,23 +175,17 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t buff_size, tl
             size_t pop_size=0;
             for(;w_threads.load(std::memory_order_relaxed) < thread_num /*- (thread_num + 1) / 2*/
                 || ccb.stat().push_size > ccb.stat().pop_size;)
-                // || total_w.load(std::memory_order_relaxed) < buff_size;)
             {
                 size_t ps = ccb_size;
-                counter.start();
                 if(ccb.pop(store_buff[tid/2].data() + pop_size, ps))
                 {
-                    counter.elapsed();
-                    // total_r.fetch_add(ps, std::memory_order_relaxed);
                     pop_size += ps;
                     store_buff[tid/2][pop_size] = '|';
                     pop_size++;
-                    // r_gud_count.fetch_add(1, std::memory_order_relaxed);
                 }
                 else
                 {
                     /// underrun
-                    // r_bad_count.fetch_add(1, std::memory_order_relaxed);
                     std::this_thread::yield();
                 }
             }
@@ -215,20 +195,6 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t buff_size, tl
 
     tll::StatCCI stat = ccb.stat();
 
-    counts.push_back(stat.push_count);
-    counts.push_back(stat.push_hit_count);
-    counts.push_back(stat.push_miss_count);
-    // counts.push_back(stat.push_err);
-    counts.push_back(stat.pop_count);
-    counts.push_back(stat.pop_hit_count);
-    counts.push_back(stat.pop_miss_count);
-    // counts.push_back(stat.pop_err);
-
-    // counts.push_back(w_gud_count.load(std::memory_order_relaxed));
-    // counts.push_back(w_bad_count.load(std::memory_order_relaxed));
-    // counts.push_back(r_gud_count.load(std::memory_order_relaxed));
-    // counts.push_back(r_bad_count.load(std::memory_order_relaxed));
-
     // tll::util::dump(ccb.buffer_.data(), ccb.buffer_.size());
     // for(int i=0; i<thread_num; i++)
     // {
@@ -237,7 +203,7 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t buff_size, tl
     // }
 
     // printf(" - w:%ld r:%ld\n", total_w.load(std::memory_order_relaxed), total_r.load(std::memory_order_relaxed));
-    if(ccb.stat().push_size != ccb.stat().pop_size)
+    if(stat.push_size != stat.pop_size)
     {
          return false;
     }
@@ -256,25 +222,6 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t buff_size, tl
     }
 
     ccb.dumpStat();
-
-    // LOGD("%ld", tt_size);
-
-    // double time_pop = 0;
-    // double time_push = 0;
-    // for(int c=0; c<omp_thread_num; c++)
-    // {
-    //     if(c&1)
-    //     {
-    //         time_pop += timer(ccb_type + std::to_string(c)).totalElapsed().count();
-    //     }
-    //     else
-    //     {
-    //         time_push += timer(ccb_type + std::to_string(c)).totalElapsed().count();
-    //     }
-    // }
-    // printf(" - push: %.9f / pop: %.9f (%.3f)\n", time_push, time_pop, time_push/time_pop);
-
-    // printf(" Total: %.6f\n\n", time_push + time_pop);
 
     return ret;
 }
@@ -343,66 +290,26 @@ bool testCCB()
 
     constexpr int kInitShift = 0;
     constexpr int kShift = 1;
-    tll::time::Map<> timer{"lf", "mt", "lfg"};
+    // tll::time::Map<> timer{"lf", "mt", "lfg"};
     constexpr size_t ccb_size = 0x1000;
     constexpr size_t buff_size = 0x8000;
-    std::vector<size_t> counts;
     printf("ccb_size: %ld(0x%lx), buff_size: %ld(0x%lx)\n", ccb_size, ccb_size, buff_size, buff_size);
     printf("threads: 1\n");
-    if(!_testCCB<1, tll::mt::CCBuffer>("mt", ccb_size, buff_size, timer, counts)) return false;
-    if(!_testCCB<1, tll::lf::CCBuffer>("lf", ccb_size, buff_size, timer, counts)) return false;
-    if(!_testCCB<1, tll::lf::GCCC<char>>("lfg", ccb_size, buff_size, timer, counts)) return false;
-    analyze(1, {"mt", "lf", "lfg"}, timer, counts);
+    if(!_testCCB<1, tll::mt::CCBuffer>("mt", ccb_size, buff_size)) return false;
+    if(!_testCCB<1, tll::lf::GCCC<char>>("lfg", ccb_size, buff_size)) return false;
 
-    counts.clear();
     printf("threads: 2\n");
-    if(!_testCCB<2, tll::mt::CCBuffer>("mt", ccb_size, buff_size, timer, counts)) return false;
-    if(!_testCCB<2, tll::lf::CCBuffer>("lf", ccb_size, buff_size, timer, counts)) return false;
-    if(!_testCCB<2, tll::lf::GCCC<char>>("lfg", ccb_size, buff_size, timer, counts)) return false;
-    analyze(2, {"mt", "lf", "lfg"}, timer, counts);
+    if(!_testCCB<2, tll::mt::CCBuffer>("mt", ccb_size, buff_size)) return false;
+    if(!_testCCB<2, tll::lf::GCCC<char>>("lfg", ccb_size, buff_size)) return false;
 
-    counts.clear();
     printf("threads: 3\n");
-    if(!_testCCB<3, tll::mt::CCBuffer>("mt", ccb_size, buff_size, timer, counts)) return false;
-    if(!_testCCB<3, tll::lf::CCBuffer>("lf", ccb_size, buff_size, timer, counts)) return false;
-    if(!_testCCB<3, tll::lf::GCCC<char>>("lfg", ccb_size, buff_size, timer, counts)) return false;
-    analyze(3, {"mt", "lf", "lfg"}, timer, counts);
+    if(!_testCCB<3, tll::mt::CCBuffer>("mt", ccb_size, buff_size)) return false;
+    if(!_testCCB<3, tll::lf::GCCC<char>>("lfg", ccb_size, buff_size)) return false;
 
-    counts.clear();
     printf("threads: 4\n");
-    if(!_testCCB<4, tll::mt::CCBuffer>("mt", ccb_size, buff_size, timer, counts)) return false;
-    if(!_testCCB<4, tll::lf::CCBuffer>("lf", ccb_size, buff_size, timer, counts)) return false;
-    if(!_testCCB<4, tll::lf::GCCC<char>>("lfg", ccb_size, buff_size, timer, counts)) return false;
-    analyze(4, {"mt", "lf", "lfg"}, timer, counts);
+    if(!_testCCB<4, tll::mt::CCBuffer>("mt", ccb_size, buff_size)) return false;
+    if(!_testCCB<4, tll::lf::GCCC<char>>("lfg", ccb_size, buff_size)) return false;
 
-    // printf("mt/lf: %.3f\n", timer("mt").duration().count() / timer("lf").duration().count());
-
-    // if(!_testCCB<2, tll::mt::CCBuffer>("mt", ccb_size, buff_size, timer) || !_testCCB<2, tll::lf::CCBuffer>("lf", ccb_size, buff_size, timer))
-    //     return false;
-    // printf("mt/lf: %.3f\n", timer("mt").duration().count() / timer("lf").duration().count());
-
-    // if(_testCCB<2>(kInitShift, kShift, timer) == false)
-    //     return false;
-    // if(_testCCB<3>(kInitShift, kShift, timer) == false)
-    //     return false;
-    // if(_testCCB<4>(kInitShift, kShift, timer) == false)
-    //     return false;
-    // if(_testCCB<10>(kInitShift, kShift, timer) == false)
-    //     return false;
-    // if(_testCCB<12>(kInitShift, kShift, timer) == false)
-        // return false;
-    
-    // int mt_win=0;
-    // int lf_win=0;
-    // int draw=0;
-    // for(int i=0; i<timer("mt").size(); i++)
-    // {
-    //     if(timer("mt").duration(i) == timer("lf").duration(i)) draw++;
-    //     if(timer("mt").duration(i) < timer("lf").duration(i)) mt_win++;
-    //     if(timer("mt").duration(i) > timer("lf").duration(i)) lf_win++;
-    // }
-
-    // printf("Draw: %d, Mutex win: %d, Lock-free win: %d\n", draw, mt_win, lf_win);
     return true;
 }
 

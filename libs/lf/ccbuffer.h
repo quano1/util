@@ -9,9 +9,10 @@
 #include "../util.h"
 
 #ifdef ENABLE_STAT
-#define STAT_FETCH_ADD(atomic, val)  atomic.fetch_add(val, std::memory_order_relaxed)
-#else
-#define STAT_FETCH_ADD(...)
+    #ifdef STAT_FETCH_ADD
+        #undef STAT_FETCH_ADD
+    #endif
+    #define STAT_FETCH_ADD(atomic, val)  atomic.fetch_add(val, std::memory_order_relaxed)
 #endif
 
 namespace tll::lf {
@@ -53,12 +54,13 @@ public:
 
     inline size_t tryPop(size_t &cons, size_t &size)
     {
+        STAT_COUNTER(counter);
         cons = ch_.load(std::memory_order_relaxed);
         size_t next_cons;
         size_t prod;
         size_t wmark;
         size_t tmp_size = size;
-        for(;;STAT_FETCH_ADD(pop_miss_count, 1))
+        for(;;STAT_FETCH_ADD(stat_pop_miss, 1))
         {
             next_cons = cons;
             size = tmp_size;
@@ -68,6 +70,7 @@ public:
             {
                 // LOGE("Underrun!");dump();
                 size = 0;
+                STAT_FETCH_ADD(stat_pop_error, 1);
                 break;
             }
 
@@ -78,6 +81,7 @@ public:
                 {
                     // LOGE("Underrun!");dump();
                     size = 0;
+                    STAT_FETCH_ADD(stat_pop_error, 1);
                     break;
                 }
                 if(size > (prod - next_cons))
@@ -99,12 +103,14 @@ public:
             if(ch_.compare_exchange_weak(cons, next_cons + size, std::memory_order_acquire, std::memory_order_relaxed)) break;
         }
 
-        STAT_FETCH_ADD(pop_count, 1);
+        STAT_FETCH_ADD(time_pop_try, counter.elapse().count());
+        STAT_FETCH_ADD(stat_pop_total, 1);
         return next_cons;
     }
 
     inline void completePop(size_t cons, size_t size)
     {
+        STAT_COUNTER(counter);
         for(;ct_.load(std::memory_order_relaxed) != cons;)
         {std::this_thread::yield();}
 
@@ -112,15 +118,33 @@ public:
             ct_.store(next(cons) + size, std::memory_order_relaxed);
         else
             ct_.store(cons + size, std::memory_order_relaxed);
-        STAT_FETCH_ADD(pop_hit_count, 1);
-        STAT_FETCH_ADD(pop_size, size);
+        STAT_FETCH_ADD(time_pop_complete, counter.elapse().count());
+        STAT_FETCH_ADD(stat_pop_size, size);
+    }
+
+    // template <typename ...Args>
+    inline bool pop(const std::function<void(size_t, size_t)> &func, size_t &size)
+    {
+        STAT_COUNTER(counter);
+        size_t cons;
+        size_t next_cons = tryPop(cons, size);
+        if(size)
+        {
+            func(next_cons, size);
+            completePop(cons, size);
+            STAT_FETCH_ADD(time_pop_total, counter.elapse().count());
+            return true;
+        }
+        STAT_FETCH_ADD(time_pop_total, counter.elapse().count());
+        return false;
     }
 
     inline size_t tryPush(size_t &prod, size_t &size)
     {
+        STAT_COUNTER(counter);
         prod = ph_.load(std::memory_order_relaxed);
         size_t next_prod;
-        for(;;STAT_FETCH_ADD(push_miss_count, 1))
+        for(;;STAT_FETCH_ADD(stat_push_miss, 1))
         {
             next_prod = prod;
             size_t wmark = wm_.load(std::memory_order_relaxed);
@@ -143,6 +167,7 @@ public:
                         {
                             // LOGE("OVERRUN");dump();
                             size = 0;
+                            STAT_FETCH_ADD(stat_push_error, 1);
                             break;
                         }
                     }
@@ -159,6 +184,7 @@ public:
                     {
                         // LOGE("OVERRUN");dump();
                         size = 0;
+                        STAT_FETCH_ADD(stat_push_error, 1);
                         break;
                     }
                     if(!ph_.compare_exchange_weak(prod, next_prod + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
@@ -169,15 +195,18 @@ public:
             {
                 // LOGE("OVERRUN");dump();
                 size = 0;
+                STAT_FETCH_ADD(stat_push_error, 1);
                 break;
             }
         }
-        STAT_FETCH_ADD(push_count, 1);
+        STAT_FETCH_ADD(time_push_try, counter.elapse().count());
+        STAT_FETCH_ADD(stat_push_total, 1);
         return next_prod;
     }
 
     inline void completePush(size_t prod, size_t size)
     {
+        STAT_COUNTER(counter);
         for(;pt_.load(std::memory_order_relaxed) != prod;)
         {std::this_thread::yield();}
 
@@ -188,8 +217,25 @@ public:
         }
         else
             pt_.store(prod + size, std::memory_order_release);
-        STAT_FETCH_ADD(push_hit_count, 1);
-        STAT_FETCH_ADD(push_size, size);
+        STAT_FETCH_ADD(time_push_complete, counter.elapse().count());
+        STAT_FETCH_ADD(stat_push_size, size);
+    }
+
+    // template <typename ...Args>
+    inline bool push(const std::function<void (size_t, size_t)> &func, size_t size)
+    {
+        STAT_COUNTER(counter);
+        size_t prod;
+        size_t next_prod = tryPush(prod, size);
+        if(size)
+        {
+            func(next_prod, size);
+            completePush(prod, size);
+            STAT_FETCH_ADD(time_push_total, counter.elapse().count());
+            return true;
+        }
+        STAT_FETCH_ADD(time_push_total, counter.elapse().count());
+        return false;
     }
 
     inline size_t buffSize() const
@@ -225,160 +271,30 @@ public:
         return (index + tmp) & (~tmp);
     }
 
-
     inline StatCCI stat() const
     {
         return StatCCI{
-            .push_size = push_size.load(std::memory_order_relaxed), .pop_size = pop_size.load(std::memory_order_relaxed),
-            .push_count = push_count.load(std::memory_order_relaxed), .pop_count = pop_count.load(std::memory_order_relaxed),
-            .push_hit_count = push_hit_count.load(std::memory_order_relaxed), .pop_hit_count = pop_hit_count.load(std::memory_order_relaxed),
-            .push_miss_count = push_miss_count.load(std::memory_order_relaxed), .pop_miss_count = pop_miss_count.load(std::memory_order_relaxed),
+            .time_push_total = time_push_total.load(std::memory_order_relaxed), .time_pop_total = time_pop_total.load(std::memory_order_relaxed),
+            .time_push_try = time_push_try.load(std::memory_order_relaxed), .time_pop_try = time_pop_try.load(std::memory_order_relaxed),
+            .time_push_complete = time_push_complete.load(std::memory_order_relaxed), .time_pop_complete = time_pop_complete.load(std::memory_order_relaxed),
+            .push_size = stat_push_size.load(std::memory_order_relaxed), .pop_size = stat_pop_size.load(std::memory_order_relaxed),
+            .push_total = stat_push_total.load(std::memory_order_relaxed), .pop_total = stat_pop_total.load(std::memory_order_relaxed),
+            .push_error = stat_push_error.load(std::memory_order_relaxed), .pop_error = stat_pop_error.load(std::memory_order_relaxed),
+            .push_miss = stat_push_miss.load(std::memory_order_relaxed), .pop_miss = stat_pop_miss.load(std::memory_order_relaxed),
         };
     }
-private:
+// private:
     std::atomic<size_t> ph_{0}, pt_{0}, wm_{0}, ch_{0}, ct_{0};
     size_t size_;
-    std::atomic<size_t> push_size{0}, pop_size{0};
-    std::atomic<size_t> push_count{0}, pop_count{0};
-    std::atomic<size_t> push_hit_count{0}, pop_hit_count{0};
-    std::atomic<size_t> push_miss_count{0}, pop_miss_count{0};
-};
+    /// Statistic
+    std::atomic<size_t> stat_push_size{0}, stat_pop_size{0};
+    std::atomic<size_t> stat_push_total{0}, stat_pop_total{0};
+    std::atomic<size_t> stat_push_error{0}, stat_pop_error{0};
+    std::atomic<size_t> stat_push_miss{0}, stat_pop_miss{0};
 
-
-/// Contiguous Circular Buffer
-struct CCBuffer
-{
-public:
-    CCBuffer() = default;
-
-    CCBuffer(size_t size)
-    {
-        reserve(size);
-    }
-
-    inline void dump() const
-    {
-        cci_.dump();
-    }
-
-    inline void dumpStat() const
-    {
-        StatCCI statistic = stat();
-        double push_hit_rate = static_cast<double>(statistic.push_hit_count)/statistic.push_count*100;
-        double push_miss_rate = static_cast<double>(statistic.push_miss_count)/statistic.push_count*100;
-        printf("push: (%9ld|%6.2f%%|%6.2f%%) %ld\n",
-               statistic.push_count, push_hit_rate, push_miss_rate,
-               statistic.push_size);
-        double pop_hit_rate = static_cast<double>(statistic.pop_hit_count)/statistic.pop_count*100;
-        double pop_miss_rate = static_cast<double>(statistic.pop_miss_count)/statistic.pop_count*100;
-        printf("pop : (%9ld|%6.2f%%|%6.2f%%) %ld\n",
-               statistic.pop_count, pop_hit_rate, pop_miss_rate,
-               statistic.pop_size);
-    }
-
-    inline void reset(size_t new_size=0)
-    {
-        cci_.reset(new_size);
-    }
-
-    inline void reserve(size_t size)
-    {
-        cci_.reserve(size);
-        buffer_.resize(cci_.buffSize());
-    }
-
-    inline char *tryPop(size_t &cons, size_t &size)
-    {
-        size_t next_cons = cci_.tryPop(cons, size);
-        if(size)
-            return buffer_.data() + wrap(next_cons);
-        return nullptr;
-    }
-
-    inline void completePop(size_t cons, size_t size)
-    {
-        cci_.completePop(cons, size);
-    }
-
-    inline bool pop(char *dst, size_t &size)
-    {
-        size_t cons;
-        char *src = tryPop(cons, size);
-        if(src)
-        {
-            memcpy(dst, src, size);
-            completePop(cons, size);
-            return true;
-        }
-
-        return false;
-    }
-
-    inline char *tryPush(size_t &prod, size_t size)
-    {
-        size_t next_prod = cci_.tryPush(prod, size);
-        if(size)
-            return buffer_.data() + wrap(next_prod);
-        else
-            return nullptr;
-    }
-
-    inline void completePush(size_t prod, size_t size)
-    {
-        cci_.completePush(prod, size);
-    }
-
-    inline bool push(const char *src, size_t size)
-    {
-        size_t prod;
-        char *dst = tryPush(prod, size);
-        if(dst)
-        {
-            memcpy(dst, src, size);
-            completePush(prod, size);
-            return true;
-        }
-
-        return false;
-    }
-
-    inline size_t buffSize() const
-    {
-        return cci_.buffSize();
-    }
-
-    inline size_t dataSize() const
-    {
-        return cci_.dataSize();
-    }
-
-    inline size_t freeSize() const
-    {
-        return cci_.freeSize();
-    }
-
-    inline size_t unused() const
-    {
-        return cci_.unused();
-    }
-
-    inline size_t wrap(size_t index) const
-    {
-        return cci_.wrap(index);
-    }
-
-    inline size_t next(size_t index) const
-    {
-        return cci_.next(index);
-    }
-
-    inline StatCCI stat() const
-    {
-        return cci_.stat();
-    }
-
-    CCI cci_;
-    std::vector<char> buffer_;
+    std::atomic<size_t> time_push_total{0}, time_pop_total{0};
+    std::atomic<size_t> time_push_try{0}, time_pop_try{0};
+    std::atomic<size_t> time_push_complete{0}, time_pop_complete{0};
 };
 
 
@@ -401,17 +317,43 @@ public:
 
     inline void dumpStat() const
     {
-        StatCCI statistic = stat();
-        double push_hit_rate = static_cast<double>(statistic.push_hit_count)/statistic.push_count*100;
-        double push_miss_rate = static_cast<double>(statistic.push_miss_count)/statistic.push_count*100;
-        printf("push: (%9ld|%6.2f%%|%6.2f%%) %ld\n",
-               statistic.push_count, push_hit_rate, push_miss_rate,
-               statistic.push_size*sizeof(T));
-        double pop_hit_rate = static_cast<double>(statistic.pop_hit_count)/statistic.pop_count*100;
-        double pop_miss_rate = static_cast<double>(statistic.pop_miss_count)/statistic.pop_count*100;
-        printf("pop : (%9ld|%6.2f%%|%6.2f%%) %ld\n",
-               statistic.pop_count, pop_hit_rate, pop_miss_rate,
-               statistic.pop_size*sizeof(T));
+        using namespace std::chrono;
+        StatCCI st = stat();
+        double time_push_total = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_push_total)).count();
+        double time_push_try = duration_cast<duration<double>>(duration<size_t, std::ratio<1,1000000000>>(st.time_push_try)).count();
+        double time_push_complete = duration_cast<duration<double>>(duration<size_t, std::ratio<1,1000000000>>(st.time_push_complete)).count();
+        double time_push_try_rate = st.time_push_try*100.f/ st.time_push_total;
+        double time_push_complete_rate = st.time_push_complete*100.f/ st.time_push_total;
+        double time_push_one = st.time_push_total*1.f / st.push_total;
+
+        double push_error_rate = (st.push_error*100.f)/st.push_total;
+        double push_miss_rate = (st.push_miss*100.f)/st.push_total;
+
+        double push_size = st.push_size*sizeof(T)*1.f / 0x100000;
+        double push_speed = push_size / time_push_total;
+
+        printf("push: (%.6f(s)|%6.2f%%|%6.2f%%|%.3f(ns)) (%ld|%6.2f%%|%6.2f%%) %.2f(Mbs)\n",
+               time_push_total, time_push_try_rate, time_push_complete_rate, time_push_one,
+               st.push_total, push_error_rate, push_miss_rate,
+               push_speed);
+
+        double time_pop_total = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_total)).count();
+        double time_pop_try = duration_cast<duration<double>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_try)).count();
+        double time_pop_complete = duration_cast<duration<double>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_complete)).count();
+        double time_pop_try_rate = st.time_pop_try*100.f/ st.time_pop_total;
+        double time_pop_complete_rate = st.time_pop_complete*100.f/ st.time_pop_total;
+        double time_pop_one = st.time_pop_total*1.f / st.pop_total;
+
+        double pop_error_rate = (st.pop_error*100.f)/st.pop_total;
+        double pop_miss_rate = (st.pop_miss*100.f)/st.pop_total;
+
+        double pop_size = st.pop_size*sizeof(T)*1.f / 0x100000;
+        double pop_speed = pop_size / time_pop_total;
+
+        printf("pop: (%.6f(s)|%6.2f%%|%6.2f%%|%.3f(ns)) (%ld|%6.2f%%|%6.2f%%) %.2f(Mbs)\n",
+               time_pop_total, time_pop_try_rate, time_pop_complete_rate, time_pop_one,
+               st.pop_total, pop_error_rate, pop_miss_rate,
+               pop_speed);
     }
 
     inline void reset(size_t new_size=0)
@@ -438,20 +380,6 @@ public:
         cci_.completePop(cons, size);
     }
 
-    inline bool pop_(const std::function<void(T *, size_t)> &func, size_t &size)
-    {
-        size_t cons;
-        T *src = tryPop(cons, size);
-        if(src)
-        {
-            func(src, size);
-            completePop(cons, size);
-            return true;
-        }
-
-        return false;
-    }
-
     inline T *tryPush(size_t &prod, size_t size)
     {
         size_t next_prod = cci_.tryPush(prod, size);
@@ -466,32 +394,21 @@ public:
         cci_.completePush(prod, size);
     }
 
-    inline bool push_(const std::function<void(T *, size_t)> &func, size_t size)
-    {
-        size_t prod;
-        T *dst = tryPush(prod, size);
-        if(dst)
-        {
-            func(dst, size);
-            completePush(prod, size);
-            return true;
-        }
-
-        return false;
-    }
-
     inline bool pop(T *dst, size_t &size)
     {
-        return pop_([dst](T *src, size_t s){
+        return cci_.pop([this, dst](size_t id, size_t s){
+            T *src = buffer_.data() + wrap(id) * sizeof(T);
             std::memcpy(dst, src, s);
         }, size);
     }
 
     inline bool push(const T *src, size_t size)
     {
-        return push_([src](T *dst, size_t s){
-            std::memcpy(dst, src, s);
-        }, size);
+        return cci_.push(
+            [this, src](size_t id, size_t s){
+                T *dst = buffer_.data() + wrap(id) * sizeof(T);
+                std::memcpy(dst, src, s);
+            }, size);
     }
 
     inline size_t dataSize() const
