@@ -29,7 +29,7 @@ public:
 
     inline void dump() const
     {
-        LOGD("sz:%ld ph:%ld(%ld) pt:%ld(%ld) wm:%ld(%ld) ch:%ld(%ld) ct:%ld(%ld)", buffer_.size(), 
+        LOGD("sz:0x%lx ph:%ld(%ld) pt:%ld(%ld) wm:%ld(%ld) ch:%ld(%ld) ct:%ld(%ld)", size_, 
              wrap(ph_), ph_, wrap(pt_), pt_, 
              wrap(wm_), wm_, 
              wrap(ch_), ch_, wrap(ct_), ct_);
@@ -46,24 +46,24 @@ public:
         double time_push_complete_rate = st.time_push_complete*100.f/ st.time_push_total;
         double time_push_one = st.time_push_total*1.f / st.push_total;
 
-        double push_total = st.push_total * 1.f / 1000000000;
+        double push_total = st.push_total * 1.f / 1000;
         double push_error_rate = (st.push_error*100.f)/st.push_total;
         double push_miss_rate = (st.push_miss*100.f)/st.push_total;
 
-        double push_size = st.push_size*1.f / 0x100000;
-        size_t push_success = st.push_total - st.push_error;
-        double push_success_size_one = push_size/push_total;
-        double push_speed = push_success_size_one;
+        // double push_size = st.push_size*1.f / 0x100000;
+        // size_t push_success = st.push_total - st.push_error;
+        // double push_success_size_one = push_size/push_total;
+        // double push_speed = push_success_size_one;
 
-        double avg_time_push_one = time_push_one / thread_num;
-        double avg_push_speed = push_size*thread_num/time_push_total;
-        // LOGD("%ld %.f", push_success, push_success_size_one);
+        // double avg_time_push_one = time_push_one / thread_num;
+        // double avg_push_speed = push_size*thread_num/time_push_total;
 
-        printf("        count(M) | err(%%) | miss(%%)| try(%%) | comp(%%)|avg one(us)|avg speed(Mbs)\n");
-        printf(" push: %9.3f | %6.2f | %6.2f | %6.2f | %6.2f | %9.3f | %.2f\n",
+        printf("        count(K) | err(%%) | miss(%%)| try(%%) | comp(%%)\n");
+        printf(" push: %9.3f | %6.2f | %6.2f | %6.2f | %6.2f\n",
                push_total, push_error_rate, push_miss_rate,
-               time_push_try_rate, time_push_complete_rate,
-               avg_time_push_one, avg_push_speed);
+               time_push_try_rate, time_push_complete_rate
+               // avg_time_push_one, avg_push_speed
+               );
 
         double time_pop_total = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_total)).count();
         double time_pop_try = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_try)).count();
@@ -72,22 +72,23 @@ public:
         double time_pop_complete_rate = st.time_pop_complete*100.f/ st.time_pop_total;
         double time_pop_one = st.time_pop_total*1.f / st.pop_total;
 
-        double pop_total = st.pop_total * 1.f / 1000000000;
+        double pop_total = st.pop_total * 1.f / 1000;
         double pop_error_rate = (st.pop_error*100.f)/st.pop_total;
         double pop_miss_rate = (st.pop_miss*100.f)/st.pop_total;
 
-        double pop_size = st.pop_size*1.f / 0x100000;
-        size_t pop_success = st.pop_total - st.pop_error;
-        double pop_success_size_one = pop_size/pop_total;
-        double pop_speed = pop_success_size_one;
+        // double pop_size = st.pop_size*1.f / 0x100000;
+        // size_t pop_success = st.pop_total - st.pop_error;
+        // double pop_success_size_one = pop_size/pop_total;
+        // double pop_speed = pop_success_size_one;
 
-        double avg_time_pop_one = time_pop_one / thread_num;
+        // double avg_time_pop_one = time_pop_one / thread_num;
         // double avg_pop_speed = pop_size*thread_num/time_pop_total;
 
-        printf(" pop : %9.3f | %6.2f | %6.2f | %6.2f | %6.2f | %9.3f\n",
+        printf(" pop : %9.3f | %6.2f | %6.2f | %6.2f | %6.2f\n",
                pop_total, pop_error_rate, pop_miss_rate,
-               time_pop_try_rate, time_pop_complete_rate,
-               avg_time_pop_one);
+               time_pop_try_rate, time_pop_complete_rate
+               // avg_time_pop_one
+               );
     }
 
     inline void reset(size_t new_size=0)
@@ -105,8 +106,15 @@ public:
     inline void reserve(size_t size)
     {
         std::scoped_lock lock(push_mtx_, pop_mtx_);
-        size = util::isPowerOf2(size) ? size : util::nextPowerOf2(size);
-        buffer_.resize(size);
+        size_ = util::isPowerOf2(size) ? size : util::nextPowerOf2(size);
+        // dump();
+#ifdef PERF_TUN
+    #if !defined PERF_TUN_NOCPY
+        buffer_.resize(PERF_TUN);
+    #endif
+#else
+        buffer_.resize(size_);
+#endif
     }
 
     inline char *tryPop(size_t &cons, size_t &size)
@@ -166,24 +174,6 @@ public:
         STAT_FETCH_ADD(stat_pop_size, size);
     }
 
-    inline bool pop(char *dst, size_t &size)
-    {
-        STAT_TIME(timer);
-        std::scoped_lock lock(pop_mtx_);
-        size_t cons;
-        char *src = tryPop(cons, size);
-        if(src != nullptr)
-        {
-            memcpy(dst, src, size);
-            completePop(cons, size);
-            STAT_FETCH_ADD(time_pop_total, STAT_TIME_ELAPSE(timer));
-            return true;
-        }
-        // dump();
-        STAT_FETCH_ADD(time_pop_total, STAT_TIME_ELAPSE(timer));
-        return false;
-    }
-
     inline char *tryPush(size_t &prod, size_t &size)
     {
         STAT_TIME(timer);
@@ -191,13 +181,13 @@ public:
         prod = ph_;
         size_t next_prod = prod;
         size_t cons = ct_;
-        if(size <= buffer_.size() - (prod - cons))
+        if(size <= size_ - (prod - cons))
         {
             /// prod leads
             if(wrap(next_prod) >= wrap(cons))
             {
                 /// not enough space    ?
-                if(size > buffer_.size() - wrap(next_prod))
+                if(size > size_ - wrap(next_prod))
                 {
                     if(size <= wrap(cons))
                     {
@@ -259,15 +249,37 @@ public:
         STAT_FETCH_ADD(stat_push_size, size);
     }
 
+    inline bool pop(char *dst, size_t &size)
+    {
+        STAT_TIME(timer);
+        std::scoped_lock lock(pop_mtx_);
+        size_t cons;
+        char *src = tryPop(cons, size);
+        if(size)
+        {
+#if !(defined PERF_TUN)
+            memcpy(dst, src, size);
+#endif
+            completePop(cons, size);
+            STAT_FETCH_ADD(time_pop_total, STAT_TIME_ELAPSE(timer));
+            return true;
+        }
+        // dump();
+        STAT_FETCH_ADD(time_pop_total, STAT_TIME_ELAPSE(timer));
+        return false;
+    }
+
     inline bool push(const char *src, size_t size)
     {
         STAT_TIME(timer);
         std::scoped_lock lock(push_mtx_);
         size_t prod;
         char *dst = tryPush(prod, size);
-        if(dst)
+        if(size)
         {
+#if !(defined PERF_TUN)
             memcpy(dst, src, size);
+#endif
             completePush(prod, size);
             STAT_FETCH_ADD(time_push_total, STAT_TIME_ELAPSE(timer));
             return true;
@@ -280,7 +292,7 @@ public:
 
     inline size_t wrap(size_t index) const
     {
-        return index & (buffer_.size() - 1);
+        return index & (size_ - 1);
     }
 
     inline size_t size() const
@@ -290,17 +302,17 @@ public:
 
     inline size_t freeSize() const
     {
-        return buffer_.size() - (ph_ - ct_ - unused());
+        return size_ - (ph_ - ct_ - unused());
     }
 
     inline size_t unused() const
     {
-        return ct_ < wm_ ? buffer_.size() - wrap(wm_) : 0;
+        return ct_ < wm_ ? size_ - wrap(wm_) : 0;
     }
 
     inline size_t next(size_t index) const
     {
-        size_t tmp = buffer_.size() - 1;
+        size_t tmp = size_ - 1;
         return (index + tmp) & (~tmp);
     }
 
@@ -316,7 +328,7 @@ public:
             .push_miss = 0, .pop_miss = 0,
         };
     }
-
+private:
     size_t stat_push_size=0, stat_pop_size=0;
     size_t stat_push_total=0, stat_pop_total=0;
     size_t stat_push_error=0, stat_pop_error=0;
@@ -326,6 +338,7 @@ public:
     size_t time_push_complete=0, time_pop_complete=0;
 
     size_t ph_=0, pt_=0, ch_=0, ct_=0, wm_=0;
+    size_t size_=0;
     std::vector<char> buffer_{}; /// 1Kb
     std::recursive_mutex push_mtx_, pop_mtx_;
 };

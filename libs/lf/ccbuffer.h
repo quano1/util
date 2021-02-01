@@ -326,24 +326,24 @@ public:
         double time_push_complete_rate = st.time_push_complete*100.f/ st.time_push_total;
         double time_push_one = st.time_push_total*1.f / st.push_total;
 
-        double push_total = st.push_total * 1.f / 1000000000;
+        double push_total = st.push_total * 1.f / 1000;
         double push_error_rate = (st.push_error*100.f)/st.push_total;
         double push_miss_rate = (st.push_miss*100.f)/st.push_total;
 
-        double push_size = st.push_size*sizeof(T)*1.f / 0x100000;
-        size_t push_success = st.push_total - st.push_error;
-        double push_success_size_one = push_size/push_total;
-        double push_speed = push_success_size_one;
+        // double push_size = st.push_size*1.f / 0x100000;
+        // size_t push_success = st.push_total - st.push_error;
+        // double push_success_size_one = push_size/push_total;
+        // double push_speed = push_success_size_one;
 
-        double avg_time_push_one = time_push_one / thread_num;
-        double avg_push_speed = push_size*thread_num/time_push_total;
-        // LOGD("%ld %.f", push_success, push_success_size_one);
+        // double avg_time_push_one = time_push_one / thread_num;
+        // double avg_push_speed = push_size*thread_num/time_push_total;
 
-        printf("        count(M) | err(%%) | miss(%%)| try(%%) | comp(%%)|avg one(us)|avg speed(Mbs)\n");
-        printf(" push: %9.3f | %6.2f | %6.2f | %6.2f | %6.2f | %9.3f | %.2f\n",
+        printf("        count(K) | err(%%) | miss(%%)| try(%%) | comp(%%)\n");
+        printf(" push: %9.3f | %6.2f | %6.2f | %6.2f | %6.2f\n",
                push_total, push_error_rate, push_miss_rate,
-               time_push_try_rate, time_push_complete_rate,
-               avg_time_push_one, avg_push_speed);
+               time_push_try_rate, time_push_complete_rate
+               // avg_time_push_one, avg_push_speed
+               );
 
         double time_pop_total = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_total)).count();
         double time_pop_try = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_try)).count();
@@ -352,22 +352,23 @@ public:
         double time_pop_complete_rate = st.time_pop_complete*100.f/ st.time_pop_total;
         double time_pop_one = st.time_pop_total*1.f / st.pop_total;
 
-        double pop_total = st.pop_total * 1.f / 1000000000;
+        double pop_total = st.pop_total * 1.f / 1000;
         double pop_error_rate = (st.pop_error*100.f)/st.pop_total;
         double pop_miss_rate = (st.pop_miss*100.f)/st.pop_total;
 
-        double pop_size = st.pop_size*sizeof(T)*1.f / 0x100000;
-        size_t pop_success = st.pop_total - st.pop_error;
-        double pop_success_size_one = pop_size/pop_total;
-        double pop_speed = pop_success_size_one;
+        // double pop_size = st.pop_size*1.f / 0x100000;
+        // size_t pop_success = st.pop_total - st.pop_error;
+        // double pop_success_size_one = pop_size/pop_total;
+        // double pop_speed = pop_success_size_one;
 
-        double avg_time_pop_one = time_pop_one / thread_num;
+        // double avg_time_pop_one = time_pop_one / thread_num;
         // double avg_pop_speed = pop_size*thread_num/time_pop_total;
 
-        printf(" pop : %9.3f | %6.2f | %6.2f | %6.2f | %6.2f | %9.3f\n",
+        printf(" pop : %9.3f | %6.2f | %6.2f | %6.2f | %6.2f\n",
                pop_total, pop_error_rate, pop_miss_rate,
-               time_pop_try_rate, time_pop_complete_rate,
-               avg_time_pop_one);
+               time_pop_try_rate, time_pop_complete_rate
+               // avg_time_pop_one
+               );
     }
 
     inline void reset(size_t new_size=0)
@@ -378,7 +379,9 @@ public:
     inline void reserve(size_t size)
     {
         cci_.reserve(size);
+#if !defined PERF_TUN
         buffer_.resize(cci_.buffSize());
+#endif
     }
 
     inline T *tryPop(size_t &cons, size_t &size)
@@ -412,7 +415,9 @@ public:
     {
         return cci_.pop([this, dst](size_t id, size_t s){
             T *src = buffer_.data() + wrap(id) * sizeof(T);
+#if !(defined PERF_TUN)
             std::memcpy(dst, src, s);
+#endif
         }, size);
     }
 
@@ -421,7 +426,9 @@ public:
         return cci_.push(
             [this, src](size_t id, size_t s){
                 T *dst = buffer_.data() + wrap(id) * sizeof(T);
+#if !(defined PERF_TUN)
                 std::memcpy(dst, src, s);
+#endif
             }, size);
     }
 
@@ -459,7 +466,7 @@ public:
     {
         return cci_.stat();
     }
-
+private:
     CCI cci_;
     std::vector<T> buffer_;
 };
