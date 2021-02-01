@@ -417,6 +417,8 @@ public:
             T *src = buffer_.data() + wrap(id) * sizeof(T);
 #if !(defined PERF_TUN)
             std::memcpy(dst, src, s);
+#else
+            NOP_LOOP(PERF_TUN);
 #endif
         }, size);
     }
@@ -428,6 +430,8 @@ public:
                 T *dst = buffer_.data() + wrap(id) * sizeof(T);
 #if !(defined PERF_TUN)
                 std::memcpy(dst, src, s);
+#else
+            NOP_LOOP(PERF_TUN);
 #endif
             }, size);
     }

@@ -8,9 +8,9 @@
 
 #define ENABLE_STAT_TIME 1
 #define ENABLE_STAT_COUNTER 1
-#define PERF_TUN 1
+#define PERF_TUN 0x1000
 
-
+#define NOP_LOOP(loop) for(int i=0; i<loop; i++) asm("nop")
 
 #include "../libs/tll.h"
 
@@ -139,7 +139,7 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
     };
 #else
     std::vector<char> temp_data[1];
-    temp_data[0].resize(0x1000); /// 4Kb
+    temp_data[0].resize(PERF_TUN);
 #endif
 
     constexpr int omp_thread_num = thread_num * 2;
@@ -273,7 +273,7 @@ bool testCCB()
     int i = 1;
     std::ofstream ofs{"run.dat"};
 
-    for(int i=1; i<=128; i*=2)
+    for(int i=1; i<=1024 * 32; i*=2)
     {
         size_t write_size = kOneMb * i;
         size_t ccb_size = write_size / 4;

@@ -108,11 +108,7 @@ public:
         std::scoped_lock lock(push_mtx_, pop_mtx_);
         size_ = util::isPowerOf2(size) ? size : util::nextPowerOf2(size);
         // dump();
-#ifdef PERF_TUN
-    #if !defined PERF_TUN_NOCPY
-        buffer_.resize(PERF_TUN);
-    #endif
-#else
+#if !defined PERF_TUN
         buffer_.resize(size_);
 #endif
     }
@@ -259,6 +255,8 @@ public:
         {
 #if !(defined PERF_TUN)
             memcpy(dst, src, size);
+#else
+            NOP_LOOP(PERF_TUN);
 #endif
             completePop(cons, size);
             STAT_FETCH_ADD(time_pop_total, STAT_TIME_ELAPSE(timer));
@@ -279,6 +277,8 @@ public:
         {
 #if !(defined PERF_TUN)
             memcpy(dst, src, size);
+#else
+            NOP_LOOP(PERF_TUN);
 #endif
             completePush(prod, size);
             STAT_FETCH_ADD(time_push_total, STAT_TIME_ELAPSE(timer));
