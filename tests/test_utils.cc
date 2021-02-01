@@ -6,7 +6,7 @@
 // #include "../libs/util.h"
 // #include "../libs/log.h"
 
-// #define ENABLE_STAT_TIME 1
+#define ENABLE_STAT_TIME 1
 #define ENABLE_STAT_COUNTER 1
 
 #include "../libs/tll.h"
@@ -99,74 +99,39 @@ bool verifyWithTemplate(int &index, const std::vector<char> &sb, const std::vect
 template <int thread_num, class CCB>
 bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, tll::time::Counter<> &counter, bool verify=true)
 {
-//     const std::vector<char> temp_data[] = {
-// {'{',1,'}'},
-// {'{',2,2,'}'},
-// {'{',3,3,3,'}'},
-// {'{',4,4,4,4,'}'},
-// {'{',5,5,5,5,5,'}'},
-// {'{',6,6,6,6,6,6,'}'},
-// {'{',7,7,7,7,7,7,7,'}'},
-// {'{',8,8,8,8,8,8,8,8,'}'},
-// {'{',9,9,9,9,9,9,9,9,9,'}'},
-// {'{',10,10,10,10,10,10,10,10,10,10,'}'},
-// {'{',11,11,11,11,11,11,11,11,11,11,11,'}'},
-// {'{',12,12,12,12,12,12,12,12,12,12,12,12,'}'},
-// {'{',13,13,13,13,13,13,13,13,13,13,13,13,13,'}'},
-// {'{',14,14,14,14,14,14,14,14,14,14,14,14,14,14,'}'},
-// {'{',15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,'}'},
-// {'{',16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,'}'},
-// {'{',17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,'}'},
-// {'{',18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,'}'},
-// {'{',19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,'}'},
-// {'{',20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,'}'},
-// {'{',21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,'}'},
-// {'{',22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,'}'},
-// {'{',23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,'}'},
-// {'{',24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,'}'},
-// {'{',25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,'}'},
-// {'{',26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,'}'},
-// {'{',27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,'}'},
-// {'{',28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,'}'},
-// {'{',29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,'}'},
-// {'{',30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,'}'},
-// {'{',31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,'}'},
-// {'{',32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,'}'},
-//     };
-
     const std::vector<char> temp_data[] = {
-        {'{',1,'}'},
-        {'{',2,'}'},
-        {'{',3,'}'},
-        {'{',4,'}'},
-        {'{',5,'}'},
-        {'{',6,'}'},
-        {'{',7,'}'},
-        {'{',8,'}'},
-        {'{',9,'}'},
-        {'{',10,'}'},
-        {'{',11,'}'},
-        {'{',12,'}'},
-        {'{',13,'}'},
-        {'{',14,'}'},
-        {'{',15,'}'},
-        {'{',16,'}'},
-        {'{',17,'}'},
-        {'{',18,'}'},
-        {'{',19,'}'},
-        {'{',20,'}'},
-        {'{',21,'}'},
-        {'{',22,'}'},
-        {'{',23,'}'},
-        {'{',24,'}'},
-        {'{',25,'}'},
-        {'{',26,'}'},
-        {'{',27,'}'},
-        {'{',28,'}'},
-        {'{',29,'}'},
-        {'{',30,'}'},
-        {'{',31,'}'},
-        {'{',32,'}'},
+{'{',1,'}'},
+{'{',2,2,'}'},
+{'{',3,3,3,'}'},
+{'{',4,4,4,4,'}'},
+{'{',5,5,5,5,5,'}'},
+{'{',6,6,6,6,6,6,'}'},
+{'{',7,7,7,7,7,7,7,'}'},
+{'{',8,8,8,8,8,8,8,8,'}'},
+{'{',9,9,9,9,9,9,9,9,9,'}'},
+{'{',10,10,10,10,10,10,10,10,10,10,'}'},
+{'{',11,11,11,11,11,11,11,11,11,11,11,'}'},
+{'{',12,12,12,12,12,12,12,12,12,12,12,12,'}'},
+{'{',13,13,13,13,13,13,13,13,13,13,13,13,13,'}'},
+{'{',14,14,14,14,14,14,14,14,14,14,14,14,14,14,'}'},
+{'{',15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,'}'},
+{'{',16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,'}'},
+{'{',17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,'}'},
+{'{',18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,'}'},
+{'{',19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,'}'},
+{'{',20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,'}'},
+{'{',21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,'}'},
+{'{',22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,'}'},
+{'{',23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,'}'},
+{'{',24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,'}'},
+{'{',25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,'}'},
+{'{',26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,'}'},
+{'{',27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,'}'},
+{'{',28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,'}'},
+{'{',29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,'}'},
+{'{',30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,'}'},
+{'{',31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,'}'},
+{'{',32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,'}'},
     };
 
     constexpr int omp_thread_num = thread_num * 2;
@@ -214,7 +179,7 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
             for(;w_threads.load(std::memory_order_relaxed) < thread_num /*- (thread_num + 1) / 2*/
                 || ccb.stat().push_size > ccb.stat().pop_size;)
             {
-                size_t ps = 3;
+                size_t ps = ccb_size;
                 if(ccb.pop(store_buff[tid/2].data() + pop_size, ps))
                 {
                     pop_size += ps;
@@ -235,7 +200,7 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
 
     tll::StatCCI stat = ccb.stat();
     printf("CC type: %s\n", ccb_type.data());
-    ccb.dumpStat();
+    ccb.dumpStat(thread_num);
 
     /// no verification
     if(!verify) return true;
@@ -283,7 +248,7 @@ bool testCCB()
     constexpr int kInitShift = 0;
     constexpr int kShift = 1;
     constexpr size_t kOneMb = 0x100000;
-    size_t write_size = kOneMb;
+    size_t write_size = kOneMb * 10;
     size_t ccb_size = write_size / 8;
     /// 1Mb, 10Mb, 100Mb, 1Gb
     // for(; ccb_size < write_size * 3; ccb_size = ccb_size << 1)
@@ -295,41 +260,41 @@ bool testCCB()
         tll::time::Counter<> counter;
         // counter.start();
         
-        if(!_testCCB<1, tll::mt::CCBuffer>("mt", ccb_size, write_size, counter, false)) return false;
-        printf(" Test duration: %.6f\n", counter.lastElapsed().count());
+        if(!_testCCB<1, tll::mt::CCBuffer>("mt", ccb_size, write_size, counter)) return false;
+        printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
         printf("-------------------------------\n");
-        if(!_testCCB<1, tll::lf::GCCC<char>>("lf", ccb_size, write_size, counter, false)) return false;
-        printf(" Test duration: %.6f\n", counter.lastElapsed().count());
+        if(!_testCCB<1, tll::lf::GCCC<char>>("lf", ccb_size, write_size, counter)) return false;
+        printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
         printf("-------------------------------\n");
         
         printf("----------------------------------------------------------------\n");
         printf("threads: 2\n");
-        // if(!_testCCB<2, tll::mt::CCBuffer>("mt", ccb_size, write_size, counter, false)) return false;
-        // printf(" Test duration: %.6f\n", counter.lastElapsed().count());
+        // if(!_testCCB<2, tll::mt::CCBuffer>("mt", ccb_size, write_size, counter)) return false;
+        // printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
         // printf("-------------------------------\n");
-        if(!_testCCB<2, tll::lf::GCCC<char>>("lf", ccb_size, write_size, counter, false)) return false;
-        printf(" Test duration: %.6f\n", counter.lastElapsed().count());
+        if(!_testCCB<2, tll::lf::GCCC<char>>("lf", ccb_size, write_size, counter)) return false;
+        printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
         printf("-------------------------------\n");
         
         printf("----------------------------------------------------------------\n");
         printf("threads: 3\n");
         // if(!_testCCB<3, tll::mt::CCBuffer>("mt", ccb_size, write_size, counter)) return false;
-        // printf(" Test duration: %.6f\n", counter.lastElapsed().count());
+        // printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
         // printf("-------------------------------\n");
-        if(!_testCCB<3, tll::lf::GCCC<char>>("lf", ccb_size, write_size, counter, false)) return false;
-        printf(" Test duration: %.6f\n", counter.lastElapsed().count());
+        if(!_testCCB<3, tll::lf::GCCC<char>>("lf", ccb_size, write_size, counter)) return false;
+        printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
         printf("-------------------------------\n");
         
         printf("----------------------------------------------------------------\n");
         printf("threads: 4\n");
         // if(!_testCCB<4, tll::mt::CCBuffer>("mt", ccb_size, write_size, counter)) return false;
-        // printf(" Test duration: %.6f\n", counter.lastElapsed().count());
+        // printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
         // printf("-------------------------------\n");
-        if(!_testCCB<4, tll::lf::GCCC<char>>("lf", ccb_size, write_size, counter, false)) return false;
-        printf(" Test duration: %.6f\n", counter.lastElapsed().count());
+        if(!_testCCB<4, tll::lf::GCCC<char>>("lf", ccb_size, write_size, counter)) return false;
+        printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
         printf("-------------------------------\n");
 
-        printf("Total duration: %.6f\n", counter.totalElapsed().count());
+        printf("Total duration: %.6f(s)\n", counter.totalElapsed().count());
         printf("================================================================\n");
         printf("\n");
     }
