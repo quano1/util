@@ -8,11 +8,71 @@
 
 #define ENABLE_STAT_TIME 1
 #define ENABLE_STAT_COUNTER 1
-#define PERF_TUN 0x1000
+// #define PERF_TUN 0x100000
 
-#define NOP_LOOP(loop) for(int i=0; i<loop; i++) asm("nop")
+#define NOP_LOOP(loop) for(int i=0; i<loop; i++) __asm__("nop")
 
 #include "../libs/tll.h"
+
+void dumpStat(const tll::StatCCI &st)
+{
+    using namespace std::chrono;
+    double time_push_total = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_push_total)).count();
+    double time_push_try = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_push_try)).count();
+    double time_push_complete = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_push_complete)).count();
+    double time_push_try_rate = st.time_push_try*100.f/ st.time_push_total;
+    double time_push_complete_rate = st.time_push_complete*100.f/ st.time_push_total;
+    double time_push_callback_rate = st.time_push_cb*100.f/ st.time_push_total;
+    double time_push_all_rate = (st.time_push_cb + st.time_push_try + st.time_push_complete)*100.f/ st.time_push_total;
+
+
+    double push_total = st.push_total * 1.f / 1000;
+    double push_error_rate = (st.push_error*100.f)/st.push_total;
+    double push_miss_rate = (st.push_miss*100.f)/st.push_total;
+
+    // double push_size = st.push_size*1.f / 0x100000;
+    // size_t push_success = st.push_total - st.push_error;
+    // double push_success_size_one = push_size/push_total;
+    // double push_speed = push_success_size_one;
+
+    // double time_push_one = st.time_push_total*1.f / st.push_total;
+    // double avg_time_push_one = time_push_one / thread_num;
+    // double avg_push_speed = push_size*thread_num/time_push_total;
+
+    printf("        count(K) | err(%%) | miss(%%)| try(%%) | comp(%%)| cb(%%)  | all(%%)\n");
+    printf(" push: %9.3f | %6.2f | %6.2f | %6.2f | %6.2f | %6.2f | %6.2f\n",
+           push_total, push_error_rate, push_miss_rate,
+           time_push_try_rate, time_push_complete_rate, time_push_callback_rate, time_push_all_rate
+           // avg_time_push_one, avg_push_speed
+           );
+
+    double time_pop_total = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_total)).count();
+    double time_pop_try = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_try)).count();
+    double time_pop_complete = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_complete)).count();
+    double time_pop_try_rate = st.time_pop_try*100.f/ st.time_pop_total;
+    double time_pop_complete_rate = st.time_pop_complete*100.f/ st.time_pop_total;
+    double time_pop_callback_rate = st.time_pop_cb*100.f/ st.time_push_total;
+    double time_pop_all_rate = (st.time_pop_cb + st.time_pop_try + st.time_pop_complete)*100.f/ st.time_pop_total;
+
+    double pop_total = st.pop_total * 1.f / 1000;
+    double pop_error_rate = (st.pop_error*100.f)/st.pop_total;
+    double pop_miss_rate = (st.pop_miss*100.f)/st.pop_total;
+
+    // double pop_size = st.pop_size*1.f / 0x100000;
+    // size_t pop_success = st.pop_total - st.pop_error;
+    // double pop_success_size_one = pop_size/pop_total;
+    // double pop_speed = pop_success_size_one;
+
+    // double time_pop_one = st.time_pop_total*1.f / st.pop_total;
+    // double avg_time_pop_one = time_pop_one / thread_num;
+    // double avg_pop_speed = pop_size*thread_num/time_pop_total;
+
+    printf(" pop : %9.3f | %6.2f | %6.2f | %6.2f | %6.2f | %6.2f | %6.2f\n",
+           pop_total, pop_error_rate, pop_miss_rate,
+           time_pop_try_rate, time_pop_complete_rate, time_pop_callback_rate, time_pop_all_rate
+           // avg_time_pop_one
+           );
+}
 
 bool verifyWithTemplate(int &index, const std::vector<char> &sb, const std::vector<char> temp_data [] )
 {
@@ -168,7 +228,12 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
             int i=0;
             for(;total_push_size.load(std::memory_order_relaxed) < (write_size);)
             {
-                if(ccb.push(temp_data[i].data(), temp_data[i].size()))
+                // if(ccb.push(temp_data[i].data(), temp_data[i].size()))
+                if(ccb.push([&ccb, &temp_data, i](size_t id, size_t size) {
+                    auto dst = ccb.elemAt(id);
+                    auto src = temp_data[i].data();
+                    memcpy(dst, src, size);
+                }, temp_data[i].size()))
                 {
                     total_push_size.fetch_add(temp_data[i].size(), std::memory_order_relaxed);
 #if !defined PERF_TUN
@@ -193,7 +258,12 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
                 || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
             {
                 size_t ps = ccb_size;
-                if(ccb.pop(store_buff[tid/2].data() + pop_size, ps))
+                // if(ccb.pop(store_buff[tid/2].data() + pop_size, ps))
+                if(ccb.pop([&ccb, &store_buff, pop_size, tid](size_t id, size_t size) {
+                    auto dst = store_buff[tid/2].data() + pop_size;
+                    auto src = ccb.elemAt(id);
+                    memcpy(dst, src, size);
+                }, ps))
                 {
                     pop_size += ps;
                     total_pop_size.fetch_add(ps, std::memory_order_relaxed);
@@ -213,7 +283,8 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
     counter.elapsed();
 
     printf("CC type: %s\n", ccb_type.data());
-    ccb.dumpStat(thread_num);
+    // ccb.dumpStat();
+    dumpStat(ccb.stat());
 
     /// no verification
     if(!verify) return true;
@@ -270,13 +341,13 @@ bool testCCB()
     /// 1Mb, 10Mb, 100Mb, 1Gb
     // for(; ccb_size < write_size * 3; ccb_size = ccb_size << 1)
     // for(;write_size <= kOneMb * 1000; kOneMb)
-    int i = 1;
+    // int i = 1;
     std::ofstream ofs{"run.dat"};
 
-    for(int i=1; i<=1024 * 32; i*=2)
+    for(int i=1; i<=128; i*=2)
     {
         size_t write_size = kOneMb * i;
-        size_t ccb_size = write_size / 4;
+        size_t ccb_size = kOneMb * 4;
 
         printf("ccb_size: %.3fMb(0x%lx), write_size: %.3fMb(0x%lx)\n", ccb_size*1.f/kOneMb, ccb_size, write_size*1.f/kOneMb, write_size);
         printf("================================================================\n");

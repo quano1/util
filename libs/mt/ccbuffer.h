@@ -35,62 +35,6 @@ public:
              wrap(ch_), ch_, wrap(ct_), ct_);
     }
 
-    inline void dumpStat(size_t thread_num=1) const
-    {
-        using namespace std::chrono;
-        StatCCI st = stat();
-        double time_push_total = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_push_total)).count();
-        double time_push_try = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_push_try)).count();
-        double time_push_complete = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_push_complete)).count();
-        double time_push_try_rate = st.time_push_try*100.f/ st.time_push_total;
-        double time_push_complete_rate = st.time_push_complete*100.f/ st.time_push_total;
-        double time_push_one = st.time_push_total*1.f / st.push_total;
-
-        double push_total = st.push_total * 1.f / 1000;
-        double push_error_rate = (st.push_error*100.f)/st.push_total;
-        double push_miss_rate = (st.push_miss*100.f)/st.push_total;
-
-        // double push_size = st.push_size*1.f / 0x100000;
-        // size_t push_success = st.push_total - st.push_error;
-        // double push_success_size_one = push_size/push_total;
-        // double push_speed = push_success_size_one;
-
-        // double avg_time_push_one = time_push_one / thread_num;
-        // double avg_push_speed = push_size*thread_num/time_push_total;
-
-        printf("        count(K) | err(%%) | miss(%%)| try(%%) | comp(%%)\n");
-        printf(" push: %9.3f | %6.2f | %6.2f | %6.2f | %6.2f\n",
-               push_total, push_error_rate, push_miss_rate,
-               time_push_try_rate, time_push_complete_rate
-               // avg_time_push_one, avg_push_speed
-               );
-
-        double time_pop_total = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_total)).count();
-        double time_pop_try = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_try)).count();
-        double time_pop_complete = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_complete)).count();
-        double time_pop_try_rate = st.time_pop_try*100.f/ st.time_pop_total;
-        double time_pop_complete_rate = st.time_pop_complete*100.f/ st.time_pop_total;
-        double time_pop_one = st.time_pop_total*1.f / st.pop_total;
-
-        double pop_total = st.pop_total * 1.f / 1000;
-        double pop_error_rate = (st.pop_error*100.f)/st.pop_total;
-        double pop_miss_rate = (st.pop_miss*100.f)/st.pop_total;
-
-        // double pop_size = st.pop_size*1.f / 0x100000;
-        // size_t pop_success = st.pop_total - st.pop_error;
-        // double pop_success_size_one = pop_size/pop_total;
-        // double pop_speed = pop_success_size_one;
-
-        // double avg_time_pop_one = time_pop_one / thread_num;
-        // double avg_pop_speed = pop_size*thread_num/time_pop_total;
-
-        printf(" pop : %9.3f | %6.2f | %6.2f | %6.2f | %6.2f\n",
-               pop_total, pop_error_rate, pop_miss_rate,
-               time_pop_try_rate, time_pop_complete_rate
-               // avg_time_pop_one
-               );
-    }
-
     inline void reset(size_t new_size=0)
     {
         std::scoped_lock lock(push_mtx_, pop_mtx_);
@@ -113,7 +57,7 @@ public:
 #endif
     }
 
-    inline char *tryPop(size_t &cons, size_t &size)
+    inline size_t tryPop(size_t &cons, size_t &size)
     {
         STAT_TIME(timer);
         std::scoped_lock lock(pop_mtx_);
@@ -155,7 +99,7 @@ public:
         ch_ = next_cons + size;
         STAT_FETCH_ADD(time_pop_try, STAT_TIME_ELAPSE(timer));
         STAT_FETCH_ADD(stat_pop_total, 1);
-        return buffer_.data() + wrap(next_cons);
+        return next_cons;
     }
 
     inline void completePop(size_t cons, size_t size)
@@ -170,7 +114,7 @@ public:
         STAT_FETCH_ADD(stat_pop_size, size);
     }
 
-    inline char *tryPush(size_t &prod, size_t &size)
+    inline size_t tryPush(size_t &prod, size_t &size)
     {
         STAT_TIME(timer);
         std::scoped_lock lock(push_mtx_);
@@ -227,7 +171,7 @@ public:
         }
         STAT_FETCH_ADD(time_push_try, STAT_TIME_ELAPSE(timer));
         STAT_FETCH_ADD(stat_push_total, 1);
-        return buffer_.data() + wrap(next_prod);
+        return next_prod;
     }
 
     inline void completePush(size_t prod, size_t size)
@@ -245,19 +189,21 @@ public:
         STAT_FETCH_ADD(stat_push_size, size);
     }
 
-    inline bool pop(char *dst, size_t &size)
+    inline bool pop(const std::function<void (size_t, size_t)> &cb, size_t &size)
     {
         STAT_TIME(timer);
         std::scoped_lock lock(pop_mtx_);
         size_t cons;
-        char *src = tryPop(cons, size);
+        size_t id = tryPop(cons, size);
         if(size)
         {
 #if !(defined PERF_TUN)
-            memcpy(dst, src, size);
+            // memcpy(dst, src, size);
+            cb(id, size);
 #else
             NOP_LOOP(PERF_TUN);
 #endif
+            STAT_FETCH_ADD(time_pop_cb, STAT_TIME_ELAPSE(timer));
             completePop(cons, size);
             STAT_FETCH_ADD(time_pop_total, STAT_TIME_ELAPSE(timer));
             return true;
@@ -267,19 +213,21 @@ public:
         return false;
     }
 
-    inline bool push(const char *src, size_t size)
+    inline bool push(const std::function<void (size_t, size_t)> &cb, size_t size)
     {
         STAT_TIME(timer);
         std::scoped_lock lock(push_mtx_);
         size_t prod;
-        char *dst = tryPush(prod, size);
+        size_t id = tryPush(prod, size);
         if(size)
         {
 #if !(defined PERF_TUN)
-            memcpy(dst, src, size);
+            // memcpy(dst, src, size);
+            cb(id, size);
 #else
             NOP_LOOP(PERF_TUN);
 #endif
+            STAT_FETCH_ADD(time_push_cb, STAT_TIME_ELAPSE(timer));
             completePush(prod, size);
             STAT_FETCH_ADD(time_push_total, STAT_TIME_ELAPSE(timer));
             return true;
@@ -289,6 +237,10 @@ public:
         return false;
     }
 
+    inline char *elemAt(size_t id)
+    {
+        return buffer_.data() + wrap(id);
+    }
 
     inline size_t wrap(size_t index) const
     {
@@ -320,6 +272,7 @@ public:
     {
         return StatCCI{
             .time_push_total = time_push_total, .time_pop_total = time_pop_total,
+            .time_push_cb = time_push_cb, .time_pop_cb = time_pop_cb,
             .time_push_try = time_push_try, .time_pop_try = time_pop_try,
             .time_push_complete = time_push_complete, .time_pop_complete = time_pop_complete,
             .push_size = stat_push_size, .pop_size = stat_pop_size,
@@ -334,6 +287,7 @@ private:
     size_t stat_push_error=0, stat_pop_error=0;
 
     size_t time_push_total=0, time_pop_total=0;
+    size_t time_push_cb=0, time_pop_cb=0;
     size_t time_push_try=0, time_pop_try=0;
     size_t time_push_complete=0, time_pop_complete=0;
 
