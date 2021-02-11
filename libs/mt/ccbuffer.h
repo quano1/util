@@ -258,9 +258,9 @@ public:
         return (index + tmp) & (~tmp);
     }
 
-    inline StatCCI stat() const
+    inline tll::cc::Stat stat() const
     {
-        return StatCCI{
+        return tll::cc::Stat{
             .time_push_total = time_push_total, .time_pop_total = time_pop_total,
             .time_push_cb = time_push_cb, .time_pop_cb = time_pop_cb,
             .time_push_try = time_push_try, .time_pop_try = time_pop_try,

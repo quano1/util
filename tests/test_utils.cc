@@ -6,15 +6,15 @@
 // #include "../libs/util.h"
 // #include "../libs/log.h"
 
-#define ENABLE_STAT_TIMER 1
-#define ENABLE_STAT_COUNTER 1
-#define PERF_TUN 0x10000
+// #define ENABLE_STAT_TIMER 1
+// #define ENABLE_STAT_COUNTER 1
+// #define PERF_TUN 0x10000
 
 #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 
 #include "../libs/tll.h"
 
-void dumpStat(const tll::StatCCI &st)
+void dumpStat(const tll::cc::Stat &st)
 {
     using namespace std::chrono;
 
@@ -312,7 +312,7 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
 
     if(total_push_size.load(std::memory_order_relaxed) != total_pop_size.load(std::memory_order_relaxed))
     {
-        tll::StatCCI stat = ccb.stat();
+        tll::cc::Stat stat = ccb.stat();
         // printf("\n");
         printf(" - w:%ld r:%ld\n", total_push_size.load(std::memory_order_relaxed), total_pop_size.load(std::memory_order_relaxed));
         printf(" - w:%ld r:%ld\n", stat.push_size, stat.pop_size);
