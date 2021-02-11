@@ -59,7 +59,6 @@ public:
 
     inline size_t tryPop(size_t &cons, size_t &size)
     {
-        STAT_TIME(timer);
         std::scoped_lock lock(pop_mtx_);
         cons = ch_;
         size_t next_cons = cons;
@@ -97,26 +96,22 @@ public:
         }
 
         ch_ = next_cons + size;
-        STAT_FETCH_ADD(time_pop_try, STAT_TIME_ELAPSE(timer));
         STAT_FETCH_ADD(stat_pop_total, 1);
         return next_cons;
     }
 
     inline void completePop(size_t cons, size_t size)
     {
-        STAT_TIME(timer);
         std::scoped_lock lock(pop_mtx_);
         if(cons == wm_)
             ct_ = next(cons) + size;
         else
             ct_ = cons + size;
-        STAT_FETCH_ADD(time_pop_complete, STAT_TIME_ELAPSE(timer));
         STAT_FETCH_ADD(stat_pop_size, size);
     }
 
     inline size_t tryPush(size_t &prod, size_t &size)
     {
-        STAT_TIME(timer);
         std::scoped_lock lock(push_mtx_);
         prod = ph_;
         size_t next_prod = prod;
@@ -169,14 +164,12 @@ public:
             STAT_FETCH_ADD(stat_push_error, 1);
             // break;
         }
-        STAT_FETCH_ADD(time_push_try, STAT_TIME_ELAPSE(timer));
         STAT_FETCH_ADD(stat_push_total, 1);
         return next_prod;
     }
 
     inline void completePush(size_t prod, size_t size)
     {
-        STAT_TIME(timer);
         std::scoped_lock lock(push_mtx_);
         if(prod + size > next(prod))
         {
@@ -185,55 +178,52 @@ public:
         }
         else
             pt_ = prod + size;
-        STAT_FETCH_ADD(time_push_complete, STAT_TIME_ELAPSE(timer));
         STAT_FETCH_ADD(stat_push_size, size);
     }
 
-    inline bool pop(const std::function<void (size_t, size_t)> &cb, size_t &size)
+    inline bool pop(const tll::cc::Callback &cb, size_t &size)
     {
-        STAT_TIME(timer);
+        STAT_TIMER(timer);
         std::scoped_lock lock(pop_mtx_);
         size_t cons;
         size_t id = tryPop(cons, size);
+        STAT_FETCH_ADD(time_pop_try, timer.elapse().count());
+        STAT_TIMER_START(timer);
         if(size)
         {
-#if !(defined PERF_TUN)
-            // memcpy(dst, src, size);
             cb(id, size);
-#else
-            NOP_LOOP(PERF_TUN);
-#endif
-            STAT_FETCH_ADD(time_pop_cb, STAT_TIME_ELAPSE(timer));
+            STAT_FETCH_ADD(time_pop_cb, timer.elapse().count());
+            STAT_TIMER_START(timer);
             completePop(cons, size);
-            STAT_FETCH_ADD(time_pop_total, STAT_TIME_ELAPSE(timer));
+            STAT_FETCH_ADD(time_pop_complete, timer.elapse().count());
+            STAT_FETCH_ADD(time_pop_total, timer.life().count());
             return true;
         }
         // dump();
-        STAT_FETCH_ADD(time_pop_total, STAT_TIME_ELAPSE(timer));
+        STAT_FETCH_ADD(time_pop_total, timer.life().count());
         return false;
     }
 
-    inline bool push(const std::function<void (size_t, size_t)> &cb, size_t size)
+    inline bool push(const tll::cc::Callback &cb, size_t size)
     {
-        STAT_TIME(timer);
+        STAT_TIMER(timer);
         std::scoped_lock lock(push_mtx_);
-        size_t prod;
-        size_t id = tryPush(prod, size);
+        size_t cons;
+        size_t id = tryPush(cons, size);
+        STAT_FETCH_ADD(time_push_try, timer.elapse().count());
+        STAT_TIMER_START(timer);
         if(size)
         {
-#if !(defined PERF_TUN)
-            // memcpy(dst, src, size);
             cb(id, size);
-#else
-            NOP_LOOP(PERF_TUN);
-#endif
-            STAT_FETCH_ADD(time_push_cb, STAT_TIME_ELAPSE(timer));
-            completePush(prod, size);
-            STAT_FETCH_ADD(time_push_total, STAT_TIME_ELAPSE(timer));
+            STAT_FETCH_ADD(time_push_cb, timer.elapse().count());
+            STAT_TIMER_START(timer);
+            completePush(cons, size);
+            STAT_FETCH_ADD(time_push_complete, timer.elapse().count());
+            STAT_FETCH_ADD(time_push_total, timer.life().count());
             return true;
         }
-        // dump();]
-        STAT_FETCH_ADD(time_push_total, STAT_TIME_ELAPSE(timer));
+        // dump();
+        STAT_FETCH_ADD(time_push_total, timer.life().count());
         return false;
     }
 

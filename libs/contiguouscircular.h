@@ -12,15 +12,23 @@ struct StatCCI
     size_t push_error=0, pop_error=0;
     size_t push_miss=0, pop_miss=0;
 };
+
+namespace cc {
+	typedef std::function<void(size_t, size_t)> Callback;
+}
 }
 
-#ifdef ENABLE_STAT_TIME
-#define STAT_TIME(counter) tll::time::Counter<std::chrono::duration<size_t, std::ratio<1, 1000000000>>, std::chrono::steady_clock> counter;counter.start()
-#define STAT_TIME_START(counter) counter.start()
-#define STAT_TIME_ELAPSE(counter) counter.elapse().count()
+#ifdef ENABLE_STAT_TIMER
+
+typedef std::chrono::steady_clock StatClock;
+typedef std::chrono::duration<size_t, std::ratio<1, 1000000000>> StatDuration;
+
+#define STAT_TIMER(counter) tll::time::Counter<StatDuration, StatClock> counter
+#define STAT_TIMER_START(counter) (counter).start()
+// #define STAT_TIMER_ELAPSE(counter) counter.elapse().count()
 #else
-#define STAT_TIME(...)
-#define STAT_TIME_ELAPSE(...) 0
+#define STAT_TIMER(...)
+#define STAT_TIMER_START(...)
 #endif
 
 #if !(defined ENABLE_STAT_COUNTER)

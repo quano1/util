@@ -118,29 +118,6 @@ public:
         STAT_FETCH_ADD(stat_pop_size, size);
     }
 
-    // template <typename ...Args>
-    inline bool pop(const std::function<void(size_t, size_t)> &cb, size_t &size)
-    {
-        size_t cons;
-        STAT_TIME(timer_total);
-        STAT_TIME(timer_inner);
-        size_t next_cons = tryPop(cons, size);
-        STAT_FETCH_ADD(time_pop_try, STAT_TIME_ELAPSE(timer_inner));
-        if(size)
-        {
-            STAT_TIME_START(timer_inner);
-            cb(next_cons, size);
-            STAT_FETCH_ADD(time_pop_cb, STAT_TIME_ELAPSE(timer_inner));
-            STAT_TIME_START(timer_inner);
-            completePop(cons, size);
-            STAT_FETCH_ADD(time_pop_complete, STAT_TIME_ELAPSE(timer_inner));
-            STAT_FETCH_ADD(time_pop_total, STAT_TIME_ELAPSE(timer_total));
-            return true;
-        }
-        STAT_FETCH_ADD(time_pop_total, STAT_TIME_ELAPSE(timer_total));
-        return false;
-    }
-
     inline size_t tryPush(size_t &prod, size_t &size)
     {
         prod = ph_.load(std::memory_order_relaxed);
@@ -219,26 +196,47 @@ public:
         STAT_FETCH_ADD(stat_push_size, size);
     }
 
+
     // template <typename ...Args>
-    inline bool push(const std::function<void (size_t, size_t)> &cb, size_t size)
+    inline bool pop(const tll::cc::Callback &cb, size_t &size)
     {
-        size_t prod;
-        STAT_TIME(timer_total);
-        STAT_TIME(timer_inner);
-        size_t next_prod = tryPush(prod, size);
-        STAT_FETCH_ADD(time_push_try, STAT_TIME_ELAPSE(timer_inner));
+        size_t cons;
+        STAT_TIMER(timer);
+        size_t next_cons = tryPop(cons, size);
+        STAT_FETCH_ADD(time_pop_try, timer.elapse().count());
+        STAT_TIMER_START(timer);
         if(size)
         {
-            STAT_TIME_START(timer_inner);
-            cb(next_prod, size);
-            STAT_FETCH_ADD(time_push_cb, STAT_TIME_ELAPSE(timer_inner));
-            STAT_TIME_START(timer_inner);
-            completePush(prod, size);
-            STAT_FETCH_ADD(time_push_complete, STAT_TIME_ELAPSE(timer_inner));
-            STAT_FETCH_ADD(time_push_total, STAT_TIME_ELAPSE(timer_total));
+            cb(next_cons, size);
+            STAT_FETCH_ADD(time_pop_cb, timer.elapse().count());
+            STAT_TIMER_START(timer);
+            completePop(cons, size);
+            STAT_FETCH_ADD(time_pop_complete, timer.elapse().count());
+            STAT_FETCH_ADD(time_pop_total, timer.life().count());
             return true;
         }
-        STAT_FETCH_ADD(time_push_total, STAT_TIME_ELAPSE(timer_total));
+        return false;
+    }
+
+    // template <typename ...Args>
+    inline bool push(const tll::cc::Callback &cb, size_t size)
+    {
+        size_t prod;
+        STAT_TIMER(timer);
+        size_t next_prod = tryPush(prod, size);
+        STAT_FETCH_ADD(time_push_try, timer.elapse().count());
+        STAT_TIMER_START(timer);
+        if(size)
+        {
+            cb(next_prod, size);
+            STAT_FETCH_ADD(time_push_cb, timer.elapse().count());
+            STAT_TIMER_START(timer);
+            completePush(prod, size);
+            STAT_FETCH_ADD(time_push_complete, timer.elapse().count());
+            STAT_FETCH_ADD(time_push_total, timer.life().count());
+            return true;
+        }
+        STAT_FETCH_ADD(time_push_total, timer.life().count());
         return false;
     }
 
@@ -334,26 +332,14 @@ public:
 #endif
     }
 
-    inline bool pop(const std::function<void (size_t, size_t)> &cb, size_t &size)
+    inline bool pop(const tll::cc::Callback &cb, size_t &size)
     {
-        return cci_.pop(
-#if !(defined PERF_TUN)
-            cb
-#else
-            [](size_t, size_t){NOP_LOOP(PERF_TUN);}
-#endif
-            , size);
+        return cci_.pop(cb, size);
     }
 
-    inline bool push(const std::function<void (size_t, size_t)> &cb, size_t size)
+    inline bool push(const tll::cc::Callback &cb, size_t size)
     {
-        return cci_.push(
-#if !(defined PERF_TUN)
-            cb
-#else
-            [](size_t, size_t){NOP_LOOP(PERF_TUN);}
-#endif
-            , size);
+        return cci_.push(cb, size);
     }
 
     inline T *elemAt(size_t id)

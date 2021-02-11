@@ -6,20 +6,21 @@
 // #include "../libs/util.h"
 // #include "../libs/log.h"
 
-#define ENABLE_STAT_TIME 1
+#define ENABLE_STAT_TIMER 1
 #define ENABLE_STAT_COUNTER 1
-// #define PERF_TUN 0x100000
+#define PERF_TUN 0x10000
 
-#define NOP_LOOP(loop) for(int i=0; i<loop; i++) __asm__("nop")
+#define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 
 #include "../libs/tll.h"
 
 void dumpStat(const tll::StatCCI &st)
 {
     using namespace std::chrono;
-    double time_push_total = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_push_total)).count();
-    double time_push_try = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_push_try)).count();
-    double time_push_complete = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_push_complete)).count();
+
+    double time_push_total = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_push_total)).count();
+    double time_push_try = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_push_try)).count();
+    double time_push_complete = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_push_complete)).count();
     double time_push_try_rate = st.time_push_try*100.f/ st.time_push_total;
     double time_push_complete_rate = st.time_push_complete*100.f/ st.time_push_total;
     double time_push_callback_rate = st.time_push_cb*100.f/ st.time_push_total;
@@ -46,13 +47,14 @@ void dumpStat(const tll::StatCCI &st)
            // avg_time_push_one, avg_push_speed
            );
 
-    double time_pop_total = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_total)).count();
-    double time_pop_try = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_try)).count();
-    double time_pop_complete = duration_cast<duration<double, std::ratio<1>>>(duration<size_t, std::ratio<1,1000000000>>(st.time_pop_complete)).count();
+    double time_pop_total = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_pop_total)).count();
+    double time_pop_try = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_pop_try)).count();
+    double time_pop_complete = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_pop_complete)).count();
     double time_pop_try_rate = st.time_pop_try*100.f/ st.time_pop_total;
     double time_pop_complete_rate = st.time_pop_complete*100.f/ st.time_pop_total;
-    double time_pop_callback_rate = st.time_pop_cb*100.f/ st.time_push_total;
+    double time_pop_callback_rate = st.time_pop_cb*100.f/ st.time_pop_total;
     double time_pop_all_rate = (st.time_pop_cb + st.time_pop_try + st.time_pop_complete)*100.f/ st.time_pop_total;
+
 
     double pop_total = st.pop_total * 1.f / 1000;
     double pop_error_rate = (st.pop_error*100.f)/st.pop_total;
@@ -100,27 +102,26 @@ bool verifyWithTemplate(int &index, const std::vector<char> &sb, const std::vect
 
 // bool testTimer()
 // {
-//     TLL_GLOGTF();
 //     typedef tll::time::Counter<std::chrono::duration<uint32_t, std::ratio<1, 1000000>>> UsCounter;
 //     // tll::time::Map<std::chrono::duration<uint32_t, std::ratio<1, 1000>>> timer{{"all"}};
 //     tll::time::Map<UsCounter> timer{{"all"}};
 //     timer("all").start();
 
 //     uint32_t total_delta = 0;
-//     constexpr uint32_t kPeriodMs = 50000;
+//     constexpr uint32_t kPeriodUs = 50000;
 //     constexpr int kLoop = 10;
 //     for (int i=0; i<kLoop; i++)
 //     {
-//         uint32_t delta = timer().restart().duration().count();
+//         uint32_t delta = timer().stop().start().duration().count();
 //         total_delta+=delta;
-//         if(total_delta >= kPeriodMs)
+//         if(total_delta >= kPeriodUs)
 //         {
-//             total_delta = total_delta%kPeriodMs;
+//             total_delta = total_delta%kPeriodUs;
 //         }
 
-//         uint32_t sleep_ms = kPeriodMs - total_delta;
-//         LOGD("sleep: %d (us)", sleep_ms);
-//         std::this_thread::sleep_for(std::chrono::microseconds(sleep_ms));
+//         uint32_t sleep_us = kPeriodUs - total_delta;
+//         LOGD("sleep: %d (us)", sleep_us);
+//         std::this_thread::sleep_for(std::chrono::microseconds(sleep_us));
 //     }
 
 //     // total_delta = timer("all").stop().duration().count();
@@ -162,7 +163,10 @@ bool verifyWithTemplate(int &index, const std::vector<char> &sb, const std::vect
 template <int thread_num, class CCB>
 bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, tll::time::Counter<> &counter, bool verify=true)
 {
-#if !defined PERF_TUN
+#ifdef PERF_TUN
+    std::vector<char> temp_data[1];
+    temp_data[0].resize(PERF_TUN);
+#else
     const std::vector<char> temp_data[] = {
 {'{',1,'}'},
 {'{',2,2,'}'},
@@ -197,9 +201,6 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
 {'{',31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,'}'},
 {'{',32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,'}'},
     };
-#else
-    std::vector<char> temp_data[1];
-    temp_data[0].resize(PERF_TUN);
 #endif
 
     constexpr int omp_thread_num = thread_num * 2;
@@ -226,14 +227,20 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
         {
             // LOGD("Producer: %d", tid);
             int i=0;
+            tll::cc::Callback push_cb;
+#ifdef PERF_TUN
+            push_cb = [](size_t, size_t){ NOP_LOOP(PERF_TUN); };
+#else
+            push_cb = [&ccb, &temp_data, &i](size_t id, size_t size) {
+                        auto dst = ccb.elemAt(id);
+                        auto src = temp_data[i].data();
+                        memcpy(dst, src, size);
+                    };
+#endif
             for(;total_push_size.load(std::memory_order_relaxed) < (write_size);)
             {
                 // if(ccb.push(temp_data[i].data(), temp_data[i].size()))
-                if(ccb.push([&ccb, &temp_data, i](size_t id, size_t size) {
-                    auto dst = ccb.elemAt(id);
-                    auto src = temp_data[i].data();
-                    memcpy(dst, src, size);
-                }, temp_data[i].size()))
+                if(ccb.push(push_cb, temp_data[i].size()))
                 {
                     total_push_size.fetch_add(temp_data[i].size(), std::memory_order_relaxed);
 #if !defined PERF_TUN
@@ -254,16 +261,22 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
         {
             // LOGD("Consumer: %d(%d)", tid, tid/2);
             size_t pop_size=0;
+            tll::cc::Callback pop_cb;
+#ifdef PERF_TUN
+            pop_cb = [](size_t, size_t){ NOP_LOOP(PERF_TUN); };
+#else
+            pop_cb = [&ccb, &store_buff, &pop_size, tid](size_t id, size_t size) {
+                    auto dst = store_buff[tid/2].data() + pop_size;
+                    auto src = ccb.elemAt(id);
+                    memcpy(dst, src, size);
+                };
+#endif
             for(;w_threads.load(std::memory_order_relaxed) < thread_num /*- (thread_num + 1) / 2*/
                 || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
             {
                 size_t ps = ccb_size;
                 // if(ccb.pop(store_buff[tid/2].data() + pop_size, ps))
-                if(ccb.pop([&ccb, &store_buff, pop_size, tid](size_t id, size_t size) {
-                    auto dst = store_buff[tid/2].data() + pop_size;
-                    auto src = ccb.elemAt(id);
-                    memcpy(dst, src, size);
-                }, ps))
+                if(ccb.pop(pop_cb, ps))
                 {
                     pop_size += ps;
                     total_pop_size.fetch_add(ps, std::memory_order_relaxed);
