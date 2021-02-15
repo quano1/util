@@ -108,8 +108,8 @@ public:
 
     inline void completePop(size_t cons, size_t size)
     {
-        for(;ct_.load(std::memory_order_relaxed) != cons;)
-        {std::this_thread::yield();}
+        for(;ct_.load(std::memory_order_relaxed) != cons;){}
+        // {std::this_thread::yield();}
 
         if(cons == wm_.load(std::memory_order_relaxed))
             ct_.store(next(cons) + size, std::memory_order_relaxed);
@@ -183,8 +183,8 @@ public:
 
     inline void completePush(size_t prod, size_t size)
     {
-        for(;pt_.load(std::memory_order_relaxed) != prod;)
-        {std::this_thread::yield();}
+        for(;pt_.load(std::memory_order_relaxed) != prod;){}
+        // {std::this_thread::yield();}
 
         if(prod + size > next(prod))
         {

@@ -221,26 +221,20 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
     {
         int tid = omp_get_thread_num();
         if(!(tid & 1))
-        // if(tid == 0)
         {
             // LOGD("Producer: %d", tid);
             int i=0;
             tll::cc::Callback push_cb;
-#ifdef PERF_TUN
-            push_cb = [](size_t, size_t){ NOP_LOOP(PERF_TUN); };
-#else
-            push_cb = [&ccb, &temp_data, &i](size_t id, size_t size) {
-                        auto dst = ccb.elemAt(id);
-                        auto src = temp_data[i].data();
-                        memcpy(dst, src, size);
-                    };
-#endif
             for(;total_push_size.load(std::memory_order_relaxed) < (write_size);)
             {
 #ifdef PERF_TUN
-                size_t ws = ccb.push(push_cb, 0x400);
+                size_t ws = ccb.push([](size_t, size_t){ NOP_LOOP(PERF_TUN); }, 0x1000);
 #else
-                size_t ws = ccb.push(push_cb, temp_data[i].size());
+                size_t ws = ccb.push([&ccb, &temp_data, &i](size_t id, size_t size) {
+                        auto dst = ccb.elemAt(id);
+                        auto src = temp_data[i].data();
+                        memcpy(dst, src, size);
+                    }, temp_data[i].size());
 #endif
                 if(ws > 0)
                 {
@@ -254,7 +248,6 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
                     /// overrun
                     std::this_thread::yield();
                 }
-                // (++i) &= 7;
             }
 
             w_threads.fetch_add(1, std::memory_order_relaxed);
@@ -268,22 +261,17 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
             // LOGD("Consumer: %d(%d)", tid, tid/2);
             size_t pop_size=0;
             tll::cc::Callback pop_cb;
-#ifdef PERF_TUN
-            pop_cb = [](size_t, size_t){ NOP_LOOP(PERF_TUN); };
-#else
-            pop_cb = [&ccb, &store_buff, &pop_size, tid](size_t id, size_t size) {
-                    auto dst = store_buff[tid/2].data() + pop_size;
-                    auto src = ccb.elemAt(id);
-                    memcpy(dst, src, size);
-                };
-#endif
             for(;w_threads.load(std::memory_order_relaxed) < thread_num /*- (thread_num + 1) / 2*/
                 || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
             {
 #ifdef PERF_TUN
-                size_t ps = ccb.pop(pop_cb, 0x400);
+                size_t ps = ccb.pop([](size_t, size_t){ NOP_LOOP(PERF_TUN); }, 0x1000);
 #else
-                size_t ps = ccb.pop(pop_cb, ccb_size);
+                size_t ps = ccb.pop([&ccb, &store_buff, &pop_size, tid](size_t id, size_t size) {
+                    auto dst = store_buff[tid/2].data() + pop_size;
+                    auto src = ccb.elemAt(id);
+                    memcpy(dst, src, size);
+                }, ccb_size);
 #endif
                 if(ps > 0)
                 {
@@ -363,7 +351,7 @@ bool testCCB()
     // int i = 1;
     std::ofstream ofs{"run.dat"};
 #ifdef PERF_TUN
-    for(int i=1; i<=0x1000; i*=2)
+    for(int i=1; i<=0x10000; i*=2)
 #else
     for(int i=1; i<=128; i*=2)
 #endif
