@@ -20,7 +20,7 @@
 #include <algorithm>
 #include <utility>
 
-#include "timer.h"
+// #include "timer.h"
 
 #ifdef __ANDROID__
 #include <android/log.h>
@@ -68,7 +68,9 @@ constexpr auto make_array(T && value)
 
 inline std::thread::id tid()
 {
-    return std::this_thread::get_id();
+    static const thread_local auto tid=std::this_thread::get_id();
+    return tid;
+    // return std::this_thread::get_id();
 }
 
 inline std::string fileName(const std::string &path)
@@ -90,6 +92,9 @@ inline std::string to_string(T val)
 template <typename T=double, typename D=std::ratio<1,1>, typename C=std::chrono::steady_clock>
 T timestamp(typename C::time_point &&t = C::now())
 {
+    static const auto tse = std::forward<typename C::time_point>(t).time_since_epoch();
+    static const auto begin = std::forward<typename C::time_point>(t);
+    // return std::chrono::duration_cast<std::chrono::duration<T,D>>(std::forward<typename C::time_point>(t) - begin).count();
     return std::chrono::duration_cast<std::chrono::duration<T,D>>(std::forward<typename C::time_point>(t).time_since_epoch()).count();
 }
 

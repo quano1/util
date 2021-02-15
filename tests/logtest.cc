@@ -14,158 +14,123 @@
 // #include "../libs/SimpleSignal.hpp"
 // #include "../libs/utils.h"
 #include "../libs/log.h"
+#include "../libs/stlwrapper.h"
 // #include "../libs/exporterudp.h"
 
-// template <typename L>
-struct A
-{
-    A(std::function<void(int, std::string const&)> logf) : life_(std::bind(logf,static_cast<int>(tll::LogType::kInfo), std::placeholders::_1), _LOG_HEADER, __FUNCTION__)
-    {
-        sig_log.connect(logf);
-        // sig_log.emit(static_cast<int>(tll::LogType::kInfo), utils::stringFormat("%s\n", _LOG_HEADER));
-    }
-
-    ~A()
-    {
-        // sig_log.emit(static_cast<int>(tll::LogType::kInfo), utils::stringFormat("%s\n", _LOG_HEADER));
-    }
-
-    // L &logger_;
-    // L sig_log_;
-    Simple::Signal<void(int, std::string const&)> sig_log;
-    tll::utils::Timer life_;
-};
-
-namespace {
-    int const console = 1;
-}
-
-inline uint16_t myhtons(uint16_t port) {return htons(port);}
-
-using Logger = tll::Logger<0x400, 0x1000, 1000>;
-Logger *plogger;
-        
+int write_cnt=0;
 
 int main(int argc, char const *argv[])
 {
-    LOGD("");
-    int write_count = 0;
-    plogger = new Logger(
-            // tll::LogEntity{tll::mask::trace, nullptr, nullptr, std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2), 0x1000, nullptr},
+    // auto &logger = tll::log::Node::instance<0x10000>();
+    // auto ptr = logger.connect(tll::log::Flag::kAll, std::bind(printf, "%.*s", std::placeholders::_2, std::placeholders::_1));
+    // tll::time::List<> timer;
 
-            tll::LogEntity{tll::mask::all, 
-                [](){return static_cast<void*>(new std::ofstream("ofs_write.log", std::ios::out | std::ios::binary));}, 
-                [](void *handle){delete static_cast<std::ofstream*>(handle);},
-                [&](void *handle, const char *buff, size_t size){static_cast<std::ofstream*>(handle)->write((const char *)buff, size);
-                    static_cast<std::ofstream*>(handle)->flush(); write_count++;}, 0x100000, nullptr}
+// #undef TLL_GLOGTF
+// #undef TLL_GLOGT
+// #undef TLL_GLOGD
+// #undef TLL_GLOGI
+// #undef TLL_GLOGW
+// #undef TLL_GLOGF
+// #define TLL_GLOGTF() TLL_LOGTF(&logger)
+// #define TLL_GLOGT(...) TLL_LOGT(&logger, ##__VA_ARGS__)
+// #define TLL_GLOGD(...) TLL_LOGD(&logger, ##__VA_ARGS__)
+// #define TLL_GLOGI(...) TLL_LOGI(&logger, ##__VA_ARGS__)
+// #define TLL_GLOGW(...) TLL_LOGW(&logger, ##__VA_ARGS__)
+// #define TLL_GLOGF(...) TLL_LOGF(&logger, ##__VA_ARGS__)
+// LOGD("");
+// tll::log::ContextMap::instance()();
+// LOGD("");
+// auto str = (tll::log::ContextMap::instance()(), tll::util::stringFormat("{%.9f}{%s}{%d}{%s}{%s}",\
+//   tll::util::timestamp<double>(),\
+//   tll::util::to_string(tll::util::tid()),\
+//   tll::log::ContextMap::instance().level(),\
+//   tll::log::ContextMap::instance().get<tll::log::ContextMap::Prev>(),\
+//   tll::log::ContextMap::instance().get<tll::log::ContextMap::Curr>()));
 
-            ,tll::LogEntity{tll::mask::all,
-                []()->void*{
-                    int sock_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-                    struct hostent *host;
-                    host = gethostbyname("localhost");
-                    sockaddr_in svr_addr;
-                    svr_addr.sin_family = AF_INET;
-                    svr_addr.sin_port = myhtons(65501);
-                    bcopy((char *)host->h_addr, (char *)&svr_addr.sin_addr.s_addr, host->h_length);
+// LOGD("");
+TLL_GLOGD("");
+TLL_GLOGI("");
+TLL_GLOGW("");
+TLL_GLOGF("");
+// LOGD("");
 
-                    // set non-blocking io
-                    if ( fcntl( sock_fd, F_SETFL, O_NONBLOCK, 1 ) == -1 )
-                    {
-                        LOGD( "failed to make socket non-blocking" );
-                        return reinterpret_cast<void*>(-1);
-                    }
-
-                    if (connect(sock_fd, (const sockaddr*)&svr_addr, sizeof(svr_addr)) < 0)
-                        LOGE("ERROR connecting");
-
-                    return reinterpret_cast<void*>(sock_fd);
-                },
-                [](void *handle){
-                    int64_t sock_fd = reinterpret_cast<int64_t>(handle);
-                    if(sock_fd>-1) 
-                        close(sock_fd);
-                },
-                [](void *handle, const char *buff, size_t size){
-                    int64_t sock_fd = reinterpret_cast<int64_t>(handle);
-                    if(sock_fd>-1)
-                    {
-                        (void)write(sock_fd, buff, size);
-                    }
-                }, 0x1000, nullptr}
-        );
-    auto &lg = *plogger;
-    // lg.init();
-    // lg.start();
-
-    auto logf = [&lg](int type, std::string const &log_msg){lg.log(type, "%s", log_msg);};
-    // auto myprinf = std::bind(std::printf, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3 );
-    // auto logf = std::bind(&Logger::log<Args...>, &lg, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+    auto &logger = tll::log::Node::instance<>();
+    TLL_GLOGTF();
     {
-        TLL_LOGTF(&lg);
+        TLL_GLOGT(MAIN);
+        // logger.remove("console");
+        // // tll::log::Entity console_ent{
+        // //                 .name = "console",
+        // //                 .flag = tll::log::Flag::kAll,
+        // //                 .on_log = std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)};
+        // tll::log::Entity file_ent{
+        //                 .name = "file", .flag = tll::log::Flag::kAll,
+        //                 [](void *handle, const char *buff, size_t size)
+        //                 {
+        //                     if(handle == nullptr)
+        //                     {
+        //                         printf("%.*s", (int)size, buff);
+        //                         return;
+        //                     }
+        //                     static_cast<std::ofstream*>(handle)->write((const char *)buff, size);
+        //                     // write_cnt++;
+        //                 },
+        //                 []()
+        //                 {
+        //                     // write_cnt=0;
+        //                     return static_cast<void*>(new std::ofstream("file_ent.log", std::ios::out | std::ios::binary));
+        //                 }, 
+        //                 [](void *&handle)
+        //                 {
+        //                     static_cast<std::ofstream*>(handle)->flush();
+        //                     static_cast<std::ofstream*>(handle)->close();
+        //                     delete static_cast<std::ofstream*>(handle);
+        //                     handle = nullptr;
+        //                 }};
+        // // logger.add(file_ent);
+        // {
+        //     tll::util::Guard<tll::time::Counter<>> time_guard{tracer__("starting")};
+        //     logger.start();
+        // }
+        // {
+        //     TLL_GLOGT(log);
+        //     #pragma omp parallel num_threads ( 16 )
+        //     {
+        //         TLL_GLOGT(omp_parallel);
+        //         tll::util::Guard<tll::time::Counter<>> time_guard{tracer__("do logging")};
+        //         for(int i=0; i < std::stoi(argv[1]); i++)
+        //         {
+        //             TLL_GLOGD("this is debug logging");
+        //             TLL_GLOGI("Some information");
+        //             TLL_GLOGW("A warning!!!");
+        //             TLL_GLOGF("Ooops!!! fatal logging");
+        //             std::this_thread::sleep_for(std::chrono::nanoseconds(std::stoi(argv[2])));
+        //         }
+        //     }
+        // }
+    tll::wrapper::StdVector<std::string> myvec {"1","2","3","4","5","6"};
+    myvec.push_back("7");
 
-        // A a(logf);
-        // if(argc > 1)
-        #pragma omp parallel num_threads ( 3 )
-        {
-            TLL_LOGT(&lg, single);
-            {
-                TLL_LOGT(&lg, single_inner);
-                // #pragma omp parallel for
-                for(int i=0; i < std::stoi(argv[1]); i++)
-                {
-                    TLL_GLOGD("%s: %d", "log something for debuging", 1);
-                    TLL_GLOGI("%s: %d", "a little bit of information", 2);
-                    TLL_GLOGW("%s: %d", "this is a warning", 3);
-                    TLL_GLOGF("%s: %d", "Oops, faltal!", 4);
-                }
-            }
-        }
+    for (const auto &el : myvec) {
+        TLL_GLOGD("%s", el.data());
     }
-    LOGD("");
-    delete(plogger);
-    // lg.join();
-    // lg.flushAll();
-    LOGD("%d", write_count);
-    // delete plg;
-    // LOGD("");
+        // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        {
+            // tll::util::Guard<tll::time::Counter<>> time_guard{tracer__("stopping")};
+            // logger.stop();
+        }
 
-    // lg.write_count_=0;
-    // // lg.batch_mode_=false;
-    // {
-    //     TLL_LOGT(lg, single);
-    //     {
-    //         TLL_LOGT(lg, single_inner);
-    //         // #pragma omp parallel for
-    //         for(int i=0; i < 100000; i++)
-    //         {
-    //             TLL_LOGD(lg, "%d %s", 10, "oi troi oi");
-    //             TLL_LOGF(lg, "%d %s", 10, "oi troi oi");
-    //         }
-    //     }
-    // }
-    // lg.join();
-    // LOGD("%d", lg.write_count_);
+        // logger.remove("file");
+    }
 
-    // {
-    //     TLL_LOGT(lg, multi);
-    //     {
-    //         TLL_LOGT(lg, multi_inner);
-    //         // #pragma omp parallel for
-    //         std::future<void> futs[2];
-    //         for(auto &fut : futs)
-    //             fut = std::async(std::launch::async, [&lg](){
-    //                 for(int i=0; i < (1000 / 2); i++)
-    //                 {
-    //                     TLL_LOGD(lg, "%d %s", 10, "oi troi oi");
-    //                     TLL_LOGF(lg, "%d %s", 10, "oi troi oi");
-    //                 }
-    //             });
-
-    //         for(auto &fut : futs) fut.get();
-    //     }
-    //     lg.join();
-    // }
+    // TLL_GLOGD("Write Count: %d", write_cnt);
+    // TLL_GLOGD("starting: %.6f", tracer__("starting").total().count());
+    // TLL_GLOGD("do logging: %.6f", tracer__("do logging").total().count());
+    // TLL_GLOGD("stopping: %.6f", tracer__("stopping").total().count());
+    TLL_GLOGD("elapse: %.6f", tracer__().elapse().count());
+    // std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    logger.stop();
     return 0;
 }
+
 

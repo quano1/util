@@ -65,13 +65,13 @@ int main(int argc, char const *argv[])
     using prof::asyncCnt;
     using prof::dologCnt;
 
-    LOGD("header: %f, %d:%f", timer("header").total().count(), hdCnt, timer("header").total().count()/hdCnt);
-    LOGD("node::log::async: %f, %d:%f", timer("node::log::async").total().count(), asyncCnt, timer("node::log::async").total().count()/asyncCnt);
+    LOGD("header: %.9f, %d:%.9f", timer("header").total().count(), hdCnt, timer("header").total().count()/hdCnt);
+    LOGD("node::log::async: %.9f, %d:%.9f", timer("node::log::async").total().count(), asyncCnt, timer("node::log::async").total().count()/asyncCnt);
 
-    LOGD("dolog: %f, %d:%f", timer("dolog").total().count(), dologCnt, timer("dolog").total().count()/dologCnt);
-    LOGD("open: %f", timer("open").total().count());
-    LOGD("close: %f", timer("close").total().count());
-    LOGD("total: %f", timer.allTotal().count());
+    LOGD("dolog: %.9f, %d:%.9f", timer("dolog").total().count(), dologCnt, timer("dolog").total().count()/dologCnt);
+    LOGD("open: %.9f", timer("open").total().count());
+    LOGD("close: %.9f", timer("close").total().count());
+    LOGD("total: %.9f", timer.allTotal().count());
 
     return 0;
 }

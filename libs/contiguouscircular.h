@@ -14,7 +14,7 @@ struct Stat
     size_t push_miss=0, pop_miss=0;
 };
 
-typedef std::function<void(size_t, size_t)> Callback;
+typedef std::function<void(size_t index, size_t size)> Callback;
 
 }
 
@@ -36,5 +36,6 @@ typedef std::chrono::duration<size_t, std::ratio<1, 1000000000>> StatDuration;
 #endif
 
 
-#include "lf/ccbuffer.h"
+// #include "lf/ccbuffer.h"
+#include "lf/ccfifo.h"
 #include "mt/ccbuffer.h"
