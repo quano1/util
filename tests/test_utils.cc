@@ -6,9 +6,9 @@
 // #include "../libs/util.h"
 // #include "../libs/log.h"
 
-// #define ENABLE_STAT_TIMER 1
-// #define ENABLE_STAT_COUNTER 1
-// #define PERF_TUN 0x10000
+#define ENABLE_STAT_TIMER 1
+#define ENABLE_STAT_COUNTER 1
+#define PERF_TUN 0x100
 
 #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 
@@ -163,6 +163,10 @@ bool verifyWithTemplate(int &index, const std::vector<char> &sb, const std::vect
 template <int thread_num, class CCB>
 bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, tll::time::Counter<> &counter, bool verify=true)
 {
+    constexpr int omp_thread_num = thread_num * 2;
+    CCB ccb(ccb_size);
+    std::vector<char> store_buff[thread_num];
+
 #ifdef PERF_TUN
     std::vector<char> temp_data[1];
     temp_data[0].resize(PERF_TUN);
@@ -201,16 +205,10 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
 {'{',31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,'}'},
 {'{',32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,'}'},
     };
-#endif
 
-    constexpr int omp_thread_num = thread_num * 2;
-
-    CCB ccb(ccb_size);
-    std::vector<char> store_buff[thread_num];
-#if !defined PERF_TUN
     for(int i=0; i<thread_num; i++)
     {
-        store_buff[i].resize(write_size + 32 + 2); /// temp_data
+        store_buff[i].resize(write_size + 32 * 2); /// temp_data
         memset(store_buff[i].data(), 0, store_buff[i].size());
     }
 #endif
@@ -239,10 +237,14 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
 #endif
             for(;total_push_size.load(std::memory_order_relaxed) < (write_size);)
             {
-                // if(ccb.push(temp_data[i].data(), temp_data[i].size()))
-                if(ccb.push(push_cb, temp_data[i].size()))
+#ifdef PERF_TUN
+                size_t ws = ccb.push(push_cb, 0x400);
+#else
+                size_t ws = ccb.push(push_cb, temp_data[i].size());
+#endif
+                if(ws > 0)
                 {
-                    total_push_size.fetch_add(temp_data[i].size(), std::memory_order_relaxed);
+                    total_push_size.fetch_add(ws, std::memory_order_relaxed);
 #if !defined PERF_TUN
                     (++i) &= 31;
 #endif
@@ -257,7 +259,11 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
 
             w_threads.fetch_add(1, std::memory_order_relaxed);
         }
+#ifdef PERF_TUN
         else if (tid & 1)
+#else
+        else if (tid == 1)
+#endif
         {
             // LOGD("Consumer: %d(%d)", tid, tid/2);
             size_t pop_size=0;
@@ -274,15 +280,15 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
             for(;w_threads.load(std::memory_order_relaxed) < thread_num /*- (thread_num + 1) / 2*/
                 || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
             {
+#ifdef PERF_TUN
+                size_t ps = ccb.pop(pop_cb, 0x400);
+#else
                 size_t ps = ccb.pop(pop_cb, ccb_size);
-                // if(ccb.pop(store_buff[tid/2].data() + pop_size, ps))
+#endif
                 if(ps > 0)
                 {
                     pop_size += ps;
                     total_pop_size.fetch_add(ps, std::memory_order_relaxed);
-                    // store_buff[tid/2][pop_size] = '|';
-                    // pop_size++;
-                    // LOGD("%ld", pop_size);
                 }
                 else
                 {
@@ -356,11 +362,14 @@ bool testCCB()
     // for(;write_size <= kOneMb * 1000; kOneMb)
     // int i = 1;
     std::ofstream ofs{"run.dat"};
-
+#ifdef PERF_TUN
+    for(int i=1; i<=0x1000; i*=2)
+#else
     for(int i=1; i<=128; i*=2)
+#endif
     {
         size_t write_size = kOneMb * i;
-        size_t ccb_size = kOneMb * 4;
+        size_t const ccb_size = kOneMb * 4;
 
         printf("ccb_size: %.3fMb(0x%lx), write_size: %.3fMb(0x%lx)\n", ccb_size*1.f/kOneMb, ccb_size, write_size*1.f/kOneMb, write_size);
         printf("================================================================\n");

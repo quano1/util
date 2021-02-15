@@ -181,7 +181,7 @@ public:
         STAT_FETCH_ADD(stat_push_size, size);
     }
 
-    inline bool pop(const tll::cc::Callback &cb, size_t &size)
+    inline size_t pop(const tll::cc::Callback &cb, size_t size)
     {
         STAT_TIMER(timer);
         std::scoped_lock lock(pop_mtx_);
@@ -196,15 +196,12 @@ public:
             STAT_TIMER_START(timer);
             completePop(cons, size);
             STAT_FETCH_ADD(time_pop_complete, timer.elapse().count());
-            STAT_FETCH_ADD(time_pop_total, timer.life().count());
-            return true;
         }
-        // dump();
         STAT_FETCH_ADD(time_pop_total, timer.life().count());
-        return false;
+        return size;
     }
 
-    inline bool push(const tll::cc::Callback &cb, size_t size)
+    inline size_t push(const tll::cc::Callback &cb, size_t size)
     {
         STAT_TIMER(timer);
         std::scoped_lock lock(push_mtx_);
@@ -219,12 +216,10 @@ public:
             STAT_TIMER_START(timer);
             completePush(cons, size);
             STAT_FETCH_ADD(time_push_complete, timer.elapse().count());
-            STAT_FETCH_ADD(time_push_total, timer.life().count());
-            return true;
         }
         // dump();
         STAT_FETCH_ADD(time_push_total, timer.life().count());
-        return false;
+        return size;
     }
 
     inline char *elemAt(size_t id)
@@ -235,21 +230,6 @@ public:
     inline size_t wrap(size_t index) const
     {
         return index & (size_ - 1);
-    }
-
-    inline size_t size() const
-    {
-        return pt_ - ch_ - unused();
-    }
-
-    inline size_t freeSize() const
-    {
-        return size_ - (ph_ - ct_ - unused());
-    }
-
-    inline size_t unused() const
-    {
-        return ct_ < wm_ ? size_ - wrap(wm_) : 0;
     }
 
     inline size_t next(size_t index) const
