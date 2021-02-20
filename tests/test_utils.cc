@@ -173,7 +173,7 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
 #if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
     std::vector<char> temp_data[1];
     temp_data[0].resize(PERF_TUNNEL);
-    size_t kPSize = 0x1000;
+    const size_t kPSize = 1;
 #else
     const std::vector<char> temp_data[] = {
 {'{',1,'}'},
@@ -355,13 +355,13 @@ bool testCCB()
     size_t opss[2];
 #if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
     // for(int i=1; i<=0x1000; i*=2)
-    int i = 0x4000;
+    int i = 1;
 #else
     for(int i=1; i<=128; i*=2)
 #endif
     {
         size_t write_size = kOneMb * i;
-        size_t const ccb_size = kOneMb * 0x100;
+        size_t const ccb_size = write_size / 8;
 
         printf("ccb_size: %.3fMb(0x%lx), write_size: %.3fGb(0x%lx)\n", ccb_size*1.f/kOneMb, ccb_size, write_size*1.f/kOneGb, write_size);
         printf("================================================================\n");
