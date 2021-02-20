@@ -8,11 +8,11 @@
 #include <vector>
 #include "../util.h"
 
-#ifdef ENABLE_STAT_COUNTER
-    #ifdef STAT_FETCH_ADD
-        #undef STAT_FETCH_ADD
+#if (defined ENABLE_PROFILING) && (ENABLE_PROFILING == 1)
+    #ifdef PROF_ADD
+        #undef PROF_ADD
     #endif
-    #define STAT_FETCH_ADD(atomic, val)  atomic+=val
+    #define PROF_ADD(atomic, val)  atomic+=val
 #endif
 
 namespace tll::mt {
@@ -52,7 +52,7 @@ public:
         std::scoped_lock lock(push_mtx_, pop_mtx_);
         size_ = util::isPowerOf2(size) ? size : util::nextPowerOf2(size);
         // dump();
-#if (!defined PERF_TUN) || (PERF_TUN==0)
+#if (!defined PERF_TUNNEL) || (PERF_TUNNEL==0)
         buffer_.resize(size_);
 #endif
     }
@@ -68,7 +68,7 @@ public:
         {
             // LOGE("Underrun!");dump();
             size = 0;
-            STAT_FETCH_ADD(stat_pop_error, 1);
+            PROF_ADD(stat_pop_error, 1);
             // return nullptr;
         }
         else if(next_cons == wmark)
@@ -78,7 +78,7 @@ public:
             {
                 // LOGE("Underrun!");dump();
                 size = 0;
-                STAT_FETCH_ADD(stat_pop_error, 1);
+                PROF_ADD(stat_pop_error, 1);
                 // return nullptr;
             }
             if(size > (prod - next_cons))
@@ -96,7 +96,7 @@ public:
         }
 
         ch_ = next_cons + size;
-        STAT_FETCH_ADD(stat_pop_total, 1);
+        PROF_ADD(stat_pop_total, 1);
         return next_cons;
     }
 
@@ -107,7 +107,7 @@ public:
             ct_ = next(cons) + size;
         else
             ct_ = cons + size;
-        STAT_FETCH_ADD(stat_pop_size, size);
+        PROF_ADD(stat_pop_size, size);
     }
 
     inline size_t tryPush(size_t &prod, size_t &size)
@@ -134,7 +134,7 @@ public:
                     {
                         // LOGE("OVERRUN");dump();
                         size = 0;
-                        STAT_FETCH_ADD(stat_push_error, 1);
+                        PROF_ADD(stat_push_error, 1);
                         // break;
                     }
                 }
@@ -151,7 +151,7 @@ public:
                 {
                     // LOGE("OVERRUN");dump();
                     size = 0;
-                    STAT_FETCH_ADD(stat_push_error, 1);
+                    PROF_ADD(stat_push_error, 1);
                     // break;
                 }
                 ph_ = next_prod + size;
@@ -161,10 +161,10 @@ public:
         {
             // LOGE("OVERRUN");dump();
             size = 0;
-            STAT_FETCH_ADD(stat_push_error, 1);
+            PROF_ADD(stat_push_error, 1);
             // break;
         }
-        STAT_FETCH_ADD(stat_push_total, 1);
+        PROF_ADD(stat_push_total, 1);
         return next_prod;
     }
 
@@ -178,47 +178,47 @@ public:
         }
         else
             pt_ = prod + size;
-        STAT_FETCH_ADD(stat_push_size, size);
+        PROF_ADD(stat_push_size, size);
     }
 
     inline size_t pop(const tll::cc::Callback &cb, size_t size)
     {
-        STAT_TIMER(timer);
+        PROF_TIMER(timer);
         std::scoped_lock lock(pop_mtx_);
         size_t cons;
         size_t id = tryPop(cons, size);
-        STAT_FETCH_ADD(time_pop_try, timer.elapse().count());
-        STAT_TIMER_START(timer);
+        PROF_ADD(time_pop_try, timer.elapse().count());
+        PROF_TIMER_START(timer);
         if(size)
         {
             cb(id, size);
-            STAT_FETCH_ADD(time_pop_cb, timer.elapse().count());
-            STAT_TIMER_START(timer);
+            PROF_ADD(time_pop_cb, timer.elapse().count());
+            PROF_TIMER_START(timer);
             completePop(cons, size);
-            STAT_FETCH_ADD(time_pop_complete, timer.elapse().count());
+            PROF_ADD(time_pop_complete, timer.elapse().count());
         }
-        STAT_FETCH_ADD(time_pop_total, timer.life().count());
+        PROF_ADD(time_pop_total, timer.life().count());
         return size;
     }
 
     inline size_t push(const tll::cc::Callback &cb, size_t size)
     {
-        STAT_TIMER(timer);
+        PROF_TIMER(timer);
         std::scoped_lock lock(push_mtx_);
         size_t cons;
         size_t id = tryPush(cons, size);
-        STAT_FETCH_ADD(time_push_try, timer.elapse().count());
-        STAT_TIMER_START(timer);
+        PROF_ADD(time_push_try, timer.elapse().count());
+        PROF_TIMER_START(timer);
         if(size)
         {
             cb(id, size);
-            STAT_FETCH_ADD(time_push_cb, timer.elapse().count());
-            STAT_TIMER_START(timer);
+            PROF_ADD(time_push_cb, timer.elapse().count());
+            PROF_TIMER_START(timer);
             completePush(cons, size);
-            STAT_FETCH_ADD(time_push_complete, timer.elapse().count());
+            PROF_ADD(time_push_complete, timer.elapse().count());
         }
         // dump();
-        STAT_FETCH_ADD(time_push_total, timer.life().count());
+        PROF_ADD(time_push_total, timer.life().count());
         return size;
     }
 

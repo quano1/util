@@ -21,20 +21,15 @@ typedef std::function<void(size_t index, size_t size)> Callback;
 typedef std::chrono::steady_clock StatClock;
 typedef std::chrono::duration<size_t, std::ratio<1, 1000000000>> StatDuration;
 
-#ifdef ENABLE_STAT_TIMER
+#if (defined ENABLE_PROFILING) && (ENABLE_PROFILING == 1)
 
-#define STAT_TIMER(counter) tll::time::Counter<StatDuration, StatClock> counter
-#define STAT_TIMER_START(counter) (counter).start()
-// #define STAT_TIMER_ELAPSE(counter) counter.elapse().count()
+#define PROF_TIMER(counter) tll::time::Counter<StatDuration, StatClock> counter
+#define PROF_TIMER_START(counter) (counter).start()
 #else
-#define STAT_TIMER(...)
-#define STAT_TIMER_START(...)
+#define PROF_TIMER(...)
+#define PROF_TIMER_START(...)
+#define PROF_ADD(...)
 #endif
-
-#if !(defined ENABLE_STAT_COUNTER)
-#define STAT_FETCH_ADD(...)
-#endif
-
 
 #include "lf/ccfifo.h"
 #include "mt/ccbuffer.h"

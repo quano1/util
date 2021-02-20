@@ -6,9 +6,8 @@
 // #include "../libs/util.h"
 // #include "../libs/log.h"
 
-#define ENABLE_STAT_TIMER 1
-#define ENABLE_STAT_COUNTER 1
-#define PERF_TUN 0
+#define ENABLE_PROFILING 1
+#define PERF_TUNNEL 1
 
 #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 
@@ -171,9 +170,9 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
     CCB ccb(ccb_size);
     std::vector<char> store_buff[thread_num];
 
-#if (defined PERF_TUN) && (PERF_TUN > 0)
+#if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
     std::vector<char> temp_data[1];
-    temp_data[0].resize(PERF_TUN);
+    temp_data[0].resize(PERF_TUNNEL);
     size_t kPSize = 0x1000;
 #else
     const std::vector<char> temp_data[] = {
@@ -232,8 +231,8 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
             tll::cc::Callback push_cb;
             for(;total_push_size.load(std::memory_order_relaxed) < (write_size);)
             {
-#if (defined PERF_TUN) && (PERF_TUN > 0)
-                size_t ws = ccb.push([](size_t, size_t){ NOP_LOOP(PERF_TUN); }, kPSize);
+#if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
+                size_t ws = ccb.push([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }, kPSize);
 #else
                 size_t ws = ccb.push([&ccb, &temp_data, &i](size_t id, size_t size) {
                         auto dst = ccb.elemAt(id);
@@ -244,7 +243,7 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
                 if(ws > 0)
                 {
                     total_push_size.fetch_add(ws, std::memory_order_relaxed);
-#if (!defined PERF_TUN) || (PERF_TUN==0)
+#if (!defined PERF_TUNNEL) || (PERF_TUNNEL==0)
                     (++i) &= 31;
 #endif
                 }
@@ -265,8 +264,8 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
             for(;w_threads.load(std::memory_order_relaxed) < thread_num /*- (thread_num + 1) / 2*/
                 || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
             {
-#if (defined PERF_TUN) && (PERF_TUN > 0)
-                size_t ps = ccb.pop([](size_t, size_t){ NOP_LOOP(PERF_TUN); }, kPSize);
+#if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
+                size_t ps = ccb.pop([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }, kPSize);
 #else
                 size_t ps = ccb.pop([&ccb, &store_buff, &pop_size, tid](size_t id, size_t size) {
                     auto dst = store_buff[tid/2].data() + pop_size;
@@ -315,7 +314,7 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
         return false;
     }
     bool ret = true;
-#if (!defined PERF_TUN) || (PERF_TUN==0)
+#if (!defined PERF_TUNNEL) || (PERF_TUNNEL==0)
     // size_t tt_size=0;
     for(int t=0; t<thread_num; t++)
     {
@@ -354,9 +353,9 @@ bool testCCB()
     // int i = 1;
     std::ofstream ofs{"run.dat"};
     size_t opss[2];
-#if (defined PERF_TUN) && (PERF_TUN > 0)
+#if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
     // for(int i=1; i<=0x1000; i*=2)
-    int i = 0x1000;
+    int i = 0x4000;
 #else
     for(int i=1; i<=128; i*=2)
 #endif

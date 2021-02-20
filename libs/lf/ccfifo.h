@@ -9,11 +9,11 @@
 #include <mutex>
 #include "../util.h"
 
-#ifdef ENABLE_STAT_COUNTER
-    #ifdef STAT_FETCH_ADD
-        #undef STAT_FETCH_ADD
+#if (defined ENABLE_PROFILING) && (ENABLE_PROFILING == 1)
+    #ifdef PROF_ADD
+        #undef PROF_ADD
     #endif
-    #define STAT_FETCH_ADD(atomic, val)  atomic.fetch_add(val, std::memory_order_relaxed)
+    #define PROF_ADD(atomic, val)  atomic.fetch_add(val, std::memory_order_relaxed)
 #endif
 
 namespace tll::lf {
@@ -61,7 +61,7 @@ public:
         size_t prod;
         size_t wmark;
         size_t tmp_size = size;
-        for(;;STAT_FETCH_ADD(stat_pop_miss, 1))
+        for(;;PROF_ADD(stat_pop_miss, 1))
         {
             next_cons = cons;
             size = tmp_size;
@@ -71,7 +71,7 @@ public:
             {
                 // LOGE("Underrun!");dump();
                 size = 0;
-                STAT_FETCH_ADD(stat_pop_error, 1);
+                PROF_ADD(stat_pop_error, 1);
                 break;
             }
 
@@ -82,7 +82,7 @@ public:
                 {
                     // LOGE("Underrun!");dump();
                     size = 0;
-                    STAT_FETCH_ADD(stat_pop_error, 1);
+                    PROF_ADD(stat_pop_error, 1);
                     break;
                 }
                 if(size > (prod - next_cons))
@@ -104,7 +104,7 @@ public:
             if(ch_.compare_exchange_weak(cons, next_cons + size, std::memory_order_acquire, std::memory_order_relaxed)) break;
         }
 
-        STAT_FETCH_ADD(stat_pop_total, 1);
+        PROF_ADD(stat_pop_total, 1);
         return next_cons;
     }
 
@@ -117,14 +117,14 @@ public:
             ct_.store(next(cons) + size, std::memory_order_relaxed);
         else
             ct_.store(cons + size, std::memory_order_relaxed);
-        STAT_FETCH_ADD(stat_pop_size, size);
+        PROF_ADD(stat_pop_size, size);
     }
 
     inline size_t tryPush(size_t &prod, size_t &size)
     {
         prod = ph_.load(std::memory_order_relaxed);
         size_t next_prod;
-        for(;;STAT_FETCH_ADD(stat_push_miss, 1))
+        for(;;PROF_ADD(stat_push_miss, 1))
         {
             next_prod = prod;
             size_t wmark = wm_.load(std::memory_order_relaxed);
@@ -147,7 +147,7 @@ public:
                         {
                             // LOGE("OVERRUN");dump();
                             size = 0;
-                            STAT_FETCH_ADD(stat_push_error, 1);
+                            PROF_ADD(stat_push_error, 1);
                             break;
                         }
                     }
@@ -164,7 +164,7 @@ public:
                     {
                         // LOGE("OVERRUN");dump();
                         size = 0;
-                        STAT_FETCH_ADD(stat_push_error, 1);
+                        PROF_ADD(stat_push_error, 1);
                         break;
                     }
                     if(!ph_.compare_exchange_weak(prod, next_prod + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
@@ -175,11 +175,11 @@ public:
             {
                 // LOGE("OVERRUN");dump();
                 size = 0;
-                STAT_FETCH_ADD(stat_push_error, 1);
+                PROF_ADD(stat_push_error, 1);
                 break;
             }
         }
-        STAT_FETCH_ADD(stat_push_total, 1);
+        PROF_ADD(stat_push_total, 1);
         return next_prod;
     }
 
@@ -195,26 +195,26 @@ public:
         }
         else
             pt_.store(prod + size, std::memory_order_release);
-        STAT_FETCH_ADD(stat_push_size, size);
+        PROF_ADD(stat_push_size, size);
     }
 
     // template <typename ...Args>
     inline size_t pop(const tll::cc::Callback &cb, size_t size)
     {
         size_t cons;
-        STAT_TIMER(timer);
+        PROF_TIMER(timer);
         size_t next_cons = tryPop(cons, size);
-        STAT_FETCH_ADD(time_pop_try, timer.elapse().count());
-        STAT_TIMER_START(timer);
+        PROF_ADD(time_pop_try, timer.elapse().count());
+        PROF_TIMER_START(timer);
         if(size)
         {
             cb(next_cons, size);
-            STAT_FETCH_ADD(time_pop_cb, timer.elapse().count());
-            STAT_TIMER_START(timer);
+            PROF_ADD(time_pop_cb, timer.elapse().count());
+            PROF_TIMER_START(timer);
             completePop(cons, size);
-            STAT_FETCH_ADD(time_pop_complete, timer.elapse().count());
+            PROF_ADD(time_pop_complete, timer.elapse().count());
         }
-        STAT_FETCH_ADD(time_pop_total, timer.life().count());
+        PROF_ADD(time_pop_total, timer.life().count());
         return size;
     }
 
@@ -222,19 +222,19 @@ public:
     inline size_t push(const tll::cc::Callback &cb, size_t size)
     {
         size_t prod;
-        STAT_TIMER(timer);
+        PROF_TIMER(timer);
         size_t next_prod = tryPush(prod, size);
-        STAT_FETCH_ADD(time_push_try, timer.elapse().count());
-        STAT_TIMER_START(timer);
+        PROF_ADD(time_push_try, timer.elapse().count());
+        PROF_TIMER_START(timer);
         if(size)
         {
             cb(next_prod, size);
-            STAT_FETCH_ADD(time_push_cb, timer.elapse().count());
-            STAT_TIMER_START(timer);
+            PROF_ADD(time_push_cb, timer.elapse().count());
+            PROF_TIMER_START(timer);
             completePush(prod, size);
-            STAT_FETCH_ADD(time_push_complete, timer.elapse().count());
+            PROF_ADD(time_push_complete, timer.elapse().count());
         }
-        STAT_FETCH_ADD(time_push_total, timer.life().count());
+        PROF_ADD(time_push_total, timer.life().count());
         return size;
     }
 
@@ -318,7 +318,7 @@ public:
     inline void reserve(size_t size)
     {
         cci_.reserve(size);
-#if (!defined PERF_TUN) || (PERF_TUN==0)
+#if (!defined PERF_TUNNEL) || (PERF_TUNNEL==0)
         buffer_.resize(cci_.capacity());
 #endif
     }
@@ -417,7 +417,7 @@ public:
         size_t prod;
         size_t wmark;
         size_t tmp_size = size;
-        for(;;STAT_FETCH_ADD(stat_pop_miss, 1))
+        for(;;PROF_ADD(stat_pop_miss, 1))
         {
             next_cons = cons;
             size = tmp_size;
@@ -427,7 +427,7 @@ public:
             {
                 // LOGE("Underrun!");dump();
                 size = 0;
-                STAT_FETCH_ADD(stat_pop_error, 1);
+                PROF_ADD(stat_pop_error, 1);
                 break;
             }
 
@@ -438,7 +438,7 @@ public:
                 {
                     // LOGE("Underrun!");dump();
                     size = 0;
-                    STAT_FETCH_ADD(stat_pop_error, 1);
+                    PROF_ADD(stat_pop_error, 1);
                     break;
                 }
                 if(size > (prod - next_cons))
@@ -460,7 +460,7 @@ public:
             if(ch_.compare_exchange_weak(cons, next_cons + size, std::memory_order_acquire, std::memory_order_relaxed)) break;
         }
 
-        STAT_FETCH_ADD(stat_pop_total, 1);
+        PROF_ADD(stat_pop_total, 1);
         return next_cons;
     }
 
@@ -473,14 +473,14 @@ public:
             ct_.store(next(cons) + size, std::memory_order_relaxed);
         else
             ct_.store(cons + size, std::memory_order_relaxed);
-        STAT_FETCH_ADD(stat_pop_size, size);
+        PROF_ADD(stat_pop_size, size);
     }
 
     inline size_t tryPush(size_t &prod, size_t &size)
     {
         prod = ph_.load(std::memory_order_relaxed);
         size_t next_prod;
-        for(;;STAT_FETCH_ADD(stat_push_miss, 1))
+        for(;;PROF_ADD(stat_push_miss, 1))
         {
             next_prod = prod;
             size_t wmark = wm_.load(std::memory_order_relaxed);
@@ -503,7 +503,7 @@ public:
                         {
                             // LOGE("OVERRUN");dump();
                             size = 0;
-                            STAT_FETCH_ADD(stat_push_error, 1);
+                            PROF_ADD(stat_push_error, 1);
                             break;
                         }
                     }
@@ -520,7 +520,7 @@ public:
                     {
                         // LOGE("OVERRUN");dump();
                         size = 0;
-                        STAT_FETCH_ADD(stat_push_error, 1);
+                        PROF_ADD(stat_push_error, 1);
                         break;
                     }
                     if(!ph_.compare_exchange_weak(prod, next_prod + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
@@ -531,11 +531,11 @@ public:
             {
                 // LOGE("OVERRUN");dump();
                 size = 0;
-                STAT_FETCH_ADD(stat_push_error, 1);
+                PROF_ADD(stat_push_error, 1);
                 break;
             }
         }
-        STAT_FETCH_ADD(stat_push_total, 1);
+        PROF_ADD(stat_push_total, 1);
         return next_prod;
     }
 
@@ -551,7 +551,7 @@ public:
         }
         else
             pt_.store(prod + size, std::memory_order_release);
-        STAT_FETCH_ADD(stat_push_size, size);
+        PROF_ADD(stat_push_size, size);
         // std::scoped_lock lock(push_mtx_);
     }
 
@@ -559,19 +559,19 @@ public:
     inline size_t pop(const tll::cc::Callback &cb, size_t size)
     {
         size_t cons;
-        STAT_TIMER(timer);
+        PROF_TIMER(timer);
         size_t next_cons = tryPop(cons, size);
-        STAT_FETCH_ADD(time_pop_try, timer.elapse().count());
-        STAT_TIMER_START(timer);
+        PROF_ADD(time_pop_try, timer.elapse().count());
+        PROF_TIMER_START(timer);
         if(size)
         {
             cb(next_cons, size);
-            STAT_FETCH_ADD(time_pop_cb, timer.elapse().count());
-            STAT_TIMER_START(timer);
+            PROF_ADD(time_pop_cb, timer.elapse().count());
+            PROF_TIMER_START(timer);
             completePop(cons, size);
-            STAT_FETCH_ADD(time_pop_complete, timer.elapse().count());
+            PROF_ADD(time_pop_complete, timer.elapse().count());
         }
-        STAT_FETCH_ADD(time_pop_total, timer.life().count());
+        PROF_ADD(time_pop_total, timer.life().count());
         return size;
     }
 
@@ -579,19 +579,19 @@ public:
     inline size_t push(const tll::cc::Callback &cb, size_t size)
     {
         size_t prod;
-        STAT_TIMER(timer);
+        PROF_TIMER(timer);
         size_t next_prod = tryPush(prod, size);
-        STAT_FETCH_ADD(time_push_try, timer.elapse().count());
-        STAT_TIMER_START(timer);
+        PROF_ADD(time_push_try, timer.elapse().count());
+        PROF_TIMER_START(timer);
         if(size)
         {
             cb(next_prod, size);
-            STAT_FETCH_ADD(time_push_cb, timer.elapse().count());
-            STAT_TIMER_START(timer);
+            PROF_ADD(time_push_cb, timer.elapse().count());
+            PROF_TIMER_START(timer);
             completePush(prod, size);
-            STAT_FETCH_ADD(time_push_complete, timer.elapse().count());
+            PROF_ADD(time_push_complete, timer.elapse().count());
         }
-        STAT_FETCH_ADD(time_push_total, timer.life().count());
+        PROF_ADD(time_push_total, timer.life().count());
         return size;
     }
 
