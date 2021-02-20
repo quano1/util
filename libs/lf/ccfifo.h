@@ -7,6 +7,7 @@
 #include <thread>
 #include <vector>
 #include <mutex>
+#include "../counter.h"
 #include "../util.h"
 
 #if (defined ENABLE_PROFILING) && (ENABLE_PROFILING == 1)
@@ -214,7 +215,7 @@ public:
             completePop(cons, size);
             PROF_ADD(time_pop_complete, timer.elapse().count());
         }
-        PROF_ADD(time_pop_total, timer.life().count());
+        PROF_ADD(time_pop_total, timer.absElapse().count());
         return size;
     }
 
@@ -234,7 +235,7 @@ public:
             completePush(prod, size);
             PROF_ADD(time_push_complete, timer.elapse().count());
         }
-        PROF_ADD(time_push_total, timer.life().count());
+        PROF_ADD(time_push_total, timer.absElapse().count());
         return size;
     }
 
@@ -571,7 +572,7 @@ public:
             completePop(cons, size);
             PROF_ADD(time_pop_complete, timer.elapse().count());
         }
-        PROF_ADD(time_pop_total, timer.life().count());
+        PROF_ADD(time_pop_total, timer.absElapse().count());
         return size;
     }
 
@@ -591,7 +592,7 @@ public:
             completePush(prod, size);
             PROF_ADD(time_push_complete, timer.elapse().count());
         }
-        PROF_ADD(time_push_total, timer.life().count());
+        PROF_ADD(time_push_total, timer.absElapse().count());
         return size;
     }
 

@@ -2,16 +2,20 @@
 /// Copyright (c) 2021 Thanh Long Le (longlt00502@gmail.com)
 #include <limits>
 #include <cmath>
+#include <omp.h>
+#include <fstream>
 // #include "../libs/timer.h"
 // #include "../libs/util.h"
 // #include "../libs/log.h"
 
 #define ENABLE_PROFILING 1
-#define PERF_TUNNEL 1
+#define PERF_TUNNEL 0
 
 #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 
-#include "../libs/tll.h"
+#include "../libs/util.h"
+#include "../libs/counter.h"
+#include "../libs/contiguouscircular.h"
 
 void dumpStat(const tll::cc::Stat &st, double real_total_time)
 {
@@ -212,7 +216,7 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
 
     for(int i=0; i<thread_num; i++)
     {
-        store_buff[i].resize(write_size + 32 * 2); /// temp_data
+        store_buff[i].resize(write_size + 34 * thread_num); /// temp_data
         memset(store_buff[i].data(), 0, store_buff[i].size());
     }
 #endif
@@ -289,14 +293,15 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
     }
     counter.elapsed();
 
+#if (!defined PERF_TUNNEL) || (PERF_TUNNEL==0)
     printf("CC type: %s\n", ccb_type.data());
-    // ccb.dumpStat();
     dumpStat(ccb.stat(), counter.lastElapsed().count());
+#endif
+
     if(opss) {
         opss[0] = ccb.stat().push_total;
         opss[1] = ccb.stat().pop_total;
     }
-
     // tll::util::dump(ccb.buffer_.data(), ccb.buffer_.size());
     // for(int i=0; i<thread_num; i++)
     // {
@@ -332,101 +337,66 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
     return ret;
 }
 
-bool _testCCB2()
+bool testCCB(int loop=1)
 {
-    bool ret = true;
-    return ret;
-}
-
-bool testCCB()
-{
-
-    // constexpr int kInitShift = 0;
-    // constexpr int kShift = 1;
     constexpr size_t kOneMb = 1024 * 1024;
     constexpr size_t kOneGb = kOneMb * 1024;
-    // size_t write_size = kOneMb * 100;
-    // size_t ccb_size = write_size / 8;
-    /// 1Mb, 10Mb, 100Mb, 1Gb
-    // for(; ccb_size < write_size * 3; ccb_size = ccb_size << 1)
-    // for(;write_size <= kOneMb * 1000; kOneMb)
-    // int i = 1;
-    std::ofstream ofs{"run.dat"};
+    size_t write_size = kOneMb;
+    tll::time::Counter<> counter;
+    std::ofstream ofs{"profile.dat"};
     size_t opss[2];
-#if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
-    // for(int i=1; i<=0x1000; i*=2)
-    int i = 1;
-#else
-    for(int i=1; i<=128; i*=2)
-#endif
-    {
-        size_t write_size = kOneMb * i;
-        size_t const ccb_size = write_size / 8;
 
+#if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
+    size_t const ccb_size = write_size / 8;
+
+    _testCCB<1, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss);
+    printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
+    ofs << 1 << " " << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count();
+    ofs << std::endl;
+
+    _testCCB<2, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss);
+    printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
+    ofs << 2 << " " << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count();
+    ofs << std::endl;
+
+#else
+    size_t const ccb_size = kOneMb;
+    printf("================================================================\n");
+    for (int l=0; l<loop; l++)
+    {
         printf("ccb_size: %.3fMb(0x%lx), write_size: %.3fGb(0x%lx)\n", ccb_size*1.f/kOneMb, ccb_size, write_size*1.f/kOneGb, write_size);
-        printf("================================================================\n");
-        // printf("----------------------------------------------------------------\n");
+        printf("----------------------------------------------------------------\n");
         printf("threads: 1\n");
-        tll::time::Counter<> counter;
-        ofs << 1 << " ";
-        // counter.start();
-        // if(!_testCCB<1, tll::mt::CCBuffer>("mt", ccb_size, write_size, counter)) return false;
-        // printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-        // ofs << tll::util::stringFormat("%.6f ", counter.lastElapsed().count());
-        // printf("-------------------------------\n");
+        ofs << write_size << " ";
+        if(!_testCCB<1, tll::mt::CCBuffer>("mt", ccb_size, write_size, counter, opss)) return false;
+        printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
+        ofs << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count() << " ";
+        printf("-------------------------------\n");
         if(!_testCCB<1, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss)) return false;
         printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-        // ofs << tll::util::stringFormat("%.6f ", counter.lastElapsed().count());
-        ofs << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count();
+        ofs << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count() << " ";
         printf("-------------------------------\n");
-        ofs << std::endl;
 
-        ofs << 2 << " ";
         printf("----------------------------------------------------------------\n");
         printf("threads: 2\n");
-        // if(!_testCCB<2, tll::mt::CCBuffer>("mt", ccb_size, write_size, counter)) return false;
-        // printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-        // printf("-------------------------------\n");
         if(!_testCCB<2, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss)) return false;
         printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-        // ofs << tll::util::stringFormat("%.6f ", counter.lastElapsed().count());
-        ofs << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count();
+        ofs << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count() << " ";
         printf("-------------------------------\n");
-        ofs << std::endl;
-
-        // ofs << 3 << " ";
-        // printf("----------------------------------------------------------------\n");
-        // printf("threads: 3\n");
-        // if(!_testCCB<3, tll::mt::CCBuffer>("mt", ccb_size, write_size, counter)) return false;
-        // printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-        // printf("-------------------------------\n");
-        // if(!_testCCB<3, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss)) return false;
-        // printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-        // // ofs << tll::util::stringFormat("%.6f ", counter.lastElapsed().count());
-        // ofs << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count();
-        // printf("-------------------------------\n");
-        // ofs << std::endl;
-
-        // printf("----------------------------------------------------------------\n");
-        // printf("threads: 4\n");
-        // if(!_testCCB<4, tll::mt::CCBuffer>("mt", ccb_size, write_size, counter)) return false;
-        // printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-        // printf("-------------------------------\n");
-        // if(!_testCCB<4, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter)) return false;
-        // printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-        // ofs << tll::util::stringFormat("%.6f ", counter.lastElapsed().count());
-        // printf("-------------------------------\n");
 
         printf("Total duration: %.6f(s)\n", counter.totalElapsed().count());
-        printf("================================================================\n");
-        printf("\n");
+        // printf("\n");
+        printf("----------------------------------------------------------------\n");
+        write_size *= 2;
         ofs << std::endl;
     }
+    printf("================================================================\n");
+#endif
 
     return true;
 }
 
-int main()
+int main(int argc, char **argv)
 {
     bool rs = false;
     // rs = testTimer();
@@ -435,8 +405,9 @@ int main()
     // rs = testGuard();
     // LOGD("testGuard: %s", rs?"Passed":"FAILED");
 
-
-    rs = testCCB();
+    int loop = 1;
+    if(argc > 1) loop = std::stoi(argv[1]);
+    rs = testCCB(loop);
     printf("testCCB: %s\n", rs?"Passed":"FAILED");
     return rs ? 0 : 1;
 }

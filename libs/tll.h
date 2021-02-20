@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "timer.h"
+#include "counter.h"
 #include "util.h"
 #include "log.h"
 #include "contiguouscircular.h"

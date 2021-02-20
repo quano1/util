@@ -197,7 +197,7 @@ public:
             completePop(cons, size);
             PROF_ADD(time_pop_complete, timer.elapse().count());
         }
-        PROF_ADD(time_pop_total, timer.life().count());
+        PROF_ADD(time_pop_total, timer.absElapse().count());
         return size;
     }
 
@@ -218,7 +218,7 @@ public:
             PROF_ADD(time_push_complete, timer.elapse().count());
         }
         // dump();
-        PROF_ADD(time_push_total, timer.life().count());
+        PROF_ADD(time_push_total, timer.absElapse().count());
         return size;
     }
 
