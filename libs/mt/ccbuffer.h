@@ -52,7 +52,7 @@ public:
         std::scoped_lock lock(push_mtx_, pop_mtx_);
         size_ = util::isPowerOf2(size) ? size : util::nextPowerOf2(size);
         // dump();
-#if !defined PERF_TUN
+#if (!defined PERF_TUN) || (PERF_TUN==0)
         buffer_.resize(size_);
 #endif
     }

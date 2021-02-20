@@ -285,6 +285,7 @@ public:
     inline void start(size_t chunk_size = 0x400, uint32_t period_ms=1000) /// 1 Kb, 1000 ms
     {
         bool val = false;
+LOGD("");
         if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
             return;
         broadcast_ = std::thread([this, chunk_size, period_ms]()
@@ -293,7 +294,7 @@ public:
             auto buff_list = init_(chunk_size);
             uint32_t total_delta = 0;
             std::vector<char> buff (chunk_size);
-
+LOGD("");
             cc::Callback onPopBatch{[this, &buff_list](uint32_t index, uint32_t size)
             {
                 for(uint32_t i=0; i<size; i++)
@@ -313,12 +314,13 @@ public:
                     }
                 }
             }};
+LOGD("");
             while(isRunning())
             {
                 uint32_t delta = counter.elapse().count();
                 counter.start();
                 total_delta += delta;
-
+LOGD("");
                 if(total_delta >= period_ms)
                 {
                     total_delta -= period_ms;
@@ -368,7 +370,7 @@ public:
                     }
                 }
             }
-
+LOGD("");
             ccq_.pop(onPopBatch, ccq_.capacity());
 
             for(auto &entry : buff_list)
@@ -578,10 +580,10 @@ inline void Manager::log<Mode::kAsync>(Message msg)
     }
     else
     {
-        bool rs = ccq_.push([this, &msg](size_t index, size_t) {
+        size_t ps = ccq_.push([this, &msg](size_t index, size_t) {
             *(ccq_.elemAt(index)) = std::move(msg);
         });
-        assert(rs);
+        assert(ps > 0);
         pop_wait_.notify_one();
     }
 }

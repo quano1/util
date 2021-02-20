@@ -158,22 +158,61 @@ std::basic_string<T> stringFormat(
     return buffer;
 }
 
-inline uint32_t nextPowerOf2(uint32_t val)
+template <typename T=size_t>
+T nextPowerOf2(T val)
 {
     val--;
     val |= val >> 1;
     val |= val >> 2;
-    val |= val >> 4;
-    val |= val >> 8;
-    val |= val >> 16;
+    if(sizeof(T) >= 1)
+        val |= val >> 4;
+    if(sizeof(T) >= 2)
+        val |= val >> 8;
+    if(sizeof(T) >= 4)
+        val |= val >> 16;
+    if(sizeof(T) > 4)
+        val |= val >> 32;
     val++;
     return val;
 }
 
-inline bool isPowerOf2(uint32_t val)
+template <typename T=size_t>
+bool isPowerOf2(T val)
 {
     return (val & (val - 1)) == 0;
 }
+
+int countConsZero(uint32_t v, int pos)
+{
+    // unsigned int v;  // find the number of trailing zeros in 32-bit v 
+    // int r;           // result goes here
+
+    v >>= pos;
+
+    static const int MultiplyDeBruijnBitPosition[32] = 
+    {
+      0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8, 
+      31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9
+    };
+    return MultiplyDeBruijnBitPosition[((uint32_t)((v & -v) * 0x077CB531U)) >> 27];
+}
+
+// inline uint32_t nextPowerOf2(uint32_t val)
+// {
+//     val--;
+//     val |= val >> 1;
+//     val |= val >> 2;
+//     val |= val >> 4;
+//     val |= val >> 8;
+//     val |= val >> 16;
+//     val++;
+//     return val;
+// }
+
+// inline bool isPowerOf2(uint32_t val)
+// {
+//     return (val & (val - 1)) == 0;
+// }
 
 /// Continuous ring buffer
 /// no thread-safe, single only

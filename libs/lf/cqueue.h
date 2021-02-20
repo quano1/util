@@ -3,19 +3,27 @@
 
 #pragma once
 
-#include <atomic>
+#include <mutex>
+#include <thread>
 #include <vector>
 #include "../util.h"
 
+#ifdef ENABLE_STAT_COUNTER
+    #ifdef STAT_FETCH_ADD
+        #undef STAT_FETCH_ADD
+    #endif
+    #define STAT_FETCH_ADD(atomic, val)  atomic.fetch_add(val, std::memory_order_relaxed)
+#endif
+
 namespace tll::lf {
-/// Circular Queue
+/// lock-free queue
 template <typename T, size_t const kELemSize=sizeof(T)>
 class CQueue
 {
 public:
     CQueue(uint32_t num_of_elem)
     {
-        capacity_ = isPowerOf2(num_of_elem) ? num_of_elem : nextPowerOf2(num_of_elem);
+        capacity_ = isPowerOf2(num_of_elem) ? num_of_elem : util::nextPowerOf2(num_of_elem);
         buffer_.resize(capacity_ * kELemSize);
     }
 
@@ -136,9 +144,12 @@ public:
         return ph_.load(std::memory_order_relaxed) - ch_.load(std::memory_order_relaxed);
     }
 
-    TLL_INLINE uint32_t wrap(uint32_t index) const
+    TLL_INLINE uint32_t wrap(uint32_t index, uint32_t max=0) const
     {
-        return index & (capacity_ - 1);
+        if(max > 0)
+            return index & (max - 1);
+        else
+            return index & (capacity_ - 1);
     }
 
     TLL_INLINE uint32_t capacity() const {
@@ -168,10 +179,14 @@ public:
         return kELemSize;
     }
 
+    constexpr uint32_t kMaxThreadNum = 32;
+
 private:
 
     std::atomic<uint32_t> pt_{0}, ph_{0}, ct_{0}, ch_{0};
     uint32_t capacity_{0};
     std::vector<T> buffer_{};
 }; /// CQueue
+
+
 } /// tll::lf

@@ -15,18 +15,17 @@
 
 int main(int argc, char const *argv[])
 {
-    TLL_GLOGD("");
-    TLL_GLOGI("");
-    TLL_GLOGW("");
-    TLL_GLOGF("");
-
     auto &logger = tll::log::Manager::instance();
-    TLL_GLOGTF();
+    // tll::time::Counter<> counter;
+    for (int i=0; i<std::stoi(argv[1]); i++)
     {
-        TLL_GLOGT(MAIN);
+        TLL_GLOGTF();
+        // LOGD("");
     }
 
     logger.stop();
+
+    // LOGD("%.9f", counter.elapse().count());
     return 0;
 }
 
