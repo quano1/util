@@ -8,13 +8,13 @@
 
 #define ENABLE_STAT_TIMER 1
 #define ENABLE_STAT_COUNTER 1
-#define PERF_TUN 0x100
+#define PERF_TUN 1
 
 #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 
 #include "../libs/tll.h"
 
-void dumpStat(const tll::cc::Stat &st)
+void dumpStat(const tll::cc::Stat &st, double real_total_time)
 {
     using namespace std::chrono;
 
@@ -40,11 +40,14 @@ void dumpStat(const tll::cc::Stat &st)
     // double avg_time_push_one = time_push_one / thread_num;
     // double avg_push_speed = push_size*thread_num/time_push_total;
 
-    printf("        count(K) | err(%%) | miss(%%)| try(%%) | comp(%%)| cb(%%)  | all(%%)\n");
-    printf(" push: %9.3f | %6.2f | %6.2f | %6.2f | %6.2f | %6.2f | %6.2f\n",
-           push_total, push_error_rate, push_miss_rate,
-           time_push_try_rate, time_push_complete_rate, time_push_callback_rate, time_push_all_rate
+    double opss = st.push_total * 0.001f / real_total_time;
+
+    printf("        count(K) | err(%%)|miss(%%)| try(%%)|comp(%%)| cb(%%) | all(%%)| ops/ms\n");
+    printf(" push: %9.3f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %.f\n",
+           push_total, push_error_rate, push_miss_rate
+           , time_push_try_rate, time_push_complete_rate, time_push_callback_rate, time_push_all_rate
            // avg_time_push_one, avg_push_speed
+           , opss
            );
 
     double time_pop_total = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_pop_total)).count();
@@ -68,11 +71,12 @@ void dumpStat(const tll::cc::Stat &st)
     // double time_pop_one = st.time_pop_total*1.f / st.pop_total;
     // double avg_time_pop_one = time_pop_one / thread_num;
     // double avg_pop_speed = pop_size*thread_num/time_pop_total;
-
-    printf(" pop : %9.3f | %6.2f | %6.2f | %6.2f | %6.2f | %6.2f | %6.2f\n",
-           pop_total, pop_error_rate, pop_miss_rate,
-           time_pop_try_rate, time_pop_complete_rate, time_pop_callback_rate, time_pop_all_rate
+    opss = st.pop_total * 0.001f / real_total_time;
+    printf(" pop : %9.3f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %.f\n",
+           pop_total, pop_error_rate, pop_miss_rate
+           , time_pop_try_rate, time_pop_complete_rate, time_pop_callback_rate, time_pop_all_rate
            // avg_time_pop_one
+           , opss
            );
 }
 
@@ -170,6 +174,7 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
 #ifdef PERF_TUN
     std::vector<char> temp_data[1];
     temp_data[0].resize(PERF_TUN);
+    size_t kPSize = 0x1000;
 #else
     const std::vector<char> temp_data[] = {
 {'{',1,'}'},
@@ -222,13 +227,13 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
         int tid = omp_get_thread_num();
         if(!(tid & 1))
         {
-            // LOGD("Producer: %d", tid);
+            LOGD("Producer: %d, cpu: %d", tid, sched_getcpu());
             int i=0;
             tll::cc::Callback push_cb;
             for(;total_push_size.load(std::memory_order_relaxed) < (write_size);)
             {
 #ifdef PERF_TUN
-                size_t ws = ccb.push([](size_t, size_t){ NOP_LOOP(PERF_TUN); }, 0x1000);
+                size_t ws = ccb.push([](size_t, size_t){ NOP_LOOP(PERF_TUN); }, kPSize);
 #else
                 size_t ws = ccb.push([&ccb, &temp_data, &i](size_t id, size_t size) {
                         auto dst = ccb.elemAt(id);
@@ -258,14 +263,14 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
         else if (tid == 1)
 #endif
         {
-            // LOGD("Consumer: %d(%d)", tid, tid/2);
+            LOGD("Consumer: %d, cpu: %d", tid, sched_getcpu());
             size_t pop_size=0;
             tll::cc::Callback pop_cb;
             for(;w_threads.load(std::memory_order_relaxed) < thread_num /*- (thread_num + 1) / 2*/
                 || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
             {
 #ifdef PERF_TUN
-                size_t ps = ccb.pop([](size_t, size_t){ NOP_LOOP(PERF_TUN); }, 0x1000);
+                size_t ps = ccb.pop([](size_t, size_t){ NOP_LOOP(PERF_TUN); }, kPSize);
 #else
                 size_t ps = ccb.pop([&ccb, &store_buff, &pop_size, tid](size_t id, size_t size) {
                     auto dst = store_buff[tid/2].data() + pop_size;
@@ -291,7 +296,7 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
 
     printf("CC type: %s\n", ccb_type.data());
     // ccb.dumpStat();
-    dumpStat(ccb.stat());
+    dumpStat(ccb.stat(), counter.lastElapsed().count());
 
     /// no verification
     if(!verify) return true;
@@ -342,7 +347,8 @@ bool testCCB()
 
     // constexpr int kInitShift = 0;
     // constexpr int kShift = 1;
-    constexpr size_t kOneMb = 0x100000;
+    constexpr size_t kOneMb = 1024 * 1024;
+    constexpr size_t kOneGb = kOneMb * 1024;
     // size_t write_size = kOneMb * 100;
     // size_t ccb_size = write_size / 8;
     /// 1Mb, 10Mb, 100Mb, 1Gb
@@ -351,7 +357,7 @@ bool testCCB()
     // int i = 1;
     std::ofstream ofs{"run.dat"};
 #ifdef PERF_TUN
-    for(int i=1; i<=0x10000; i*=2)
+    for(int i=1; i<=0x100; i*=2)
 #else
     for(int i=1; i<=128; i*=2)
 #endif
@@ -359,7 +365,7 @@ bool testCCB()
         size_t write_size = kOneMb * i;
         size_t const ccb_size = kOneMb * 4;
 
-        printf("ccb_size: %.3fMb(0x%lx), write_size: %.3fMb(0x%lx)\n", ccb_size*1.f/kOneMb, ccb_size, write_size*1.f/kOneMb, write_size);
+        printf("ccb_size: %.3fMb(0x%lx), write_size: %.3fGb(0x%lx)\n", ccb_size*1.f/kOneMb, ccb_size, write_size*1.f/kOneGb, write_size);
         printf("================================================================\n");
         // printf("----------------------------------------------------------------\n");
         printf("threads: 1\n");
@@ -392,6 +398,7 @@ bool testCCB()
         // printf("-------------------------------\n");
         // if(!_testCCB<3, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter)) return false;
         // printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
+        // ofs << tll::util::stringFormat("%.6f ", counter.lastElapsed().count());
         // printf("-------------------------------\n");
 
         // printf("----------------------------------------------------------------\n");
@@ -401,6 +408,7 @@ bool testCCB()
         // printf("-------------------------------\n");
         // if(!_testCCB<4, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter)) return false;
         // printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
+        // ofs << tll::util::stringFormat("%.6f ", counter.lastElapsed().count());
         // printf("-------------------------------\n");
 
         printf("Total duration: %.6f(s)\n", counter.totalElapsed().count());
