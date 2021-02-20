@@ -8,7 +8,7 @@
 
 #define ENABLE_STAT_TIMER 1
 #define ENABLE_STAT_COUNTER 1
-#define PERF_TUN 1
+#define PERF_TUN 0
 
 #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 
@@ -165,13 +165,13 @@ bool verifyWithTemplate(int &index, const std::vector<char> &sb, const std::vect
 
 
 template <int thread_num, class CCB>
-bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, tll::time::Counter<> &counter, bool verify=true)
+bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, tll::time::Counter<> &counter, size_t *opss=nullptr)
 {
     constexpr int omp_thread_num = thread_num * 2;
     CCB ccb(ccb_size);
     std::vector<char> store_buff[thread_num];
 
-#ifdef PERF_TUN
+#if (defined PERF_TUN) && (PERF_TUN > 0)
     std::vector<char> temp_data[1];
     temp_data[0].resize(PERF_TUN);
     size_t kPSize = 0x1000;
@@ -227,12 +227,12 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
         int tid = omp_get_thread_num();
         if(!(tid & 1))
         {
-            LOGD("Producer: %d, cpu: %d", tid, sched_getcpu());
+            // LOGD("Producer: %d, cpu: %d", tid, sched_getcpu());
             int i=0;
             tll::cc::Callback push_cb;
             for(;total_push_size.load(std::memory_order_relaxed) < (write_size);)
             {
-#ifdef PERF_TUN
+#if (defined PERF_TUN) && (PERF_TUN > 0)
                 size_t ws = ccb.push([](size_t, size_t){ NOP_LOOP(PERF_TUN); }, kPSize);
 #else
                 size_t ws = ccb.push([&ccb, &temp_data, &i](size_t id, size_t size) {
@@ -244,7 +244,7 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
                 if(ws > 0)
                 {
                     total_push_size.fetch_add(ws, std::memory_order_relaxed);
-#if !defined PERF_TUN
+#if (!defined PERF_TUN) || (PERF_TUN==0)
                     (++i) &= 31;
 #endif
                 }
@@ -257,19 +257,15 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
 
             w_threads.fetch_add(1, std::memory_order_relaxed);
         }
-#ifdef PERF_TUN
         else if (tid & 1)
-#else
-        else if (tid == 1)
-#endif
         {
-            LOGD("Consumer: %d, cpu: %d", tid, sched_getcpu());
+            // LOGD("Consumer: %d, cpu: %d", tid, sched_getcpu());
             size_t pop_size=0;
             tll::cc::Callback pop_cb;
             for(;w_threads.load(std::memory_order_relaxed) < thread_num /*- (thread_num + 1) / 2*/
                 || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
             {
-#ifdef PERF_TUN
+#if (defined PERF_TUN) && (PERF_TUN > 0)
                 size_t ps = ccb.pop([](size_t, size_t){ NOP_LOOP(PERF_TUN); }, kPSize);
 #else
                 size_t ps = ccb.pop([&ccb, &store_buff, &pop_size, tid](size_t id, size_t size) {
@@ -297,9 +293,10 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
     printf("CC type: %s\n", ccb_type.data());
     // ccb.dumpStat();
     dumpStat(ccb.stat(), counter.lastElapsed().count());
-
-    /// no verification
-    if(!verify) return true;
+    if(opss) {
+        opss[0] = ccb.stat().push_total;
+        opss[1] = ccb.stat().pop_total;
+    }
 
     // tll::util::dump(ccb.buffer_.data(), ccb.buffer_.size());
     // for(int i=0; i<thread_num; i++)
@@ -318,7 +315,7 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
         return false;
     }
     bool ret = true;
-#if !defined PERF_TUN
+#if (!defined PERF_TUN) || (PERF_TUN==0)
     // size_t tt_size=0;
     for(int t=0; t<thread_num; t++)
     {
@@ -356,50 +353,60 @@ bool testCCB()
     // for(;write_size <= kOneMb * 1000; kOneMb)
     // int i = 1;
     std::ofstream ofs{"run.dat"};
-#ifdef PERF_TUN
-    for(int i=1; i<=0x100; i*=2)
+    size_t opss[2];
+#if (defined PERF_TUN) && (PERF_TUN > 0)
+    // for(int i=1; i<=0x1000; i*=2)
+    int i = 0x1000;
 #else
     for(int i=1; i<=128; i*=2)
 #endif
     {
         size_t write_size = kOneMb * i;
-        size_t const ccb_size = kOneMb * 4;
+        size_t const ccb_size = kOneMb * 0x100;
 
         printf("ccb_size: %.3fMb(0x%lx), write_size: %.3fGb(0x%lx)\n", ccb_size*1.f/kOneMb, ccb_size, write_size*1.f/kOneGb, write_size);
         printf("================================================================\n");
         // printf("----------------------------------------------------------------\n");
         printf("threads: 1\n");
         tll::time::Counter<> counter;
+        ofs << 1 << " ";
         // counter.start();
-        ofs << i << " ";
-        if(!_testCCB<1, tll::mt::CCBuffer>("mt", ccb_size, write_size, counter)) return false;
+        // if(!_testCCB<1, tll::mt::CCBuffer>("mt", ccb_size, write_size, counter)) return false;
+        // printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
+        // ofs << tll::util::stringFormat("%.6f ", counter.lastElapsed().count());
+        // printf("-------------------------------\n");
+        if(!_testCCB<1, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss)) return false;
         printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-        ofs << tll::util::stringFormat("%.6f ", counter.lastElapsed().count());
+        // ofs << tll::util::stringFormat("%.6f ", counter.lastElapsed().count());
+        ofs << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count();
         printf("-------------------------------\n");
-        if(!_testCCB<1, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter)) return false;
-        printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-        ofs << tll::util::stringFormat("%.6f ", counter.lastElapsed().count());
-        printf("-------------------------------\n");
+        ofs << std::endl;
 
+        ofs << 2 << " ";
         printf("----------------------------------------------------------------\n");
         printf("threads: 2\n");
         // if(!_testCCB<2, tll::mt::CCBuffer>("mt", ccb_size, write_size, counter)) return false;
         // printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
         // printf("-------------------------------\n");
-        if(!_testCCB<2, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter)) return false;
+        if(!_testCCB<2, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss)) return false;
         printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-        ofs << tll::util::stringFormat("%.6f ", counter.lastElapsed().count());
+        // ofs << tll::util::stringFormat("%.6f ", counter.lastElapsed().count());
+        ofs << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count();
         printf("-------------------------------\n");
+        ofs << std::endl;
 
+        // ofs << 3 << " ";
         // printf("----------------------------------------------------------------\n");
         // printf("threads: 3\n");
         // if(!_testCCB<3, tll::mt::CCBuffer>("mt", ccb_size, write_size, counter)) return false;
         // printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
         // printf("-------------------------------\n");
-        // if(!_testCCB<3, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter)) return false;
+        // if(!_testCCB<3, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss)) return false;
         // printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-        // ofs << tll::util::stringFormat("%.6f ", counter.lastElapsed().count());
+        // // ofs << tll::util::stringFormat("%.6f ", counter.lastElapsed().count());
+        // ofs << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count();
         // printf("-------------------------------\n");
+        // ofs << std::endl;
 
         // printf("----------------------------------------------------------------\n");
         // printf("threads: 4\n");
