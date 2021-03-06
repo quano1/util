@@ -39,9 +39,9 @@
 
 #define ASSERTM(exp, msg) assert(((void)msg, exp))
 
-#define LOGPD(format, ...) PRINTF("(D)(%.9f)(%s)(%s:%s:%d)(" format ")\n", tll::util::timestamp(), tll::util::to_string(tll::util::tid()).data(), tll::util::fileName(__FILE__).data(), __PRETTY_FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGD(format, ...) PRINTF("(D)(%.9f)(%s)(%s:%s:%d)(" format ")\n", tll::util::timestamp(), tll::util::to_string(tll::util::tid()).data(), tll::util::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGE(format, ...) PRINTF("(E)(%.9f)(%s)(%s:%s:%d)(" format ")(%s)\n", tll::util::timestamp(), tll::util::to_string(tll::util::tid()).data(), tll::util::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__, strerror(errno))
+#define LOGPD(format, ...) PRINTF("(D)(%.9f)(%s)(%s:%s:%d)(" format ")\n", tll::util::timestamp(), tll::util::str_tid().data(), tll::util::fileName(__FILE__).data(), __PRETTY_FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGD(format, ...) PRINTF("%.9f\t%s\t%s:%s:%d\t" format "\n", tll::util::timestamp(), tll::util::str_tid().data(), tll::util::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGE(format, ...) PRINTF("(E)(%.9f)(%s)(%s:%s:%d)(" format ")(%s)\n", tll::util::timestamp(), tll::util::str_tid().data(), tll::util::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__, strerror(errno))
 
 #define TRACE(ID) tll::log::Tracer<> tracer_##ID##__(#ID)
 #define TRACEF() tll::log::Tracer<> tracer__(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + tll::util::to_string(tll::util::tid()) + ")")
@@ -65,7 +65,6 @@ constexpr auto make_array(T && value)
     return make_array_impl<T, N>(std::forward<T>(value), std::make_index_sequence<N>{});
 }
 
-
 inline std::thread::id tid()
 {
     static const thread_local auto tid=std::this_thread::get_id();
@@ -87,6 +86,15 @@ inline std::string to_string(T val)
     std::stringstream ss;
     ss << val;
     return ss.str();
+}
+
+// static int __tid__=0;
+
+inline std::string str_tid()
+{
+    static std::atomic<int> __tid__{0};
+    static const thread_local auto ret = tll::util::to_string(__tid__.fetch_add(1, std::memory_order_relaxed));
+    return ret;
 }
 
 template <typename T=double, typename D=std::ratio<1,1>, typename C=std::chrono::steady_clock>
@@ -182,20 +190,25 @@ bool isPowerOf2(T val)
     return (val & (val - 1)) == 0;
 }
 
-int countConsZero(uint32_t v, int pos)
-{
-    // unsigned int v;  // find the number of trailing zeros in 32-bit v 
-    // int r;           // result goes here
+// inline int countConsZero(uint64_t v)
+// {
+//     return ffsll((v >> pos) | (v << (64 - pos))) - 1;
+// }
 
-    v >>= pos;
+// inline int countConsZero(uint32_t v, int pos)
+// {
+//     // unsigned int v;  // find the number of trailing zeros in 32-bit v 
+//     // int r;           // result goes here
 
-    static const int MultiplyDeBruijnBitPosition[32] = 
-    {
-      0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8, 
-      31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9
-    };
-    return MultiplyDeBruijnBitPosition[((uint32_t)((v & -v) * 0x077CB531U)) >> 27];
-}
+//     v >>= pos;
+
+//     static const int MultiplyDeBruijnBitPosition[32] = 
+//     {
+//       0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8, 
+//       31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9
+//     };
+//     return MultiplyDeBruijnBitPosition[((uint32_t)((v & -v) * 0x077CB531U)) >> 27];
+// }
 
 // inline uint32_t nextPowerOf2(uint32_t val)
 // {
