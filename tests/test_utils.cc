@@ -4,12 +4,13 @@
 #include <cmath>
 #include <omp.h>
 #include <fstream>
+#include <thread>
 // #include "../libs/timer.h"
 // #include "../libs/util.h"
 // #include "../libs/log.h"
 
 #define ENABLE_PROFILING 1
-#define PERF_TUNNEL 0
+#define PERF_TUNNEL 1
 
 #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 
@@ -232,7 +233,6 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
         {
             // LOGD("Producer: %d, cpu: %d", tid, sched_getcpu());
             int i=0;
-            tll::cc::Callback push_cb;
             for(;total_push_size.load(std::memory_order_relaxed) < (write_size);)
             {
 #if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
@@ -264,7 +264,6 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
         {
             // LOGD("Consumer: %d, cpu: %d", tid, sched_getcpu());
             size_t pop_size=0;
-            tll::cc::Callback pop_cb;
             for(;w_threads.load(std::memory_order_relaxed) < thread_num /*- (thread_num + 1) / 2*/
                 || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
             {
@@ -396,8 +395,193 @@ bool testCCB(int loop=1)
     return true;
 }
 
+
+template <int prod_num, class CCB>
+bool testCQ(size_t ccb_size, size_t write_count, tll::time::Counter<> &counter, size_t *opss=nullptr)
+{
+    constexpr int kThreadNum = prod_num * 2;
+    CCB ccb{ccb_size};
+    std::vector<char> store_buff[prod_num];
+
+#if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
+    std::vector<char> temp_data[1];
+    // temp_data[0].resize(PERF_TUNNEL);
+    // const size_t kPSize = 1;
+#else
+    const std::vector<char> temp_data[] = {
+{'{',1,'}'},
+{'{',2,2,'}'},
+{'{',3,3,3,'}'},
+{'{',4,4,4,4,'}'},
+{'{',5,5,5,5,5,'}'},
+{'{',6,6,6,6,6,6,'}'},
+{'{',7,7,7,7,7,7,7,'}'},
+{'{',8,8,8,8,8,8,8,8,'}'},
+{'{',9,9,9,9,9,9,9,9,9,'}'},
+{'{',10,10,10,10,10,10,10,10,10,10,'}'},
+{'{',11,11,11,11,11,11,11,11,11,11,11,'}'},
+{'{',12,12,12,12,12,12,12,12,12,12,12,12,'}'},
+{'{',13,13,13,13,13,13,13,13,13,13,13,13,13,'}'},
+{'{',14,14,14,14,14,14,14,14,14,14,14,14,14,14,'}'},
+{'{',15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,'}'},
+{'{',16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,'}'},
+{'{',17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,'}'},
+{'{',18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,'}'},
+{'{',19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,'}'},
+{'{',20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,'}'},
+{'{',21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,'}'},
+{'{',22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,'}'},
+{'{',23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,'}'},
+{'{',24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,'}'},
+{'{',25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,'}'},
+{'{',26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,'}'},
+{'{',27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,'}'},
+{'{',28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,'}'},
+{'{',29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,'}'},
+{'{',30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,'}'},
+{'{',31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,31,'}'},
+{'{',32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,'}'},
+    };
+
+    for(int i=0; i<prod_num; i++)
+    {
+        store_buff[i].resize(34 * write_count * prod_num); /// temp_data
+        memset(store_buff[i].data(), 0, store_buff[i].size());
+    }
+#endif
+    std::atomic<int> w_threads{0};
+
+    assert(kThreadNum > 1);
+    counter.start();
+    std::atomic<size_t> total_push_count{0}, total_pop_count{0};
+    std::thread dump_stat{[&](){
+        for(;w_threads.load(std::memory_order_relaxed) < prod_num /*- (prod_num + 1) / 2*/
+            || total_push_count.load(std::memory_order_relaxed) > total_pop_count.load(std::memory_order_relaxed);)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            LOGD("%s", ccb.dump().data());
+        }
+    }};
+
+    #pragma omp parallel num_threads ( kThreadNum ) shared(ccb, store_buff, temp_data)
+    {
+        int tid = omp_get_thread_num();
+        if(!(tid & 1))
+        {
+            LOGD("Producer: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
+            int i=0;
+            for(;total_push_count.load(std::memory_order_relaxed) < (write_count);)
+            {
+#if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
+                bool ws = ccb.enQueue([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); });
+#else
+                bool ws = ccb.enQueue([&ccb, &temp_data, &i](size_t id, size_t size) {
+                        LOGD("");
+                        auto dst = ccb.elemAt(id);
+                        *dst = temp_data[i];
+                    });
+#endif
+                if(ws)
+                {
+                    total_push_count.fetch_add(1, std::memory_order_relaxed);
+#if (!defined PERF_TUNNEL) || (PERF_TUNNEL==0)
+                    (++i) &= 31;
+#endif
+                }
+                else
+                {
+                    /// overrun
+                    std::this_thread::yield();
+                }
+
+                // LOGD("push: %ld", total_push_count.load());
+            }
+
+            w_threads.fetch_add(1, std::memory_order_relaxed);
+        }
+        else if (tid & 1)
+        {
+            LOGD("Consumer: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
+            size_t pop_size=0;
+            for(;w_threads.load(std::memory_order_relaxed) < prod_num /*- (prod_num + 1) / 2*/
+                || total_push_count.load(std::memory_order_relaxed) > total_pop_count.load(std::memory_order_relaxed);)
+            {
+#if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
+                bool ps = ccb.deQueue([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); });
+#else
+                bool ps = ccb.deQueue([&ccb, &store_buff, &pop_size, tid](size_t id, size_t size) {
+                    LOGD("");
+                    auto dst = store_buff[tid/2].data() + pop_size;
+                    auto src = ccb.elemAt(id);
+                    memcpy(dst, src, src->size());
+                    pop_size += src->size();
+                });
+#endif
+                if(ps)
+                {
+                    total_pop_count.fetch_add(1, std::memory_order_relaxed);
+                }
+                else
+                {
+                    /// underrun
+                    std::this_thread::yield();
+                }
+                // LOGD("pop: %ld", total_pop_count.load());
+            }
+        }
+        LOGD("          %d Done", tid);
+    }
+    counter.elapsed();
+    dump_stat.join();
+    LOGD("%s", ccb.dump().data());
+#if (!defined PERF_TUNNEL) || (PERF_TUNNEL==0)
+    dumpStat(ccb.stat(), counter.lastElapsed().count());
+#endif
+
+    if(opss) {
+        opss[0] = ccb.stat().push_total;
+        opss[1] = ccb.stat().pop_total;
+    }
+    // tll::util::dump(ccb.buffer_.data(), ccb.buffer_.size());
+    // for(int i=0; i<prod_num; i++)
+    // {
+    //     LOGD("%d", i);
+    //     tll::util::dump(store_buff[i].data(), store_buff[i].size(), 0, -1, false);
+    // }
+
+
+    if(total_push_count.load(std::memory_order_relaxed) != total_pop_count.load(std::memory_order_relaxed))
+    {
+        tll::cc::Stat stat = ccb.stat();
+        // printf("\n");
+        printf(" - w:%ld r:%ld\n", total_push_count.load(std::memory_order_relaxed), total_pop_count.load(std::memory_order_relaxed));
+        printf(" - w:%ld r:%ld\n", stat.push_size, stat.pop_size);
+        return false;
+    }
+    bool ret = true;
+#if (!defined PERF_TUNNEL) || (PERF_TUNNEL==0)
+    // size_t tt_size=0;
+    for(int t=0; t<prod_num; t++)
+    {
+        int index;
+        if(!verifyWithTemplate(index, store_buff[t], temp_data))
+        {
+            printf(" cons: %d", t);
+            tll::util::dump(store_buff[t].data(), store_buff[t].size(),0,index);
+            ret = false;
+        }
+    }
+#endif
+    // printf("\n");
+
+    return ret;
+}
+
 int main(int argc, char **argv)
 {
+    size_t loop = 0x400;
+    if(argc > 1) loop = std::stoul(argv[1]);
+
     bool rs = false;
     // rs = testTimer();
     // LOGD("testTimer: %s", rs?"Passed":"FAILED");
@@ -405,9 +589,11 @@ int main(int argc, char **argv)
     // rs = testGuard();
     // LOGD("testGuard: %s", rs?"Passed":"FAILED");
 
-    int loop = 1;
-    if(argc > 1) loop = std::stoi(argv[1]);
-    rs = testCCB(loop);
+    // rs = testCCB(loop);
+    // printf("testCCB: %s\n", rs?"Passed":"FAILED");
+
+    tll::time::Counter<> counter;
+    rs = testCQ<4, tll::lf::CCFIFO< std::vector<char> >>(0x100, loop, counter);
     printf("testCCB: %s\n", rs?"Passed":"FAILED");
     return rs ? 0 : 1;
 }
