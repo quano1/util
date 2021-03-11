@@ -59,7 +59,7 @@ constexpr auto make_array_impl(T && value, std::index_sequence<I...>)
         };
 }
 
-template<typename T, std::size_t N>
+template<std::size_t N, typename T>
 constexpr auto make_array(T && value)
 {
     return make_array_impl<T, N>(std::forward<T>(value), std::make_index_sequence<N>{});

@@ -7,6 +7,7 @@
 #include <thread>
 #include <vector>
 #include <mutex>
+#include <bitset>
 #include "../counter.h"
 #include "../util.h"
 
@@ -20,6 +21,7 @@
 namespace tll::lf {
 
 /// Contiguous Circular Index
+template <size_t num_threads=128>
 struct CCIndex
 {
 public:
@@ -32,28 +34,49 @@ public:
 
     inline auto dump() const
     {
-        return util::stringFormat("sz:%ld ph:%ld pt:%ld wm:%ld ch:%ld ct:%ld pef:0x%16llx cef:0x%16llx", capacity(), 
+        return util::stringFormat("sz:%ld ph:%ld pt:%ld wm:%ld ch:%ld ct:%ld", capacity(), 
              ph_.load(std::memory_order_relaxed), pt_.load(std::memory_order_relaxed), 
              wm_.load(std::memory_order_relaxed), 
-             ch_.load(std::memory_order_relaxed), ct_.load(std::memory_order_relaxed),
-             prod_exit_flag_.load(std::memory_order_relaxed), cons_exit_flag_.load(std::memory_order_relaxed));
+             ch_.load(std::memory_order_relaxed), ct_.load(std::memory_order_relaxed));
     }
 
     inline void reset(size_t new_size=0)
     {
-        ph_.store(0,std::memory_order_relaxed);
-        ch_.store(0,std::memory_order_relaxed);
-        pt_.store(0,std::memory_order_relaxed);
-        ct_.store(0,std::memory_order_relaxed);
-        wm_.store(0,std::memory_order_relaxed);
         if(new_size)
+        {
             reserve(new_size);
+        }
+        else
+        {
+            ph_.store(capacity_,std::memory_order_relaxed);
+            ch_.store(capacity_,std::memory_order_relaxed);
+            pt_.store(capacity_,std::memory_order_relaxed);
+            ct_.store(capacity_,std::memory_order_relaxed);
+            wm_.store(0,std::memory_order_relaxed);
+        }
     }
 
     inline void reserve(size_t size)
     {
+        // num_threads_ = util::isPowerOf2(num_threads) ? num_threads : util::nextPowerOf2(num_threads);
+        // pi_.resize(num_threads_);
+        // ci_.resize(num_threads_);
+        // LOGD("%ld", num_threads_);
+        // memset(pi_.data(), kDone, num_threads_ * sizeof(bool));
+        // memset(ci_.data(), kDone, num_threads_ * sizeof(bool));
+
         size = util::isPowerOf2(size) ? size : util::nextPowerOf2(size);
         capacity_= size;
+        ph_.store(capacity_,std::memory_order_relaxed);
+        ch_.store(capacity_,std::memory_order_relaxed);
+        pt_.store(capacity_,std::memory_order_relaxed);
+        ct_.store(capacity_,std::memory_order_relaxed);
+        wm_.store(0,std::memory_order_relaxed);
+        for(int i=0; i<num_threads; i++)
+        {
+            pi_[i].store(0, std::memory_order_relaxed);
+            ci_[i].store(0, std::memory_order_relaxed);
+        }
     }
 
     inline size_t tryPop(size_t &cons, size_t &size)
@@ -240,6 +263,47 @@ public:
         return size;
     }
 
+    inline bool completeQueue(size_t idx, std::atomic<size_t> &tail, std::atomic<size_t> index [])
+    {
+        size_t t_pos = wrap(idx, num_threads);
+
+        if(idx >= (tail.load(std::memory_order_relaxed) + num_threads)) return false;
+        
+        size_t const kIdx = idx;
+
+        for(;;)
+        {
+            size_t next = index[wrap(idx, num_threads)].load(std::memory_order_relaxed);
+            size_t tmp_tail = tail.load(std::memory_order_relaxed);
+            // LOGD(">(%ld:%ld:%ld:%ld) [%ld] {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads), tmp_tail, next, this->to_string(index).data());
+            if(tmp_tail > idx)
+            {
+                // LOGD("E-(%ld:%ld:%ld:%ld) [%ld] {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads), tmp_tail, next, this->to_string(index).data());
+                break;
+            }
+            else if (tmp_tail == idx)
+            {
+                size_t cnt = 1;
+                next = index[wrap(idx + cnt, num_threads)].load(std::memory_order_relaxed);
+                for(; (cnt<num_threads) && (next>tmp_tail); cnt++)
+                {
+                    next = index[wrap(idx + cnt + 1, num_threads)].load(std::memory_order_relaxed);
+                }
+
+                idx += cnt;
+                // LOGD("=-(%ld:%ld:%ld:%ld) [%ld] +%ld {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads), tmp_tail, cnt, next, this->to_string(index).data());
+                // tail.store(tmp_tail + cnt);
+                tail.fetch_add(cnt, std::memory_order_relaxed);
+            }
+
+            if(index[wrap(idx, num_threads)].compare_exchange_strong(next, kIdx, std::memory_order_relaxed, std::memory_order_relaxed)) break;
+
+            // LOGD("M-(%ld:%ld:%ld:%ld) [%ld] {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads), tmp_tail, next, this->to_string(index).data());
+        }
+
+        return true;
+    }
+
     inline bool deQueue(const tll::cc::Callback &cb)
     {
         size_t idx = ch_.load(std::memory_order_relaxed);
@@ -253,83 +317,7 @@ public:
         }
 
         cb(idx, 1);
-        size_t tpos = idx % (kMaxThreads);
-
-        for(;( idx >= (ct_.load(std::memory_order_relaxed) + (kMaxThreads - 1)) ) || 
-            !( cons_exit_flag_.load(std::memory_order_relaxed) & (1ul << tpos) );)
-            {std::this_thread::yield();}
-
-        size_t ef = cons_exit_flag_.load(std::memory_order_relaxed);
-        size_t next_ef=0;
-        size_t ef_mask=0;
-        constexpr size_t kMask = 0x8000000000000000u;
-        size_t tt_cnt = 0;
-        size_t c_mask = 0;
-        // size_t tpos = wrap(idx, kMaxThreads);
-
-        for(;;)
-        {
-            size_t cnt = 0;
-            size_t next_idx = idx + tt_cnt;
-            size_t next_tpos = next_idx % (kMaxThreads);
-            size_t cons_tail = ct_.load(std::memory_order_relaxed);
-            if(cons_tail == next_idx)
-            {
-                uint64_t temp = 0;
-                // if(tt_cnt == 0)
-                //     ef &= ~(1ul << idx);
-                // cnt = util::countConsZero(ef | (1ull << 63), next_tpos + 1) + 1;
-                // if( ((tt_cnt == 0) && (ef & (1ul << next_tpos))) || ((tt_cnt > 0) && !(ef & (1ul << next_tpos))) )
-                if(!(ef & (1ul << next_tpos)) || !tt_cnt)
-                {
-                    temp = tt_cnt ? ef : ef & ~(1ul << tpos);
-                    temp = next_tpos ? ((temp & (~kMask)) >> (next_tpos)) | (temp << (63 - (next_tpos))) : temp;
-                    temp |= kMask;
-                    // temp &= tt_cnt ? 1ul << next_tpos;
-                    cnt = ffsll(temp) - 1; /// 1st setbit position.
-                    next_tpos += cnt;
-                    tt_cnt += cnt;
-                    // ct_.fetch_add(cnt, std::memory_order_relaxed);
-                    LOGD("ct: %ld + %ld", ct_.fetch_add(cnt, std::memory_order_relaxed), cnt);
-                    // LOGD("(f/%016lx:t/%016lx)", ef, temp);
-                    if(next_tpos < 63)
-                    {
-                        ef_mask = (kExitMasks[tt_cnt - 1] << (tpos));
-                    }
-                    else
-                    {
-                        ef_mask = (kExitMasks[63 - tpos - 1] << (tpos)) | (kExitMasks[next_tpos - 63] | 1);
-                    }
-                }
-
-                next_ef = ef | ef_mask;
-                if(this->ct() > this->ch()) LOGD("OI TROI OI");
-                LOGD("(p/%ld:n/%ld:t/%ld:c/%ld)-(id/%ld:ct/%ld:ch/%ld)(f/%016lx:n/%016lx:m/%016lx:t/%016lx)", tpos, next_tpos, tt_cnt, cnt, idx, this->ct(), this->ch(), ef, next_ef ^ kMask, ef_mask, temp);
-            }
-            else if (cons_tail < next_idx)
-            {
-                // size_t const kExitFlag = 1 << tpos;
-                next_ef = ef & (~((size_t)1u << next_tpos));
-                // if(this->ct() > this->ch()) LOGD("OI TROI OI");
-                LOGD("(p/%ld:n/%ld:t/%ld:c/%ld)-(id/%ld:ct/%ld:ch/%ld)(f/%016lx:n/%016lx)", tpos, next_tpos, tt_cnt, cnt, idx, this->ct(), this->ch(), ef, next_ef ^ kMask);
-            }
-            else
-            {
-                next_ef = ef | ef_mask;
-                // if(this->ct() > this->ch()) LOGD("OI TROI OI");
-                LOGD("(p/%ld:n/%ld:t/%ld:c/%ld)-(id/%ld:ct/%ld:ch/%ld)(f/%016lx:n/%016lx:m/%016lx)", tpos, next_tpos, tt_cnt, cnt, idx, this->ct(), this->ch(), ef, next_ef ^ kMask, ef_mask);
-                // break;
-            }
-
-            if(cons_exit_flag_.compare_exchange_weak(ef, next_ef ^ kMask, std::memory_order_release, std::memory_order_relaxed)) break;
-            // if(this->ct() > this->ch()) LOGD("OI TROI OI");
-            LOGD("(p/%ld:n/%ld:t/%ld:c/%ld)-(id/%ld:ct/%ld:ch/%ld)(f/%016lx)n/", 
-                 tpos, next_tpos, tt_cnt, cnt, 
-                 idx, this->ct(), this->ch(), 
-                 ef);
-        }
-        // LOGD("%s", dump().data());
-
+        while(!completeQueue(idx, ct_, ci_)) {std::this_thread::yield();}
         return true;
     }
 
@@ -347,74 +335,7 @@ public:
         }
 
         cb(idx, 1);
-
-        for (;pt_.load(std::memory_order_relaxed) != idx;)
-        {}
-
-        pt_.fetch_add(1, std::memory_order_release);
-
-        for(;(idx) > (pt_.load(std::memory_order_relaxed) + kMaxThreads);){}
-
-        // size_t ef = prod_exit_flag_.load(std::memory_order_relaxed);
-        // size_t next_ef=0;
-        // size_t ef_mask=0;
-        // constexpr size_t kMask = 0x8000000000000000u;
-        // size_t tt_cnt = 0;
-        // size_t c_mask = 0;
-        // // size_t thread_pos = wrap(idx, kMaxThreads);
-        // size_t thread_pos = idx % (kMaxThreads);
-
-        // for(;;)
-        // {
-        //     size_t cnt = 0;
-        //     size_t next_idx = idx + tt_cnt;
-        //     size_t next_tpos = next_idx % (kMaxThreads);
-        //     size_t cons_tail = pt_.load(std::memory_order_relaxed);
-        //     if(cons_tail == next_idx)
-        //     {
-        //         // cnt = util::countConsZero(ef | (1ull << 63), next_tpos + 1) + 1;
-        //         uint64_t temp = ef & ~kMask;
-        //         temp = (temp >> (next_tpos + 1)) | (temp << (63 - (next_tpos))) | kMask;
-        //         cnt = ffsll(temp); /// 1st setbit position.
-        //         next_tpos += cnt;
-        //         tt_cnt += cnt;
-        //         // LOGD("(%ld:%ld)-(%ld:%ld)(%016lx:%016lx)", thread_pos, idx, this->ct(), this->ch(), ef, temp);
-        //         if(next_tpos < 63)
-        //         {
-        //             ef_mask = (kExitMasks[tt_cnt - 1] << (thread_pos));
-        //             // next_ef |= ef | (kExitMasks[cnt-1] << (next_tpos));
-        //         }
-        //         else
-        //         {
-        //             ef_mask = (kExitMasks[63 - thread_pos - 1] << (thread_pos)) | (kExitMasks[next_tpos - 63]);
-        //         }
-
-        //         next_ef = ef | ef_mask;
-        //         pt_.fetch_add(cnt, std::memory_order_relaxed);
-        //         // LOGD("(p%ld:n%ld:t%ld:c%ld)-(i%ld:t%ld:h%ld)(%016lx:%016lx:%016lx)", thread_pos, next_tpos, tt_cnt, cnt, idx, this->ct(), this->ch(), ef, next_ef ^ kMask, ef_mask);
-        //     }
-        //     else if (cons_tail < next_idx)
-        //     {
-        //         // size_t const kExitFlag = 1 << thread_pos;
-        //         next_ef = ef & (~((size_t)1u << next_tpos));
-        //         // LOGD("(p%ld:n%ld:t%ld:c%ld)-(i%ld:t%ld:h%ld)(%016lx:%016lx)", thread_pos, next_tpos, tt_cnt, cnt, idx, this->ct(), this->ch(), ef, next_ef ^ kMask);
-        //     }
-        //     else
-        //     {
-        //         next_ef = ef | ef_mask;
-        //         // LOGD("(p%ld:n%ld:t%ld:c%ld)-(i%ld:t%ld:h%ld)(%016lx:%016lx:%016lx)", thread_pos, next_tpos, tt_cnt, cnt, idx, this->ct(), this->ch(), ef, next_ef ^ kMask, ef_mask);
-        //         // break;
-        //     }
-
-        //     if(prod_exit_flag_.compare_exchange_weak(ef, next_ef ^ kMask, std::memory_order_release, std::memory_order_relaxed)) break;
-
-        //     // LOGD("(p%ld:n%ld:t%ld:c%ld)-(i%ld:t%ld:h%ld)(%016lx)", 
-        //          // thread_pos, next_tpos, tt_cnt, cnt, 
-        //          // idx, this->ct(), this->ch(), 
-        //          // ef);
-        // }
-        // // LOGD("%s", dump().data());
-
+        while(!completeQueue(idx, pt_, pi_)) {std::this_thread::yield();}
         return true;
     }
 
@@ -469,12 +390,38 @@ public:
     inline size_t ch() const {return ch_.load(std::memory_order_relaxed);}
     inline size_t ct() const {return ct_.load(std::memory_order_relaxed);}
     inline size_t wm() const {return wm_.load(std::memory_order_relaxed);}
-    inline size_t pef() const {return prod_exit_flag_.load(std::memory_order_relaxed);}
-    inline size_t cef() const {return cons_exit_flag_.load(std::memory_order_relaxed);}
+    // inline size_t pef() const {return prod_exit_flag_.load(std::memory_order_relaxed);}
+    // inline size_t cef() const {return cons_exit_flag_.load(std::memory_order_relaxed);}
 private:
 
+    inline std::string to_string(std::atomic<size_t> idxs [])
+    {
+        std::string ret;
+        ret.resize(num_threads);
+        size_t ct = this->ct();
+        for(int i=0; i<num_threads; i++)
+        {
+            if(idxs[i].load(std::memory_order_relaxed) > ct)
+                ret[i] = '1';
+            else
+                ret[i] = '0';
+        }
+        return ret;
+    }
+
+    // static constexpr size_t kMaxThreads = 8;
+    // size_t num_threads_=num_threads;
+    static constexpr int8_t kDone = 0, kWorking = 1;
+    // class enum
+    // {
+    //     kDone = 0,
+    //     kWorking
+    // };
     std::atomic<size_t> ph_{0}, pt_{0}, wm_{0}, ch_{0}, ct_{0};
-    std::atomic<size_t> prod_exit_flag_{-1llu}, cons_exit_flag_{-1llu};
+    // std::atomic<size_t> pe_{0}, ce_{0};
+    std::atomic<size_t> pi_[num_threads], ci_[num_threads];
+    // std::bitset<8> pi_, ci_;
+    // std::atomic<size_t> prod_exit_flag_{-1llu}, cons_exit_flag_{-1llu};
     size_t capacity_;
     /// Statistic
     std::atomic<size_t> stat_push_size{0}, stat_pop_size{0};
@@ -487,9 +434,10 @@ private:
     std::atomic<size_t> time_push_try{0}, time_pop_try{0};
     std::atomic<size_t> time_push_complete{0}, time_pop_complete{0};
 
-    static constexpr size_t kMaxThreads = 63;
-    static constexpr size_t kExitMasks[kMaxThreads] = {
-        0x0,0x2,0x6,0xe,0x1e,0x3e,0x7e,0xfe,0x1fe,0x3fe,0x7fe,0xffe,0x1ffe,0x3ffe,0x7ffe,0xfffe,0x1fffe,0x3fffe,0x7fffe,0xffffe,0x1ffffe,0x3ffffe,0x7ffffe,0xfffffe,0x1fffffe,0x3fffffe,0x7fffffe,0xffffffe,0x1ffffffe,0x3ffffffe,0x7ffffffe,0xfffffffe,0x1fffffffe,0x3fffffffe,0x7fffffffe,0xffffffffe,0x1ffffffffe,0x3ffffffffe,0x7ffffffffe,0xfffffffffe,0x1fffffffffe,0x3fffffffffe,0x7fffffffffe,0xffffffffffe,0x1ffffffffffe,0x3ffffffffffe,0x7ffffffffffe,0xfffffffffffe,0x1fffffffffffe,0x3fffffffffffe,0x7fffffffffffe,0xffffffffffffe,0x1ffffffffffffe,0x3ffffffffffffe,0x7ffffffffffffe,0xfffffffffffffe,0x1fffffffffffffe,0x3fffffffffffffe,0x7fffffffffffffe,0xffffffffffffffe,0x1ffffffffffffffe,0x3ffffffffffffffe,0x7ffffffffffffffe};
+    // std::vector<bool> pi_, ci_;
+    // constexpr util::make_array<kMaxThreads, bool> pi_{false}, ci_{false};
+    // static constexpr size_t kExitMasks[kMaxThreads] = {
+    //     0x0,0x2,0x6,0xe,0x1e,0x3e,0x7e,0xfe,0x1fe,0x3fe,0x7fe,0xffe,0x1ffe,0x3ffe,0x7ffe,0xfffe,0x1fffe,0x3fffe,0x7fffe,0xffffe,0x1ffffe,0x3ffffe,0x7ffffe,0xfffffe,0x1fffffe,0x3fffffe,0x7fffffe,0xffffffe,0x1ffffffe,0x3ffffffe,0x7ffffffe,0xfffffffe,0x1fffffffe,0x3fffffffe,0x7fffffffe,0xffffffffe,0x1ffffffffe,0x3ffffffffe,0x7ffffffffe,0xfffffffffe,0x1fffffffffe,0x3fffffffffe,0x7fffffffffe,0xffffffffffe,0x1ffffffffffe,0x3ffffffffffe,0x7ffffffffffe,0xfffffffffffe,0x1fffffffffffe,0x3fffffffffffe,0x7fffffffffffe,0xffffffffffffe,0x1ffffffffffffe,0x3ffffffffffffe,0x7ffffffffffffe,0xfffffffffffffe,0x1fffffffffffffe,0x3fffffffffffffe,0x7fffffffffffffe,0xffffffffffffffe,0x1ffffffffffffffe,0x3ffffffffffffffe,0x7ffffffffffffffe};
 
 };
 
@@ -576,11 +524,11 @@ public:
 
     inline T *elemAt(size_t id)
     {
-        return buffer_.data() + wrap(id) * sizeof(T);
+        return &buffer_[wrap(id)];
     }
 
 private:
-    CCIndex cci_;
+    CCIndex<> cci_;
     std::vector<T> buffer_;
 };
 

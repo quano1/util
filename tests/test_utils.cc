@@ -10,8 +10,8 @@
 // #include "../libs/log.h"
 
 #define ENABLE_PROFILING 1
-#define PERF_TUNNEL 1
-
+#define PERF_TUNNEL 0
+// #define DUMPER
 #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 
 #include "../libs/util.h"
@@ -396,11 +396,11 @@ bool testCCB(int loop=1)
 }
 
 
-template <int prod_num, class CCB>
-bool testCQ(size_t ccb_size, size_t write_count, tll::time::Counter<> &counter, size_t *opss=nullptr)
+template <int prod_num, class CQ>
+bool testCQ(size_t capacity, size_t write_count, tll::time::Counter<> &counter, size_t *opss=nullptr)
 {
     constexpr int kThreadNum = prod_num * 2;
-    CCB ccb{ccb_size};
+    CQ cq{capacity};
     std::vector<char> store_buff[prod_num];
 
 #if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
@@ -455,30 +455,32 @@ bool testCQ(size_t ccb_size, size_t write_count, tll::time::Counter<> &counter, 
     counter.start();
     std::atomic<size_t> total_push_count{0}, total_pop_count{0};
     std::thread dump_stat{[&](){
+#ifdef DUMPER
         for(;w_threads.load(std::memory_order_relaxed) < prod_num /*- (prod_num + 1) / 2*/
             || total_push_count.load(std::memory_order_relaxed) > total_pop_count.load(std::memory_order_relaxed);)
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-            LOGD("%s", ccb.dump().data());
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            LOGD("DUMPER: %s", cq.dump().data());
         }
+#endif
     }};
 
-    #pragma omp parallel num_threads ( kThreadNum ) shared(ccb, store_buff, temp_data)
+    #pragma omp parallel num_threads ( kThreadNum ) shared(cq, store_buff, temp_data)
     {
         int tid = omp_get_thread_num();
         if(!(tid & 1))
         {
-            LOGD("Producer: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
+            // LOGD("Producer: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
             int i=0;
             for(;total_push_count.load(std::memory_order_relaxed) < (write_count);)
             {
 #if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
-                bool ws = ccb.enQueue([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); });
+                bool ws = cq.enQueue([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); });
 #else
-                bool ws = ccb.enQueue([&ccb, &temp_data, &i](size_t id, size_t size) {
-                        LOGD("");
-                        auto dst = ccb.elemAt(id);
+                bool ws = cq.enQueue([&cq, &temp_data, &i](size_t id, size_t size) {
+                        std::vector<char> *dst = cq.elemAt(id);
                         *dst = temp_data[i];
+                        // LOGD("> %ld %ld", id, dst->size());
                     });
 #endif
                 if(ws)
@@ -501,20 +503,20 @@ bool testCQ(size_t ccb_size, size_t write_count, tll::time::Counter<> &counter, 
         }
         else if (tid & 1)
         {
-            LOGD("Consumer: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
+            // LOGD("Consumer: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
             size_t pop_size=0;
             for(;w_threads.load(std::memory_order_relaxed) < prod_num /*- (prod_num + 1) / 2*/
                 || total_push_count.load(std::memory_order_relaxed) > total_pop_count.load(std::memory_order_relaxed);)
             {
 #if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
-                bool ps = ccb.deQueue([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); });
+                bool ps = cq.deQueue([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); });
 #else
-                bool ps = ccb.deQueue([&ccb, &store_buff, &pop_size, tid](size_t id, size_t size) {
-                    LOGD("");
+                bool ps = cq.deQueue([&cq, &store_buff, &pop_size, tid](size_t id, size_t size) {
                     auto dst = store_buff[tid/2].data() + pop_size;
-                    auto src = ccb.elemAt(id);
-                    memcpy(dst, src, src->size());
+                    std::vector<char> *src = cq.elemAt(id);
+                    memcpy(dst, src->data(), src->size());
                     pop_size += src->size();
+                    // LOGD("< %ld %ld", id, src->size());
                 });
 #endif
                 if(ps)
@@ -529,20 +531,21 @@ bool testCQ(size_t ccb_size, size_t write_count, tll::time::Counter<> &counter, 
                 // LOGD("pop: %ld", total_pop_count.load());
             }
         }
-        LOGD("          %d Done", tid);
+        // LOGD("          %d Done", tid);
     }
     counter.elapsed();
     dump_stat.join();
-    LOGD("%s", ccb.dump().data());
+    LOGD("%s", cq.dump().data());
 #if (!defined PERF_TUNNEL) || (PERF_TUNNEL==0)
-    dumpStat(ccb.stat(), counter.lastElapsed().count());
+    dumpStat(cq.stat(), counter.lastElapsed().count());
 #endif
 
     if(opss) {
-        opss[0] = ccb.stat().push_total;
-        opss[1] = ccb.stat().pop_total;
+        opss[0] = cq.stat().push_total;
+        opss[1] = cq.stat().pop_total;
     }
-    // tll::util::dump(ccb.buffer_.data(), ccb.buffer_.size());
+
+    // tll::util::dump(cq.buffer_.data(), cq.buffer_.size());
     // for(int i=0; i<prod_num; i++)
     // {
     //     LOGD("%d", i);
@@ -552,7 +555,7 @@ bool testCQ(size_t ccb_size, size_t write_count, tll::time::Counter<> &counter, 
 
     if(total_push_count.load(std::memory_order_relaxed) != total_pop_count.load(std::memory_order_relaxed))
     {
-        tll::cc::Stat stat = ccb.stat();
+        tll::cc::Stat stat = cq.stat();
         // printf("\n");
         printf(" - w:%ld r:%ld\n", total_push_count.load(std::memory_order_relaxed), total_pop_count.load(std::memory_order_relaxed));
         printf(" - w:%ld r:%ld\n", stat.push_size, stat.pop_size);
@@ -593,7 +596,7 @@ int main(int argc, char **argv)
     // printf("testCCB: %s\n", rs?"Passed":"FAILED");
 
     tll::time::Counter<> counter;
-    rs = testCQ<4, tll::lf::CCFIFO< std::vector<char> >>(0x100, loop, counter);
-    printf("testCCB: %s\n", rs?"Passed":"FAILED");
+    rs = testCQ<16, tll::lf::CCFIFO< std::vector<char> >>(0x100, loop, counter);
+    printf("testCQ: %s\n", rs?"Passed":"FAILED");
     return rs ? 0 : 1;
 }
