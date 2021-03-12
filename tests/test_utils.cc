@@ -720,38 +720,36 @@ bool perfTunnelCQ(size_t write_count, tll::time::Counter<> &counter, size_t *ops
 void performanceTunnel()
 {
     tll::time::Counter<> counter;
-    constexpr size_t kCount = 100000000;
-    printf("1\n");
+    constexpr size_t kCount = 10000000;
+    printf("Buffer, thead num: 1\n");
     perfTunnelCCB<1, tll::lf::CCFIFO<char>>(kCount, counter);
-    printf("2\n");
+    printf("Buffer, thead num: 2\n");
     perfTunnelCCB<2, tll::lf::CCFIFO<char>>(kCount, counter);
-    printf("4\n");
+    printf("Buffer, thead num: 4\n");
     perfTunnelCCB<4, tll::lf::CCFIFO<char>>(kCount, counter);
-    // printf("8\n");
-    // perfTunnelCCB<8, tll::lf::CCFIFO<char>>(kCount, counter);
-    printf("1\n");
+
+    printf("Queue, thead num: 1\n");
     perfTunnelCQ<1, tll::lf::CCFIFO<char>>(kCount, counter);
-    printf("2\n");
+    printf("Queue, thead num: 2\n");
     perfTunnelCQ<2, tll::lf::CCFIFO<char>>(kCount, counter);
-    printf("4\n");
+    printf("Queue, thead num: 4\n");
     perfTunnelCQ<4, tll::lf::CCFIFO<char>>(kCount, counter);
-    printf("8\n");
+    printf("Queue, thead num: 8\n");
     perfTunnelCQ<8, tll::lf::CCFIFO<char>>(kCount, counter);
-    printf("16\n");
+    printf("Queue, thead num: 16\n");
     perfTunnelCQ<16, tll::lf::CCFIFO<char>>(kCount, counter);
-    // printf("32\n");
-    // perfTunnelCQ<32, tll::lf::CCFIFO<char>>(kCount, counter);
-    // printf("64\n");
-    // perfTunnelCQ<64, tll::lf::CCFIFO<char>>(kCount, counter);
-    // printf("128\n");
-    // perfTunnelCQ<128, tll::lf::CCFIFO<char>>(kCount, counter);
+    printf("Queue, thead num: 32\n");
+    perfTunnelCQ<32, tll::lf::CCFIFO<char>>(kCount, counter);
+    printf("Queue, thead num: 64\n");
+    perfTunnelCQ<64, tll::lf::CCFIFO<char>>(kCount, counter);
 }
 
 int main(int argc, char **argv)
 {
-    size_t loop = 0x400;
-    if(argc > 1) loop = std::stoul(argv[1]);
+    // size_t write_count = 0x400;
+    // if(argc > 1) write_count = std::stoul(argv[1]);
     tll::time::Counter<> counter;
+    size_t opss[2];
 
     bool rs = false;
     // rs = testTimer();
@@ -760,11 +758,11 @@ int main(int argc, char **argv)
     // rs = testGuard();
     // LOGD("testGuard: %s", rs?"Passed":"FAILED");
 
-    // rs = testCCB(loop);
-    // printf("testCCB: %s\n", rs?"Passed":"FAILED");
+    rs = testCCB<2, tll::lf::CCFIFO<char>>("lf", 0x1000, 0x100000, counter, opss);
+    printf("testCCB: %s\n", rs?"Passed":"FAILED");
 
-    // rs = testCQ<16, tll::lf::CCFIFO< std::vector<char> >>(0x100, loop, counter);
-    // printf("testCQ: %s\n", rs?"Passed":"FAILED");
+    rs = testCQ<2, tll::lf::CCFIFO< std::vector<char> >>(0x1000, opss[0], counter);
+    printf("testCQ: %s\n", rs?"Passed":"FAILED");
 
     performanceTunnel();
     return rs ? 0 : 1;
