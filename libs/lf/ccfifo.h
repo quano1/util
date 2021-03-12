@@ -21,7 +21,7 @@
 namespace tll::lf {
 
 /// Contiguous Circular Index
-template <size_t num_threads=128>
+template <size_t num_threads=0x400>
 struct CCIndex
 {
 public:
@@ -48,10 +48,10 @@ public:
         }
         else
         {
-            ph_.store(capacity_,std::memory_order_relaxed);
-            ch_.store(capacity_,std::memory_order_relaxed);
-            pt_.store(capacity_,std::memory_order_relaxed);
-            ct_.store(capacity_,std::memory_order_relaxed);
+            ph_.store(num_threads,std::memory_order_relaxed);
+            ch_.store(num_threads,std::memory_order_relaxed);
+            pt_.store(num_threads,std::memory_order_relaxed);
+            ct_.store(num_threads,std::memory_order_relaxed);
             wm_.store(0,std::memory_order_relaxed);
         }
     }
@@ -67,10 +67,10 @@ public:
 
         size = util::isPowerOf2(size) ? size : util::nextPowerOf2(size);
         capacity_= size;
-        ph_.store(capacity_,std::memory_order_relaxed);
-        ch_.store(capacity_,std::memory_order_relaxed);
-        pt_.store(capacity_,std::memory_order_relaxed);
-        ct_.store(capacity_,std::memory_order_relaxed);
+        ph_.store(num_threads,std::memory_order_relaxed);
+        ch_.store(num_threads,std::memory_order_relaxed);
+        pt_.store(num_threads,std::memory_order_relaxed);
+        ct_.store(num_threads,std::memory_order_relaxed);
         wm_.store(0,std::memory_order_relaxed);
         for(int i=0; i<num_threads; i++)
         {
@@ -306,37 +306,74 @@ public:
 
     inline bool deQueue(const tll::cc::Callback &cb)
     {
+        PROF_TIMER(timer);
+        bool ret = false;
         size_t idx = ch_.load(std::memory_order_relaxed);
         for(;;)
         {
             if (idx == pt_.load(std::memory_order_relaxed))
-                return false;
+            {
+                PROF_ADD(stat_pop_error, 1);
+                break;
+            }
 
             if(ch_.compare_exchange_weak(idx, idx + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+            {
+                ret = true;
                 break;
+            }
+            PROF_ADD(stat_pop_miss, 1);
         }
-
-        cb(idx, 1);
-        while(!completeQueue(idx, ct_, ci_)) {std::this_thread::yield();}
-        return true;
+        PROF_ADD(time_pop_try, timer.elapse().count());
+        PROF_TIMER_START(timer);
+        if(ret)
+        {
+            cb(idx, 1);
+            PROF_ADD(time_pop_cb, timer.elapse().count());
+            PROF_TIMER_START(timer);
+            while(!completeQueue(idx, ct_, ci_)) {std::this_thread::yield();}
+            PROF_ADD(time_pop_complete, timer.elapse().count());
+            PROF_ADD(stat_pop_size, 1);
+        }
+        PROF_ADD(time_pop_total, timer.absElapse().count());
+        PROF_ADD(stat_pop_total, 1);
+        return ret;
     }
 
     inline bool enQueue(const tll::cc::Callback &cb)
     {
+        PROF_TIMER(timer);
+        bool ret = false;
         size_t idx = ph_.load(std::memory_order_relaxed);
-
         for(;;)
         {
             if (idx == (ct_.load(std::memory_order_relaxed) + capacity_))
-                return false;
+            {
+                PROF_ADD(stat_push_error, 1);
+                break;
+            }
 
             if(ph_.compare_exchange_weak(idx, idx + 1, std::memory_order_acquire, std::memory_order_relaxed))
+            {
+                ret = true;
                 break;
+            }
+            PROF_ADD(stat_push_miss, 1);
         }
-
-        cb(idx, 1);
-        while(!completeQueue(idx, pt_, pi_)) {std::this_thread::yield();}
-        return true;
+        PROF_ADD(time_push_try, timer.elapse().count());
+        PROF_TIMER_START(timer);
+        if(ret)
+        {
+            cb(idx, 1);
+            PROF_ADD(time_push_cb, timer.elapse().count());
+            PROF_TIMER_START(timer);
+            while(!completeQueue(idx, pt_, pi_)) {std::this_thread::yield();}
+            PROF_ADD(time_push_complete, timer.elapse().count());
+            PROF_ADD(stat_push_size, 1);
+        }
+        PROF_ADD(time_push_total, timer.absElapse().count());
+        PROF_ADD(stat_push_total, 1);
+        return ret;
     }
 
     inline size_t capacity() const

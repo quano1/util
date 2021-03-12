@@ -18,70 +18,77 @@
 #include "../libs/counter.h"
 #include "../libs/contiguouscircular.h"
 
+template <uint8_t type = 3>
 void dumpStat(const tll::cc::Stat &st, double real_total_time)
 {
     using namespace std::chrono;
+    if(type) printf("        count(K) | err(%%)|miss(%%)| try(%%)|comp(%%)| cb(%%) | all(%%)| ops/ms\n");
 
-    double time_push_total = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_push_total)).count();
-    double time_push_try = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_push_try)).count();
-    double time_push_complete = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_push_complete)).count();
-    double time_push_try_rate = st.time_push_try*100.f/ st.time_push_total;
-    double time_push_complete_rate = st.time_push_complete*100.f/ st.time_push_total;
-    double time_push_callback_rate = st.time_push_cb*100.f/ st.time_push_total;
-    double time_push_all_rate = (st.time_push_cb + st.time_push_try + st.time_push_complete)*100.f/ st.time_push_total;
-
-
-    double push_total = st.push_total * 1.f / 1000;
-    double push_error_rate = (st.push_error*100.f)/st.push_total;
-    double push_miss_rate = (st.push_miss*100.f)/st.push_total;
-
-    // double push_size = st.push_size*1.f / 0x100000;
-    // size_t push_success = st.push_total - st.push_error;
-    // double push_success_size_one = push_size/push_total;
-    // double push_speed = push_success_size_one;
-
-    // double time_push_one = st.time_push_total*1.f / st.push_total;
-    // double avg_time_push_one = time_push_one / thread_num;
-    // double avg_push_speed = push_size*thread_num/time_push_total;
-
-    double opss = st.push_total * 0.001f / real_total_time;
-
-    printf("        count(K) | err(%%)|miss(%%)| try(%%)|comp(%%)| cb(%%) | all(%%)| ops/ms\n");
-    printf(" push: %9.3f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %.f\n",
-           push_total, push_error_rate, push_miss_rate
-           , time_push_try_rate, time_push_complete_rate, time_push_callback_rate, time_push_all_rate
-           // avg_time_push_one, avg_push_speed
-           , opss
-           );
-
-    double time_pop_total = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_pop_total)).count();
-    double time_pop_try = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_pop_try)).count();
-    double time_pop_complete = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_pop_complete)).count();
-    double time_pop_try_rate = st.time_pop_try*100.f/ st.time_pop_total;
-    double time_pop_complete_rate = st.time_pop_complete*100.f/ st.time_pop_total;
-    double time_pop_callback_rate = st.time_pop_cb*100.f/ st.time_pop_total;
-    double time_pop_all_rate = (st.time_pop_cb + st.time_pop_try + st.time_pop_complete)*100.f/ st.time_pop_total;
+    if(type & 1)
+    {
+        double time_push_total = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_push_total)).count();
+        double time_push_try = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_push_try)).count();
+        double time_push_complete = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_push_complete)).count();
+        double time_push_try_rate = st.time_push_try*100.f/ st.time_push_total;
+        double time_push_complete_rate = st.time_push_complete*100.f/ st.time_push_total;
+        double time_push_callback_rate = st.time_push_cb*100.f/ st.time_push_total;
+        double time_push_all_rate = (st.time_push_cb + st.time_push_try + st.time_push_complete)*100.f/ st.time_push_total;
 
 
-    double pop_total = st.pop_total * 1.f / 1000;
-    double pop_error_rate = (st.pop_error*100.f)/st.pop_total;
-    double pop_miss_rate = (st.pop_miss*100.f)/st.pop_total;
+        double push_total = st.push_total * 1.f / 1000;
+        double push_error_rate = (st.push_error*100.f)/st.push_total;
+        double push_miss_rate = (st.push_miss*100.f)/st.push_total;
 
-    // double pop_size = st.pop_size*1.f / 0x100000;
-    // size_t pop_success = st.pop_total - st.pop_error;
-    // double pop_success_size_one = pop_size/pop_total;
-    // double pop_speed = pop_success_size_one;
+        // double push_size = st.push_size*1.f / 0x100000;
+        // size_t push_success = st.push_total - st.push_error;
+        // double push_success_size_one = push_size/push_total;
+        // double push_speed = push_success_size_one;
 
-    // double time_pop_one = st.time_pop_total*1.f / st.pop_total;
-    // double avg_time_pop_one = time_pop_one / thread_num;
-    // double avg_pop_speed = pop_size*thread_num/time_pop_total;
-    opss = st.pop_total * 0.001f / real_total_time;
-    printf(" pop : %9.3f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %.f\n",
-           pop_total, pop_error_rate, pop_miss_rate
-           , time_pop_try_rate, time_pop_complete_rate, time_pop_callback_rate, time_pop_all_rate
-           // avg_time_pop_one
-           , opss
-           );
+        // double time_push_one = st.time_push_total*1.f / st.push_total;
+        // double avg_time_push_one = time_push_one / thread_num;
+        // double avg_push_speed = push_size*thread_num/time_push_total;
+
+        double opss = st.push_total * 0.001f / real_total_time;
+
+        printf(" push: %9.3f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %.f\n",
+               push_total, push_error_rate, push_miss_rate
+               , time_push_try_rate, time_push_complete_rate, time_push_callback_rate, time_push_all_rate
+               // avg_time_push_one, avg_push_speed
+               , opss
+               );
+    }
+
+    if(type & 2)
+    {
+        double time_pop_total = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_pop_total)).count();
+        double time_pop_try = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_pop_try)).count();
+        double time_pop_complete = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_pop_complete)).count();
+        double time_pop_try_rate = st.time_pop_try*100.f/ st.time_pop_total;
+        double time_pop_complete_rate = st.time_pop_complete*100.f/ st.time_pop_total;
+        double time_pop_callback_rate = st.time_pop_cb*100.f/ st.time_pop_total;
+        double time_pop_all_rate = (st.time_pop_cb + st.time_pop_try + st.time_pop_complete)*100.f/ st.time_pop_total;
+
+
+        double pop_total = st.pop_total * 1.f / 1000;
+        double pop_error_rate = (st.pop_error*100.f)/st.pop_total;
+        double pop_miss_rate = (st.pop_miss*100.f)/st.pop_total;
+
+        // double pop_size = st.pop_size*1.f / 0x100000;
+        // size_t pop_success = st.pop_total - st.pop_error;
+        // double pop_success_size_one = pop_size/pop_total;
+        // double pop_speed = pop_success_size_one;
+
+        // double time_pop_one = st.time_pop_total*1.f / st.pop_total;
+        // double avg_time_pop_one = time_pop_one / thread_num;
+        // double avg_pop_speed = pop_size*thread_num/time_pop_total;
+        double opss = st.pop_total * 0.001f / real_total_time;
+        printf(" pop : %9.3f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %.f\n",
+               pop_total, pop_error_rate, pop_miss_rate
+               , time_pop_try_rate, time_pop_complete_rate, time_pop_callback_rate, time_pop_all_rate
+               // avg_time_pop_one
+               , opss
+               );
+    }
 }
 
 bool verifyWithTemplate(int &index, const std::vector<char> &sb, const std::vector<char> temp_data [] )
@@ -169,7 +176,7 @@ bool verifyWithTemplate(int &index, const std::vector<char> &sb, const std::vect
 
 
 template <int thread_num, class CCB>
-bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, tll::time::Counter<> &counter, size_t *opss=nullptr)
+bool testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, tll::time::Counter<> &counter, size_t *opss=nullptr)
 {
     constexpr int omp_thread_num = thread_num * 2;
     CCB ccb(ccb_size);
@@ -292,10 +299,10 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
     }
     counter.elapsed();
 
-#if (!defined PERF_TUNNEL) || (PERF_TUNNEL==0)
+// #if (!defined PERF_TUNNEL) || (PERF_TUNNEL==0)
     printf("CC type: %s\n", ccb_type.data());
-    dumpStat(ccb.stat(), counter.lastElapsed().count());
-#endif
+    dumpStat<>(ccb.stat(), counter.lastElapsed().count());
+// #endif
 
     if(opss) {
         opss[0] = ccb.stat().push_total;
@@ -336,64 +343,64 @@ bool _testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, t
     return ret;
 }
 
-bool testCCB(int loop=1)
-{
-    constexpr size_t kOneMb = 1024 * 1024;
-    constexpr size_t kOneGb = kOneMb * 1024;
-    size_t write_size = kOneMb;
-    tll::time::Counter<> counter;
-    std::ofstream ofs{"profile.dat"};
-    size_t opss[2];
+// bool testCCB(int loop=1)
+// {
+//     constexpr size_t kOneMb = 1024 * 1024;
+//     constexpr size_t kOneGb = kOneMb * 1024;
+//     size_t write_size = kOneMb;
+//     tll::time::Counter<> counter;
+//     std::ofstream ofs{"profile.dat"};
+//     size_t opss[2];
 
-#if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
-    size_t const ccb_size = write_size / 8;
+// #if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
+//     size_t const ccb_size = write_size / 8;
 
-    _testCCB<1, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss);
-    printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-    ofs << 1 << " " << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count();
-    ofs << std::endl;
+//     _testCCB<1, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss);
+//     printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
+//     ofs << 1 << " " << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count();
+//     ofs << std::endl;
 
-    _testCCB<2, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss);
-    printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-    ofs << 2 << " " << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count();
-    ofs << std::endl;
+//     _testCCB<2, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss);
+//     printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
+//     ofs << 2 << " " << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count();
+//     ofs << std::endl;
 
-#else
-    size_t const ccb_size = kOneMb;
-    printf("================================================================\n");
-    for (int l=0; l<loop; l++)
-    {
-        printf("ccb_size: %.3fMb(0x%lx), write_size: %.3fGb(0x%lx)\n", ccb_size*1.f/kOneMb, ccb_size, write_size*1.f/kOneGb, write_size);
-        printf("----------------------------------------------------------------\n");
-        printf("threads: 1\n");
-        ofs << write_size << " ";
-        if(!_testCCB<1, tll::mt::CCBuffer>("mt", ccb_size, write_size, counter, opss)) return false;
-        printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-        ofs << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count() << " ";
-        printf("-------------------------------\n");
-        if(!_testCCB<1, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss)) return false;
-        printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-        ofs << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count() << " ";
-        printf("-------------------------------\n");
+// #else
+//     size_t const ccb_size = kOneMb;
+//     printf("================================================================\n");
+//     for (int l=0; l<loop; l++)
+//     {
+//         printf("ccb_size: %.3fMb(0x%lx), write_size: %.3fGb(0x%lx)\n", ccb_size*1.f/kOneMb, ccb_size, write_size*1.f/kOneGb, write_size);
+//         printf("----------------------------------------------------------------\n");
+//         printf("threads: 1\n");
+//         ofs << write_size << " ";
+//         if(!_testCCB<1, tll::mt::CCBuffer>("mt", ccb_size, write_size, counter, opss)) return false;
+//         printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
+//         ofs << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count() << " ";
+//         printf("-------------------------------\n");
+//         if(!_testCCB<1, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss)) return false;
+//         printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
+//         ofs << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count() << " ";
+//         printf("-------------------------------\n");
 
-        printf("----------------------------------------------------------------\n");
-        printf("threads: 2\n");
-        if(!_testCCB<2, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss)) return false;
-        printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-        ofs << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count() << " ";
-        printf("-------------------------------\n");
+//         printf("----------------------------------------------------------------\n");
+//         printf("threads: 2\n");
+//         if(!_testCCB<2, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss)) return false;
+//         printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
+//         ofs << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count() << " ";
+//         printf("-------------------------------\n");
 
-        printf("Total duration: %.6f(s)\n", counter.totalElapsed().count());
-        // printf("\n");
-        printf("----------------------------------------------------------------\n");
-        write_size *= 2;
-        ofs << std::endl;
-    }
-    printf("================================================================\n");
-#endif
+//         printf("Total duration: %.6f(s)\n", counter.totalElapsed().count());
+//         // printf("\n");
+//         printf("----------------------------------------------------------------\n");
+//         write_size *= 2;
+//         ofs << std::endl;
+//     }
+//     printf("================================================================\n");
+// #endif
 
-    return true;
-}
+//     return true;
+// }
 
 
 template <int prod_num, class CQ>
@@ -535,10 +542,10 @@ bool testCQ(size_t capacity, size_t write_count, tll::time::Counter<> &counter, 
     }
     counter.elapsed();
     dump_stat.join();
-    LOGD("%s", cq.dump().data());
-#if (!defined PERF_TUNNEL) || (PERF_TUNNEL==0)
-    dumpStat(cq.stat(), counter.lastElapsed().count());
-#endif
+    // LOGD("%s", cq.dump().data());
+// #if (!defined PERF_TUNNEL) || (PERF_TUNNEL==0)
+    dumpStat<>(cq.stat(), counter.lastElapsed().count());
+// #endif
 
     if(opss) {
         opss[0] = cq.stat().push_total;
@@ -580,10 +587,171 @@ bool testCQ(size_t capacity, size_t write_count, tll::time::Counter<> &counter, 
     return ret;
 }
 
+template <int prod_num, class CCB>
+bool perfTunnelCCB(size_t write_count, tll::time::Counter<> &counter, size_t *opss=nullptr)
+{
+    constexpr int kThreadNum = prod_num;
+    CCB fifo{write_count * 2};
+    std::atomic<int> w_threads{0};
+    assert(kThreadNum > 0);
+    std::atomic<size_t> total_push_count{0}, total_pop_count{0};
+
+    counter.start();
+    #pragma omp parallel num_threads ( kThreadNum ) shared(fifo)
+    {
+        int i=0;
+        for(;total_push_count.load(std::memory_order_relaxed) < (write_count);)
+        {
+            bool ws = fifo.push([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }, 1);
+            if(ws)
+            {
+                total_push_count.fetch_add(1, std::memory_order_relaxed);
+            }
+            else
+            {
+                /// overrun
+                abort();
+            }
+        }
+
+        w_threads.fetch_add(1, std::memory_order_relaxed);
+    }
+    counter.elapsed();
+    dumpStat<1>(fifo.stat(), counter.lastElapsed().count());
+    counter.start();
+    #pragma omp parallel num_threads ( kThreadNum ) shared(fifo)
+    {
+        for(;total_push_count.load(std::memory_order_relaxed) > total_pop_count.load(std::memory_order_relaxed);)
+        {
+            bool ps = fifo.pop([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }, 1);
+            if(ps)
+            {
+                total_pop_count.fetch_add(1, std::memory_order_relaxed);
+            }
+            else
+            {
+                break;
+            }
+        }
+    }
+    counter.elapsed();
+    dumpStat<2>(fifo.stat(), counter.lastElapsed().count());
+
+    if(opss) {
+        opss[0] = fifo.stat().push_total;
+        opss[1] = fifo.stat().pop_total;
+    }
+
+    if(total_push_count.load(std::memory_order_relaxed) != total_pop_count.load(std::memory_order_relaxed))
+    {
+        tll::cc::Stat stat = fifo.stat();
+        // printf("\n");
+        printf(" - w:%ld r:%ld\n", total_push_count.load(std::memory_order_relaxed), total_pop_count.load(std::memory_order_relaxed));
+        printf(" - w:%ld r:%ld\n", stat.push_size, stat.pop_size);
+        abort();
+    }
+}
+
+template <int prod_num, class CQ>
+bool perfTunnelCQ(size_t write_count, tll::time::Counter<> &counter, size_t *opss=nullptr)
+{
+    constexpr int kThreadNum = prod_num;
+    CQ fifo{write_count * 2};
+    std::atomic<int> w_threads{0};
+    assert(kThreadNum > 0);
+    std::atomic<size_t> total_push_count{0}, total_pop_count{0};
+
+    counter.start();
+    #pragma omp parallel num_threads ( kThreadNum ) shared(fifo)
+    {
+        int i=0;
+        for(;total_push_count.load(std::memory_order_relaxed) < (write_count);)
+        {
+            bool ws = fifo.enQueue([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); });
+            if(ws)
+            {
+                total_push_count.fetch_add(1, std::memory_order_relaxed);
+            }
+            else
+            {
+                /// overrun
+                abort();
+            }
+        }
+
+        w_threads.fetch_add(1, std::memory_order_relaxed);
+    }
+    counter.elapsed();
+    dumpStat<1>(fifo.stat(), counter.lastElapsed().count());
+    counter.start();
+    #pragma omp parallel num_threads ( kThreadNum ) shared(fifo)
+    {
+        for(;total_push_count.load(std::memory_order_relaxed) > total_pop_count.load(std::memory_order_relaxed);)
+        {
+            bool ps = fifo.deQueue([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); });
+            if(ps)
+            {
+                total_pop_count.fetch_add(1, std::memory_order_relaxed);
+            }
+            else
+            {
+                break;
+            }
+        }
+    }
+    counter.elapsed();
+    dumpStat<2>(fifo.stat(), counter.lastElapsed().count());
+
+    if(opss) {
+        opss[0] = fifo.stat().push_total;
+        opss[1] = fifo.stat().pop_total;
+    }
+
+    if(total_push_count.load(std::memory_order_relaxed) != total_pop_count.load(std::memory_order_relaxed))
+    {
+        tll::cc::Stat stat = fifo.stat();
+        // printf("\n");
+        printf(" - w:%ld r:%ld\n", total_push_count.load(std::memory_order_relaxed), total_pop_count.load(std::memory_order_relaxed));
+        printf(" - w:%ld r:%ld\n", stat.push_size, stat.pop_size);
+        abort();
+    }
+}
+
+void performanceTunnel()
+{
+    tll::time::Counter<> counter;
+    constexpr size_t kCount = 100000000;
+    printf("1\n");
+    perfTunnelCCB<1, tll::lf::CCFIFO<char>>(kCount, counter);
+    printf("2\n");
+    perfTunnelCCB<2, tll::lf::CCFIFO<char>>(kCount, counter);
+    printf("4\n");
+    perfTunnelCCB<4, tll::lf::CCFIFO<char>>(kCount, counter);
+    // printf("8\n");
+    // perfTunnelCCB<8, tll::lf::CCFIFO<char>>(kCount, counter);
+    printf("1\n");
+    perfTunnelCQ<1, tll::lf::CCFIFO<char>>(kCount, counter);
+    printf("2\n");
+    perfTunnelCQ<2, tll::lf::CCFIFO<char>>(kCount, counter);
+    printf("4\n");
+    perfTunnelCQ<4, tll::lf::CCFIFO<char>>(kCount, counter);
+    printf("8\n");
+    perfTunnelCQ<8, tll::lf::CCFIFO<char>>(kCount, counter);
+    printf("16\n");
+    perfTunnelCQ<16, tll::lf::CCFIFO<char>>(kCount, counter);
+    // printf("32\n");
+    // perfTunnelCQ<32, tll::lf::CCFIFO<char>>(kCount, counter);
+    // printf("64\n");
+    // perfTunnelCQ<64, tll::lf::CCFIFO<char>>(kCount, counter);
+    // printf("128\n");
+    // perfTunnelCQ<128, tll::lf::CCFIFO<char>>(kCount, counter);
+}
+
 int main(int argc, char **argv)
 {
     size_t loop = 0x400;
     if(argc > 1) loop = std::stoul(argv[1]);
+    tll::time::Counter<> counter;
 
     bool rs = false;
     // rs = testTimer();
@@ -595,8 +763,9 @@ int main(int argc, char **argv)
     // rs = testCCB(loop);
     // printf("testCCB: %s\n", rs?"Passed":"FAILED");
 
-    tll::time::Counter<> counter;
-    rs = testCQ<16, tll::lf::CCFIFO< std::vector<char> >>(0x100, loop, counter);
-    printf("testCQ: %s\n", rs?"Passed":"FAILED");
+    // rs = testCQ<16, tll::lf::CCFIFO< std::vector<char> >>(0x100, loop, counter);
+    // printf("testCQ: %s\n", rs?"Passed":"FAILED");
+
+    performanceTunnel();
     return rs ? 0 : 1;
 }
