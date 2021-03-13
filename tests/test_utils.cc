@@ -6,6 +6,8 @@
 #include <fstream>
 #include <thread>
 #include <utility>
+
+#include <boost/lockfree/queue.hpp>
 // #include "../libs/timer.h"
 // #include "../libs/util.h"
 // #include "../libs/log.h"
@@ -23,6 +25,7 @@ template <uint8_t type = 3>
 void dumpStat(const tll::cc::Stat &st, double real_total_time)
 {
     using namespace std::chrono;
+    LOGD("%.3f", real_total_time);
     if(type) printf("        count(K) | err(%%)|miss(%%)| try(%%)|comp(%%)| cb(%%) | all(%%)| ops/ms\n");
 
     if(type & 1)
@@ -547,7 +550,7 @@ bool testCQ(size_t capacity, size_t write_count, tll::time::Counter<> &counter, 
 }
 
 template <int prod_num, class FIFO>
-void perfTunnelCCB(size_t write_count, tll::time::Counter<> &counter, size_t *opss=nullptr)
+void perfTunnelCCB(size_t write_count, tll::time::Counter<> &counter, double *opss=nullptr)
 {
     constexpr int kThreadNum = prod_num;
     FIFO fifo{write_count * 2};
@@ -597,8 +600,8 @@ void perfTunnelCCB(size_t write_count, tll::time::Counter<> &counter, size_t *op
     dumpStat<2>(fifo.stat(), counter.lastElapsed().count());
 
     if(opss) {
-        opss[0] = fifo.stat().push_total;
-        opss[1] = fifo.stat().pop_total;
+        opss[0] = fifo.stat().push_total / counter.lastElapsed().count();
+        opss[1] = fifo.stat().pop_total / counter.lastElapsed().count();
     }
 
     if(total_push_count.load(std::memory_order_relaxed) != total_pop_count.load(std::memory_order_relaxed))
@@ -643,7 +646,7 @@ void perfTunnelCQ(size_t write_count, tll::time::Counter<> &counter, double *ops
     counter.elapsed();
     dumpStat<1>(fifo.stat(), counter.lastElapsed().count());
     if(opss) {
-        opss[0] = fifo.stat().push_total * 0.001f / counter.lastElapsed().count();
+        opss[0] = fifo.stat().push_total / counter.lastElapsed().count();
     }
     counter.start();
     #pragma omp parallel num_threads ( kThreadNum ) shared(fifo)
@@ -665,7 +668,7 @@ void perfTunnelCQ(size_t write_count, tll::time::Counter<> &counter, double *ops
     dumpStat<2>(fifo.stat(), counter.lastElapsed().count());
 
     if(opss) {
-        opss[1] = fifo.stat().pop_total * 0.001f / counter.lastElapsed().count();
+        opss[1] = fifo.stat().pop_total / counter.lastElapsed().count();
     }
 
     if(total_push_count.load(std::memory_order_relaxed) != total_pop_count.load(std::memory_order_relaxed))
@@ -674,6 +677,78 @@ void perfTunnelCQ(size_t write_count, tll::time::Counter<> &counter, double *ops
         // printf("\n");
         printf(" - w:%ld r:%ld\n", total_push_count.load(std::memory_order_relaxed), total_pop_count.load(std::memory_order_relaxed));
         printf(" - w:%ld r:%ld\n", stat.push_size, stat.pop_size);
+        abort();
+    }
+}
+
+
+template <int prod_num>
+void perfTunnelBoost(size_t write_count, tll::time::Counter<> &counter, double *opss=nullptr)
+{
+    constexpr int kThreadNum = prod_num;
+    boost::lockfree::queue<char> fifo{write_count * 2};
+
+    std::atomic<int> w_threads{0};
+    assert(kThreadNum > 0);
+    std::atomic<size_t> total_push_count{0}, total_pop_count{0};
+
+    counter.start();
+    #pragma omp parallel num_threads ( kThreadNum ) shared(fifo)
+    {
+        int i=0;
+        for(;total_push_count.load(std::memory_order_relaxed) < (write_count);)
+        {
+            bool ws = fifo.push((char)1);
+            if(ws)
+            {
+                total_push_count.fetch_add(1, std::memory_order_relaxed);
+            }
+            else
+            {
+                /// overrun
+                abort();
+            }
+        }
+
+        w_threads.fetch_add(1, std::memory_order_relaxed);
+    }
+    counter.elapsed();
+    // dumpStat<1>(fifo.stat(), counter.lastElapsed().count());
+    if(opss) {
+        LOGD("%ld %.3f", total_push_count.load(std::memory_order_relaxed), counter.lastElapsed().count());
+        opss[0] = total_push_count.load(std::memory_order_relaxed) / counter.lastElapsed().count();
+    }
+    counter.start();
+    #pragma omp parallel num_threads ( kThreadNum ) shared(fifo)
+    {
+        for(;total_push_count.load(std::memory_order_relaxed) > total_pop_count.load(std::memory_order_relaxed);)
+        {
+            char val;
+            bool ps = fifo.pop(val);
+            if(ps)
+            {
+                total_pop_count.fetch_add(1, std::memory_order_relaxed);
+            }
+            else
+            {
+                break;
+            }
+        }
+    }
+    counter.elapsed();
+    // dumpStat<2>(fifo.stat(), counter.lastElapsed().count());
+
+    if(opss) {
+        LOGD("%ld %.3f", total_pop_count.load(std::memory_order_relaxed), counter.lastElapsed().count());
+        opss[1] = total_pop_count.load(std::memory_order_relaxed) / counter.lastElapsed().count();
+    }
+
+    if(total_push_count.load(std::memory_order_relaxed) != total_pop_count.load(std::memory_order_relaxed))
+    {
+        // tll::cc::Stat stat = fifo.stat();
+        // printf("\n");
+        printf(" - w:%ld r:%ld\n", total_push_count.load(std::memory_order_relaxed), total_pop_count.load(std::memory_order_relaxed));
+        // printf(" - w:%ld r:%ld\n", stat.push_size, stat.pop_size);
         abort();
     }
 }
@@ -711,14 +786,16 @@ void perfTunnel()
     tll::time::Counter<> counter;
     constexpr size_t kCount = 1000000;
     // const int cores = std::thread::hardware_concurrency();
-    magic<1, NUM_CPU>( [&](auto x)
-    {
-        LOGD("Number Of Threads: %d", x.value);
-        perfTunnelCCB<x.value, tll::lf::CCFIFO<char>>(kCount, counter);
-        LOGD("=========================");
-    });
+    // magic<1, NUM_CPU>( [&](auto x)
+    // {
+    //     double opss[2];
+    //     LOGD("Number Of Threads: %d", x.value);
+    //     perfTunnelCCB<x.value, tll::lf::CCFIFO<char>>(kCount, counter, opss);
+    //     LOGD("=========================");
+    // });
 
-    magic<1, NUM_CPU * 4>( [&](auto x)
+
+    magic<1, NUM_CPU * 16>( [&](auto x)
     {
         double opss[2];
         opss[0] = 0;
@@ -729,7 +806,10 @@ void perfTunnel()
         LOGD("thread size: %ld", kTN);
         perfTunnelCQ<x.value, tll::lf::CCFIFO<char, kTN>>(kCount, counter, opss);
         LOGD("=========================");
+        ofs << x.value << " " << opss[0] << " " << opss[1] << " ";
+        perfTunnelBoost<NUM_CPU>(kCount, counter, opss);
         ofs << x.value << " " << opss[0] << " " << opss[1] << "\n";
+        LOGD("=========================");
     });
     ofs << std::endl;
 }
@@ -748,8 +828,8 @@ int main(int argc, char **argv)
     // rs = testGuard();
     // LOGD("testGuard: %s", rs?"Passed":"FAILED");
 
-    rs = testCCB<NUM_CPU, tll::lf::CCFIFO<char>>("lf", 0x1000, 0x100000, counter, opss);
-    printf("testCCB: %s\n", rs?"Passed":"FAILED");
+    // rs = testCCB<NUM_CPU, tll::lf::CCFIFO<char>>("lf", 0x1000, 0x100000, counter, opss);
+    // printf("testCCB: %s\n", rs?"Passed":"FAILED");
 
     rs = testCQ<NUM_CPU, tll::lf::CCFIFO< std::vector<char> >>(0x1000, opss[0], counter);
     printf("testCQ: %s\n", rs?"Passed":"FAILED");

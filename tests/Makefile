@@ -30,6 +30,6 @@ clean:
 # g++ test_utils.cc -std=c++17 -lpthread -fopenmp -O3 -D NUM_CPU=$(grep -c ^processor /proc/cpuinfo)
 
 plot: perfTunnel.dat
-	gnuplot -c perfTunnel.p $< $(@:%.dat=%.png) $(NUM_CPU)
+	gnuplot -c perfTunnel.p $< $(<:%.dat=%.png) $(NUM_CPU)
 
 -include test_utils.d
