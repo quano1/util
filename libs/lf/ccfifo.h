@@ -29,6 +29,7 @@ public:
 
     CCIndex(size_t size)
     {
+        static_assert(util::isPowerOf2(num_threads));
         reserve(size);
     }
 
