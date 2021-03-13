@@ -40,19 +40,18 @@ public:
              cons_head_.load(std::memory_order_relaxed), cons_tail_.load(std::memory_order_relaxed));
     }
 
-    inline void reset(size_t new_size=0)
+    inline void reset()
     {
-        if(new_size)
+        prod_head_.store(capacity_,std::memory_order_relaxed);
+        cons_head_.store(capacity_,std::memory_order_relaxed);
+        prod_tail_.store(capacity_,std::memory_order_relaxed);
+        cons_tail_.store(capacity_,std::memory_order_relaxed);
+        water_mark_.store(0,std::memory_order_relaxed);
+
+        for(int i=0; i<num_threads; i++)
         {
-            reserve(new_size);
-        }
-        else
-        {
-            prod_head_.store(num_threads,std::memory_order_relaxed);
-            cons_head_.store(num_threads,std::memory_order_relaxed);
-            prod_tail_.store(num_threads,std::memory_order_relaxed);
-            cons_tail_.store(num_threads,std::memory_order_relaxed);
-            water_mark_.store(0,std::memory_order_relaxed);
+            prod_out_[i].store(0, std::memory_order_relaxed);
+            cons_out_[i].store(0, std::memory_order_relaxed);
         }
     }
 
@@ -60,16 +59,7 @@ public:
     {
         size = util::isPowerOf2(size) ? size : util::nextPowerOf2(size);
         capacity_= size;
-        prod_head_.store(num_threads,std::memory_order_relaxed);
-        cons_head_.store(num_threads,std::memory_order_relaxed);
-        prod_tail_.store(num_threads,std::memory_order_relaxed);
-        cons_tail_.store(num_threads,std::memory_order_relaxed);
-        water_mark_.store(0,std::memory_order_relaxed);
-        for(int i=0; i<num_threads; i++)
-        {
-            prod_out_[i].store(0, std::memory_order_relaxed);
-            cons_out_[i].store(0, std::memory_order_relaxed);
-        }
+        reset();
     }
 
     inline size_t tryPop(size_t &cons, size_t &size)
@@ -467,9 +457,9 @@ public:
         return cci_.dump();
     }
 
-    inline void reset(size_t new_size=0)
+    inline void reset()
     {
-        cci_.reset(new_size);
+        cci_.reset();
     }
 
     inline void reserve(size_t size)
