@@ -656,7 +656,7 @@ void perfTunnelCCB(size_t write_count, tll::time::Counter<> &counter, size_t *op
 }
 
 template <int prod_num, class CQ>
-void perfTunnelCQ(size_t write_count, tll::time::Counter<> &counter, size_t *opss=nullptr)
+void perfTunnelCQ(size_t write_count, tll::time::Counter<> &counter, double *opss=nullptr)
 {
     constexpr int kThreadNum = prod_num;
     CQ fifo{write_count * 2};
@@ -686,6 +686,9 @@ void perfTunnelCQ(size_t write_count, tll::time::Counter<> &counter, size_t *ops
     }
     counter.elapsed();
     dumpStat<1>(fifo.stat(), counter.lastElapsed().count());
+    if(opss) {
+        opss[0] = fifo.stat().push_total * 0.001f / counter.lastElapsed().count();
+    }
     counter.start();
     #pragma omp parallel num_threads ( kThreadNum ) shared(fifo)
     {
@@ -706,8 +709,7 @@ void perfTunnelCQ(size_t write_count, tll::time::Counter<> &counter, size_t *ops
     dumpStat<2>(fifo.stat(), counter.lastElapsed().count());
 
     if(opss) {
-        opss[0] = fifo.stat().push_total;
-        opss[1] = fifo.stat().pop_total;
+        opss[1] = fifo.stat().pop_total * 0.001f / counter.lastElapsed().count();
     }
 
     if(total_push_count.load(std::memory_order_relaxed) != total_pop_count.load(std::memory_order_relaxed))
@@ -764,11 +766,13 @@ constexpr auto magic(F f)
     return magic<beg>(f, std::make_integer_sequence<int, end-beg+1>{});
 }
 
-void performanceTunnel()
+void perfTunnel()
 {
+    std::ofstream ofs{"perfTunnel.dat"};
+    // std::ofstream ofs_dq{"perfTunnelDQ.dat"};
     tll::time::Counter<> counter;
-    constexpr size_t kCount = 1000000;
-    const int cores = std::thread::hardware_concurrency();
+    constexpr size_t kCount = 100000;
+    // const int cores = std::thread::hardware_concurrency();
     magic<1, PROC_CNT>( [&](auto x)
     {
         LOGD("Number Of Threads: %d", x.value);
@@ -776,15 +780,20 @@ void performanceTunnel()
         LOGD("=========================");
     });
 
-    magic<1, PROC_CNT * 16>( [&](auto x)
+    magic<1, PROC_CNT * 8>( [&](auto x)
     {
+        double opss[2];
+        opss[0] = 0;
+        opss[1] = 0;
         LOGD("Number Of Threads: %d", x.value);
         constexpr size_t kN2 = x.value * 512;
         constexpr size_t kTN = (tll::util::isPowerOf2(kN2) ? kN2 : tll::util::nextPowerOf2(kN2));
         LOGD("thread size: %ld", kTN);
-        perfTunnelCQ<x.value, tll::lf::CCFIFO<char, kTN>>(kCount, counter);
+        perfTunnelCQ<x.value, tll::lf::CCFIFO<char, kTN>>(kCount, counter, opss);
         LOGD("=========================");
+        ofs << x.value << " " << opss[0] << " " << opss[1] << "\n";
     });
+    ofs << std::endl;
 }
 
 int main(int argc, char **argv)
@@ -801,12 +810,14 @@ int main(int argc, char **argv)
     // rs = testGuard();
     // LOGD("testGuard: %s", rs?"Passed":"FAILED");
 
-    rs = testCCB<2, tll::lf::CCFIFO<char>>("lf", 0x1000, 0x100000, counter, opss);
-    printf("testCCB: %s\n", rs?"Passed":"FAILED");
+    // rs = testCCB<2, tll::lf::CCFIFO<char>>("lf", 0x1000, 0x100000, counter, opss);
+    // printf("testCCB: %s\n", rs?"Passed":"FAILED");
 
-    rs = testCQ<2, tll::lf::CCFIFO< std::vector<char> >>(0x1000, opss[0], counter);
-    printf("testCQ: %s\n", rs?"Passed":"FAILED");
+    // rs = testCQ<2, tll::lf::CCFIFO< std::vector<char> >>(0x1000, opss[0], counter);
+    // printf("testCQ: %s\n", rs?"Passed":"FAILED");
 
-    performanceTunnel();
-    return rs ? 0 : 1;
+    // return rs ? 0 : 1;
+
+    perfTunnel();
+    return 0;
 }
