@@ -126,15 +126,11 @@ public:
         return next_cons;
     }
 
-    inline void completePop(size_t cons, size_t size)
+    inline void completePop(size_t cons, size_t next, size_t size)
     {
         for(;cons_tail_.load(std::memory_order_relaxed) != cons;){}
         // {std::this_thread::yield();}
-
-        if(cons == water_mark_.load(std::memory_order_relaxed))
-            cons_tail_.store(next(cons) + size, std::memory_order_relaxed);
-        else
-            cons_tail_.store(cons + size, std::memory_order_relaxed);
+        cons_tail_.store(next + size, std::memory_order_relaxed);
         PROF_ADD(stat_pop_size, size);
     }
 
@@ -201,18 +197,16 @@ public:
         return next_prod;
     }
 
-    inline void completePush(size_t prod, size_t size)
+    inline void completePush(size_t prod, size_t next, size_t size)
     {
         for(;prod_tail_.load(std::memory_order_relaxed) != prod;){}
         // {std::this_thread::yield();}
 
-        if(prod + size > next(prod))
+        if(prod < next)
         {
             water_mark_.store(prod, std::memory_order_relaxed);
-            prod_tail_.store(next(prod) + size, std::memory_order_release);
         }
-        else
-            prod_tail_.store(prod + size, std::memory_order_release);
+        prod_tail_.store(next + size, std::memory_order_release);
         PROF_ADD(stat_push_size, size);
     }
 
@@ -221,15 +215,15 @@ public:
     {
         size_t cons;
         PROF_TIMER(timer);
-        size_t next_cons = tryPop(cons, size);
+        size_t next = tryPop(cons, size);
         PROF_ADD(time_pop_try, timer.elapse().count());
         PROF_TIMER_START(timer);
         if(size)
         {
-            cb(next_cons, size);
+            cb(next, size);
             PROF_ADD(time_pop_cb, timer.elapse().count());
             PROF_TIMER_START(timer);
-            completePop(cons, size);
+            completePop(cons, next, size);
             PROF_ADD(time_pop_complete, timer.elapse().count());
         }
         PROF_ADD(time_pop_total, timer.absElapse().count());
@@ -241,15 +235,15 @@ public:
     {
         size_t prod;
         PROF_TIMER(timer);
-        size_t next_prod = tryPush(prod, size);
+        size_t next = tryPush(prod, size);
         PROF_ADD(time_push_try, timer.elapse().count());
         PROF_TIMER_START(timer);
         if(size)
         {
-            cb(next_prod, size);
+            cb(next, size);
             PROF_ADD(time_push_cb, timer.elapse().count());
             PROF_TIMER_START(timer);
-            completePush(prod, size);
+            completePush(prod, next, size);
             PROF_ADD(time_push_complete, timer.elapse().count());
         }
         PROF_ADD(time_push_total, timer.absElapse().count());

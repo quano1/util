@@ -12,7 +12,7 @@
 
 #define ENABLE_PROFILING 1
 #define PERF_TUNNEL 0
-// #define DUMPER
+#define DUMPER
 #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 
 #include "../libs/util.h"
@@ -176,11 +176,11 @@ bool verifyWithTemplate(int &index, const std::vector<char> &sb, const std::vect
 // }
 
 
-template <int thread_num, class CCB>
-bool testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, tll::time::Counter<> &counter, size_t *opss=nullptr)
+template <int thread_num, class FIFO>
+bool testCCB(const std::string &fifo_type, size_t fifo_size, size_t write_size, tll::time::Counter<> &counter, size_t *opss=nullptr)
 {
     constexpr int omp_thread_num = thread_num * 2;
-    CCB ccb(ccb_size);
+    FIFO fifo(fifo_size);
     std::vector<char> store_buff[thread_num];
 
 #if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
@@ -234,20 +234,32 @@ bool testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, tl
     assert(omp_thread_num > 1);
     counter.start();
     std::atomic<size_t> total_push_size{0}, total_pop_size{0};
-    #pragma omp parallel num_threads ( omp_thread_num ) shared(ccb, store_buff, temp_data)
+
+#ifdef DUMPER
+    std::thread dumper{[&](){
+        for(;w_threads.load(std::memory_order_relaxed) < thread_num /*- (prod_num + 1) / 2*/
+            || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            LOGD("DUMPER: %s", fifo.dump().data());
+        }
+    }};
+#endif
+
+    #pragma omp parallel num_threads ( omp_thread_num ) shared(fifo, store_buff, temp_data)
     {
         int tid = omp_get_thread_num();
         if(!(tid & 1))
         {
-            // LOGD("Producer: %d, cpu: %d", tid, sched_getcpu());
+            LOGD("Producer: %d, cpu: %d", tid, sched_getcpu());
             int i=0;
             for(;total_push_size.load(std::memory_order_relaxed) < (write_size);)
             {
 #if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
-                size_t ws = ccb.push([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }, kPSize);
+                size_t ws = fifo.push([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }, kPSize);
 #else
-                size_t ws = ccb.push([&ccb, &temp_data, &i](size_t id, size_t size) {
-                        auto dst = ccb.elemAt(id);
+                size_t ws = fifo.push([&fifo, &temp_data, &i](size_t id, size_t size) {
+                        auto dst = fifo.elemAt(id);
                         auto src = temp_data[i].data();
                         memcpy(dst, src, size);
                     }, temp_data[i].size());
@@ -270,19 +282,19 @@ bool testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, tl
         }
         else if (tid & 1)
         {
-            // LOGD("Consumer: %d, cpu: %d", tid, sched_getcpu());
+            LOGD("Consumer: %d, cpu: %d", tid, sched_getcpu());
             size_t pop_size=0;
             for(;w_threads.load(std::memory_order_relaxed) < thread_num /*- (thread_num + 1) / 2*/
                 || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
             {
 #if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
-                size_t ps = ccb.pop([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }, kPSize);
+                size_t ps = fifo.pop([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }, kPSize);
 #else
-                size_t ps = ccb.pop([&ccb, &store_buff, &pop_size, tid](size_t id, size_t size) {
+                size_t ps = fifo.pop([&fifo, &store_buff, &pop_size, tid](size_t id, size_t size) {
                     auto dst = store_buff[tid/2].data() + pop_size;
-                    auto src = ccb.elemAt(id);
+                    auto src = fifo.elemAt(id);
                     memcpy(dst, src, size);
-                }, ccb_size);
+                }, fifo_size);
 #endif
                 if(ps > 0)
                 {
@@ -296,20 +308,24 @@ bool testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, tl
                 }
             }
         }
-        // LOGD("          %d Done", tid);
+        LOGD("          %d Done", tid);
     }
     counter.elapsed();
 
+#ifdef DUMPER
+    dumper.join();
+#endif
+
 // #if (!defined PERF_TUNNEL) || (PERF_TUNNEL==0)
-    printf("CC type: %s\n", ccb_type.data());
-    dumpStat<>(ccb.stat(), counter.lastElapsed().count());
+    printf("FIFO type: %s\n", fifo_type.data());
+    dumpStat<>(fifo.stat(), counter.lastElapsed().count());
 // #endif
 
     if(opss) {
-        opss[0] = ccb.stat().push_total;
-        opss[1] = ccb.stat().pop_total;
+        opss[0] = fifo.stat().push_total;
+        opss[1] = fifo.stat().pop_total;
     }
-    // tll::util::dump(ccb.buffer_.data(), ccb.buffer_.size());
+    // tll::util::dump(fifo.buffer_.data(), fifo.buffer_.size());
     // for(int i=0; i<thread_num; i++)
     // {
     //     LOGD("%d", i);
@@ -319,7 +335,7 @@ bool testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, tl
 
     if(total_push_size.load(std::memory_order_relaxed) != total_pop_size.load(std::memory_order_relaxed))
     {
-        tll::cc::Stat stat = ccb.stat();
+        tll::cc::Stat stat = fifo.stat();
         // printf("\n");
         printf(" - w:%ld r:%ld\n", total_push_size.load(std::memory_order_relaxed), total_pop_size.load(std::memory_order_relaxed));
         printf(" - w:%ld r:%ld\n", stat.push_size, stat.pop_size);
@@ -343,66 +359,6 @@ bool testCCB(const std::string &ccb_type, size_t ccb_size, size_t write_size, tl
 
     return ret;
 }
-
-// bool testCCB(int loop=1)
-// {
-//     constexpr size_t kOneMb = 1024 * 1024;
-//     constexpr size_t kOneGb = kOneMb * 1024;
-//     size_t write_size = kOneMb;
-//     tll::time::Counter<> counter;
-//     std::ofstream ofs{"profile.dat"};
-//     size_t opss[2];
-
-// #if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
-//     size_t const ccb_size = write_size / 8;
-
-//     _testCCB<1, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss);
-//     printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-//     ofs << 1 << " " << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count();
-//     ofs << std::endl;
-
-//     _testCCB<2, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss);
-//     printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-//     ofs << 2 << " " << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count();
-//     ofs << std::endl;
-
-// #else
-//     size_t const ccb_size = kOneMb;
-//     printf("================================================================\n");
-//     for (int l=0; l<loop; l++)
-//     {
-//         printf("ccb_size: %.3fMb(0x%lx), write_size: %.3fGb(0x%lx)\n", ccb_size*1.f/kOneMb, ccb_size, write_size*1.f/kOneGb, write_size);
-//         printf("----------------------------------------------------------------\n");
-//         printf("threads: 1\n");
-//         ofs << write_size << " ";
-//         if(!_testCCB<1, tll::mt::CCBuffer>("mt", ccb_size, write_size, counter, opss)) return false;
-//         printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-//         ofs << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count() << " ";
-//         printf("-------------------------------\n");
-//         if(!_testCCB<1, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss)) return false;
-//         printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-//         ofs << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count() << " ";
-//         printf("-------------------------------\n");
-
-//         printf("----------------------------------------------------------------\n");
-//         printf("threads: 2\n");
-//         if(!_testCCB<2, tll::lf::CCFIFO<char>>("lf", ccb_size, write_size, counter, opss)) return false;
-//         printf(" Test duration: %.6f(s)\n", counter.lastElapsed().count());
-//         ofs << opss[0] * 0.001f / counter.lastElapsed().count() << " " << opss[1] * 0.001f / counter.lastElapsed().count() << " ";
-//         printf("-------------------------------\n");
-
-//         printf("Total duration: %.6f(s)\n", counter.totalElapsed().count());
-//         // printf("\n");
-//         printf("----------------------------------------------------------------\n");
-//         write_size *= 2;
-//         ofs << std::endl;
-//     }
-//     printf("================================================================\n");
-// #endif
-
-//     return true;
-// }
-
 
 template <int prod_num, class CQ>
 bool testCQ(size_t capacity, size_t write_count, tll::time::Counter<> &counter, size_t *opss=nullptr)
@@ -463,7 +419,7 @@ bool testCQ(size_t capacity, size_t write_count, tll::time::Counter<> &counter, 
     counter.start();
     std::atomic<size_t> total_push_count{0}, total_pop_count{0};
 #ifdef DUMPER
-    std::thread dump_stat{[&](){
+    std::thread dumper{[&](){
         for(;w_threads.load(std::memory_order_relaxed) < prod_num /*- (prod_num + 1) / 2*/
             || total_push_count.load(std::memory_order_relaxed) > total_pop_count.load(std::memory_order_relaxed);)
         {
@@ -543,7 +499,7 @@ bool testCQ(size_t capacity, size_t write_count, tll::time::Counter<> &counter, 
     }
     counter.elapsed();
 #ifdef DUMPER
-    dump_stat.join();
+    dumper.join();
 #endif
     // LOGD("%s", cq.dump().data());
 // #if (!defined PERF_TUNNEL) || (PERF_TUNNEL==0)
@@ -590,11 +546,11 @@ bool testCQ(size_t capacity, size_t write_count, tll::time::Counter<> &counter, 
     return ret;
 }
 
-template <int prod_num, class CCB>
+template <int prod_num, class FIFO>
 void perfTunnelCCB(size_t write_count, tll::time::Counter<> &counter, size_t *opss=nullptr)
 {
     constexpr int kThreadNum = prod_num;
-    CCB fifo{write_count * 2};
+    FIFO fifo{write_count * 2};
     std::atomic<int> w_threads{0};
     assert(kThreadNum > 0);
     std::atomic<size_t> total_push_count{0}, total_pop_count{0};
@@ -725,24 +681,6 @@ void perfTunnelCQ(size_t write_count, tll::time::Counter<> &counter, double *ops
 template<int N> void f(size_t write_count, auto &counter)
 {
     LOGD("Number Of Threads: %d", N);
-    // {
-    //     constexpr size_t kN2 = N;
-    //     constexpr size_t kTN = (tll::util::isPowerOf2(kN2) ? kN2 : tll::util::nextPowerOf2(kN2));
-    //     LOGD("thread size: %ld", kTN);
-    //     perfTunnelCQ<N, tll::lf::CCFIFO<char, kTN>>(write_count, counter);
-    // }
-    // {
-    //     constexpr size_t kN2 = N * 8;
-    //     constexpr size_t kTN = (tll::util::isPowerOf2(kN2) ? kN2 : tll::util::nextPowerOf2(kN2));
-    //     LOGD("thread size: %ld", kTN);
-    //     perfTunnelCQ<N, tll::lf::CCFIFO<char, kTN>>(write_count, counter);
-    // }
-    // {
-    //     constexpr size_t kN2 = N * 64;
-    //     constexpr size_t kTN = (tll::util::isPowerOf2(kN2) ? kN2 : tll::util::nextPowerOf2(kN2));
-    //     LOGD("thread size: %ld", kTN);
-    //     perfTunnelCQ<N, tll::lf::CCFIFO<char, kTN>>(write_count, counter);
-    // }
     {
         constexpr size_t kN2 = N * 512;
         constexpr size_t kTN = (tll::util::isPowerOf2(kN2) ? kN2 : tll::util::nextPowerOf2(kN2));
@@ -771,16 +709,16 @@ void perfTunnel()
     std::ofstream ofs{"perfTunnel.dat"};
     // std::ofstream ofs_dq{"perfTunnelDQ.dat"};
     tll::time::Counter<> counter;
-    constexpr size_t kCount = 100000;
+    constexpr size_t kCount = 1000000;
     // const int cores = std::thread::hardware_concurrency();
-    magic<1, PROC_CNT>( [&](auto x)
+    magic<1, NUM_CPU>( [&](auto x)
     {
         LOGD("Number Of Threads: %d", x.value);
         perfTunnelCCB<x.value, tll::lf::CCFIFO<char>>(kCount, counter);
         LOGD("=========================");
     });
 
-    magic<1, PROC_CNT * 8>( [&](auto x)
+    magic<1, NUM_CPU * 4>( [&](auto x)
     {
         double opss[2];
         opss[0] = 0;
@@ -810,14 +748,13 @@ int main(int argc, char **argv)
     // rs = testGuard();
     // LOGD("testGuard: %s", rs?"Passed":"FAILED");
 
-    // rs = testCCB<2, tll::lf::CCFIFO<char>>("lf", 0x1000, 0x100000, counter, opss);
-    // printf("testCCB: %s\n", rs?"Passed":"FAILED");
+    rs = testCCB<NUM_CPU, tll::lf::CCFIFO<char>>("lf", 0x1000, 0x100000, counter, opss);
+    printf("testCCB: %s\n", rs?"Passed":"FAILED");
 
-    // rs = testCQ<2, tll::lf::CCFIFO< std::vector<char> >>(0x1000, opss[0], counter);
-    // printf("testCQ: %s\n", rs?"Passed":"FAILED");
+    rs = testCQ<NUM_CPU, tll::lf::CCFIFO< std::vector<char> >>(0x1000, opss[0], counter);
+    printf("testCQ: %s\n", rs?"Passed":"FAILED");
 
-    // return rs ? 0 : 1;
 
     perfTunnel();
-    return 0;
+    return rs ? 0 : 1;
 }
