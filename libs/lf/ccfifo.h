@@ -457,7 +457,7 @@ private:
 
 
 /// Contiguous Circular FIFO
-template <typename T>
+template <typename T, size_t num_threads=0x400>
 struct CCFIFO
 {
 public:
@@ -542,7 +542,7 @@ public:
     }
 
 private:
-    CCIndex<> cci_;
+    CCIndex<num_threads> cci_;
     std::vector<T> buffer_;
 };
 

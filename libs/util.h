@@ -6,11 +6,8 @@
 #include <cstring>
 #include <cassert>
 #include <string>
+
 #include <sstream>
-
-#include <vector>
-#include <list>
-
 #include <chrono>
 #include <thread>
 #include <atomic>
@@ -19,6 +16,10 @@
 #include <functional>
 #include <algorithm>
 #include <utility>
+
+#include <vector>
+#include <list>
+#include <array>
 
 // #include "timer.h"
 
@@ -63,6 +64,37 @@ template<std::size_t N, typename T>
 constexpr auto make_array(T && value)
 {
     return make_array_impl<T, N>(std::forward<T>(value), std::make_index_sequence<N>{});
+}
+
+template <typename T = std::size_t>
+constexpr T generate_ith_number(const std::size_t index) {
+  static_assert(std::is_integral<T>::value, "T must to be an integral type");
+
+  return index;
+}
+
+template <std::size_t... Is> 
+constexpr auto make_sequence_impl(std::index_sequence<Is...>)
+{
+    return std::index_sequence<generate_ith_number(Is)...>{};
+}
+
+template <std::size_t N> 
+constexpr auto make_sequence()
+{
+    return make_sequence_impl(std::make_index_sequence<N>{});
+}
+
+template <std::size_t... Is>
+constexpr auto make_array_from_sequence_impl(std::index_sequence<Is...>)
+{
+    return std::array<std::size_t, sizeof...(Is)>{Is...};
+}
+
+template <typename Seq>
+constexpr auto make_array_from_sequence(Seq)
+{
+    return make_array_from_sequence_impl(Seq{});
 }
 
 inline std::thread::id tid()
@@ -167,7 +199,7 @@ std::basic_string<T> stringFormat(
 }
 
 template <typename T=size_t>
-T nextPowerOf2(T val)
+constexpr T nextPowerOf2(T val)
 {
     val--;
     val |= val >> 1;
@@ -185,7 +217,7 @@ T nextPowerOf2(T val)
 }
 
 template <typename T=size_t>
-bool isPowerOf2(T val)
+constexpr bool isPowerOf2(T val)
 {
     return (val & (val - 1)) == 0;
 }
