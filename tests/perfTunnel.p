@@ -11,7 +11,7 @@ set terminal png size 1280, 800
 set output sprintf('%s', ARG2)
 
 set title sprintf('max cpu: %s', ARG3)
-set ylabel "operations per second"
+set ylabel "ops (x1000) per second"
 set xlabel "num of threads"
 
 set key reverse Left outside
