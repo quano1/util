@@ -1,5 +1,5 @@
 # Targets
-.PHONY: default clean all test_utils.out benchmark.out
+.PHONY: default clean all test_cc.out benchmark.out
 
 NUM_CPU=`grep -c ^processor /proc/cpuinfo`
 CXX=g++
@@ -9,15 +9,15 @@ LD_FLAGS = -lpthread -fopenmp
 
 default: all
 
-all: test_utils.out benchmark.out
+all: test_cc.out benchmark.out
 
-test_utils.o: test_utils.cc
+test_cc.o: test_cc.cc
 	$(CXX) -c $(CXX_FLAGS) -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" $< -o $@
 
 benchmark.o: benchmark.cc
 	$(CXX) -c $(CXX_FLAGS) -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" $< -o $@
 
-test_utils.out: test_utils.o
+test_cc.out: test_cc.o
 	$(LD) $(LD_FLAGS) $? -o $@
 	objcopy --only-keep-debug $@ $(@:%.out=%.debug)
 	strip -g $@
@@ -34,9 +34,9 @@ benchmark.dat: benchmark.out
 clean:
 	rm -f *.o *.d *.out *.debug
 
-# g++ test_utils.cc -std=c++17 -lpthread -fopenmp -O3 -D NUM_CPU=$(grep -c ^processor /proc/cpuinfo)
+# g++ test_cc.cc -std=c++17 -lpthread -fopenmp -O3 -D NUM_CPU=$(grep -c ^processor /proc/cpuinfo)
 
 plot: benchmark.dat
 	gnuplot -c perfTunnel.p $< $(<:%.dat=%.png) $(NUM_CPU)
 
--include test_utils.d
+-include test_cc.d benchmark.d

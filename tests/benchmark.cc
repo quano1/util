@@ -88,32 +88,32 @@ void benchmark()
     std::ofstream ofs{"benchmark.dat"};
     constexpr size_t kCount = 2000000;
 
-    // magic<1, NUM_CPU>( [&](auto x)
+    // CallFuncInSeq<1, NUM_CPU>( [&](auto x)
     // {
     //     double time[2], ops[2];
     //     tll::lf::CCFIFO<char> fifo{kCount * 2};
     //     auto doPush = [&]() -> bool { return fifo.push([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }, 1); };
     //     auto doPop = [&]() -> bool { return fifo.pop([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }, 1); };
 
-    //     LOGD("Number Of Threads: %d", x.value);
-    //     _benchmark<x.value>(doPush, doPop, kCount, time, ops);
+    //     LOGD("Number Of Threads: %d", index.value);
+    //     _benchmark<index.value>(doPush, doPop, kCount, time, ops);
     //     LOGD("=========================");
     // });
 
-    tll::util::magic<1, NUM_CPU * 8>( [&](auto x)
+    tll::util::CallFuncInSeq<NUM_CPU, 12>( [&](auto index_seq)
     {
         size_t ops[2];
         double time[2];
-        LOGD("Number Of Threads: %d", x.value);
-        ofs << x.value << " ";
-        constexpr size_t kN2 = x.value * 512;
+        LOGD("Number Of Threads: %ld", index_seq.value);
+        ofs << index_seq.value << " ";
+        constexpr size_t kN2 = index_seq.value * 512;
         constexpr size_t kTN = (tll::util::isPowerOf2(kN2) ? kN2 : tll::util::nextPowerOf2(kN2));
 
         {
             tll::lf::CCFIFO<char, kTN> fifo{kCount * 2};
             auto doPush = [&fifo]() -> bool { return fifo.enQueue([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }); };
             auto doPop = [&fifo]() -> bool { return fifo.deQueue([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }); };
-            _benchmark<x.value>(doPush, doPop, kCount, time, ops);
+            _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
             ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
             LOGD("CCFIFO time(s)\tpush:%.3f, pop: %.3f", time[0], time[1]);
         }
@@ -122,17 +122,16 @@ void benchmark()
             boost::lockfree::queue<char> fifo{kCount * 2};
             auto doPush = [&fifo]() -> bool { return fifo.push((char)1); };
             auto doPop = [&fifo]() -> bool { char val; return fifo.pop(val); };
-            _benchmark<x.value>(doPush, doPop, kCount, time, ops);
+            _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
             ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
             LOGD("Boost time(s)\tpush:%.3f, pop: %.3f", time[0], time[1]);
         }
-
 
         {
             tbb::concurrent_queue<char> fifo;
             auto doPush = [&fifo]() -> bool { fifo.push((char)1); return true; };
             auto doPop = [&fifo]() -> bool { char val; return fifo.try_pop(val); };
-            _benchmark<x.value>(doPush, doPop, kCount, time, ops);
+            _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
             ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
             LOGD("TBB time(s)\tpush:%.3f, pop: %.3f", time[0], time[1]);
         }
@@ -141,7 +140,7 @@ void benchmark()
             moodycamel::ConcurrentQueue<char> fifo;
             auto doPush = [&fifo]() -> bool { fifo.enqueue((char)1); return true; };
             auto doPop = [&fifo]() -> bool { char val; return fifo.try_dequeue(val); };
-            _benchmark<x.value>(doPush, doPop, kCount, time, ops);
+            _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
             ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
             LOGD("MC time(s)\tpush:%.3f, pop: %.3f", time[0], time[1]);
         }
@@ -150,7 +149,7 @@ void benchmark()
         //     tll::lf::CCFIFO<char> fifo{kCount * 2};
         //     auto doPush = [&]() -> bool { return fifo.push([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }, 1); };
         //     auto doPop = [&]() -> bool { return fifo.pop([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }, 1); };
-        //     _benchmark<x.value>(doPush, doPop, kCount, time, ops);
+        //     _benchmark<index.value>(doPush, doPop, kCount, time, ops);
         //     ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
         // }
 

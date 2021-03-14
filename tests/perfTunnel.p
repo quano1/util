@@ -14,6 +14,15 @@ set title sprintf('Max CPU %s', ARG3)
 set ylabel "Ops (million)/second"
 set xlabel "Threads"
 
+# set logscale x
+# set xtics scale 0
+# set xtics scale 0 format ""
+map(x) = x
+inv_map(x) = x
+
+set nonlinear x via map(x) inverse inv_map(x)
+
+
 set key reverse Left outside
 set grid
 

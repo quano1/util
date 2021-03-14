@@ -66,23 +66,23 @@ constexpr auto make_array(T && value)
     return make_array_impl<T, N>(std::forward<T>(value), std::make_index_sequence<N>{});
 }
 
-template <typename T = std::size_t>
+template <size_t threshold, typename T = std::size_t>
 constexpr T generate_ith_number(const std::size_t index) {
   static_assert(std::is_integral<T>::value, "T must to be an integral type");
-
-  return index;
+  if(index < threshold) return index + 1;
+  return (index - threshold + 2) * threshold;
 }
 
-template <std::size_t... Is> 
+template <size_t threshold, std::size_t... Is> 
 constexpr auto make_sequence_impl(std::index_sequence<Is...>)
 {
-    return std::index_sequence<generate_ith_number(Is)...>{};
+    return std::index_sequence<generate_ith_number<threshold>(Is)...>{};
 }
 
-template <std::size_t N> 
+template <std::size_t N, size_t threshold> 
 constexpr auto make_sequence()
 {
-    return make_sequence_impl(std::make_index_sequence<N>{});
+    return make_sequence_impl<threshold>(std::make_index_sequence<N>{});
 }
 
 template <std::size_t... Is>
@@ -97,17 +97,17 @@ constexpr auto make_array_from_sequence(Seq)
     return make_array_from_sequence_impl(Seq{});
 }
 
-template<int beg, class F, int... Is>
-constexpr void magic(F f, std::integer_sequence<int, Is...>)
+template<class F, size_t... ints>
+constexpr void CallFuncInSeq(F f, std::integer_sequence<size_t, ints...>)
 {
-    int expand[] = { (f(std::integral_constant<int, beg+Is>{}), void(), 0)... };
-    (void)expand;
+    (f(std::integral_constant<size_t, ints>{}),...);
 }
 
-template<int beg, int end, class F>
-constexpr auto magic(F f)
+template<size_t threshold, size_t end, class F>
+constexpr auto CallFuncInSeq(F f)
 {
-    return magic<beg>(f, std::make_integer_sequence<int, end-beg+1>{});
+    // return CallFuncInSeq<>(f, std::make_integer_sequence<size_t, end>{});
+    return CallFuncInSeq<>(f, make_sequence<end, threshold>());
 }
 
 inline std::thread::id tid()
