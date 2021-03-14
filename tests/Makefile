@@ -1,5 +1,5 @@
 # Targets
-.PHONY: default clean all test_utils.out
+.PHONY: default clean all test_utils.out benchmark.out
 
 NUM_CPU=`grep -c ^processor /proc/cpuinfo`
 CXX=g++
@@ -23,13 +23,13 @@ test_utils.out: test_utils.o
 	strip -g $@
 
 benchmark.out: benchmark.o
-	$(LD) $(LD_FLAGS) $? -o $@
+	$(LD) $(LD_FLAGS) $? -o $@ -ltbb
 	objcopy --only-keep-debug $@ $(@:%.out=%.debug)
 	strip -g $@
 
 benchmark.dat: benchmark.out
 	@echo "Running benchmark..."
-	./$< > run.log
+	./$<
 
 clean:
 	rm -f *.o *.d *.out *.debug
