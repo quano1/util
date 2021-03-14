@@ -20,80 +20,6 @@
 #include "../libs/counter.h"
 #include "../libs/contiguouscircular.h"
 
-template <uint8_t type = 3>
-void dumpStat(const tll::cc::Stat &st, double real_total_time)
-{
-    using namespace std::chrono;
-    LOGD("%.3f", real_total_time);
-    if(type) printf("        count(K) | err(%%)|miss(%%)| try(%%)|comp(%%)| cb(%%) | all(%%)| ops/ms\n");
-
-    if(type & 1)
-    {
-        double time_push_total = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_push_total)).count();
-        double time_push_try = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_push_try)).count();
-        double time_push_complete = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_push_complete)).count();
-        double time_push_try_rate = st.time_push_try*100.f/ st.time_push_total;
-        double time_push_complete_rate = st.time_push_complete*100.f/ st.time_push_total;
-        double time_push_callback_rate = st.time_push_cb*100.f/ st.time_push_total;
-        double time_push_all_rate = (st.time_push_cb + st.time_push_try + st.time_push_complete)*100.f/ st.time_push_total;
-
-
-        double push_total = st.push_total * 1.f / 1000;
-        double push_error_rate = (st.push_error*100.f)/st.push_total;
-        double push_miss_rate = (st.push_miss*100.f)/st.push_total;
-
-        // double push_size = st.push_size*1.f / 0x100000;
-        // size_t push_success = st.push_total - st.push_error;
-        // double push_success_size_one = push_size/push_total;
-        // double push_speed = push_success_size_one;
-
-        // double time_push_one = st.time_push_total*1.f / st.push_total;
-        // double avg_time_push_one = time_push_one / thread_num;
-        // double avg_push_speed = push_size*thread_num/time_push_total;
-
-        double opss = st.push_total * 0.001f / real_total_time;
-
-        printf(" push: %9.3f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %.f\n",
-               push_total, push_error_rate, push_miss_rate
-               , time_push_try_rate, time_push_complete_rate, time_push_callback_rate, time_push_all_rate
-               // avg_time_push_one, avg_push_speed
-               , opss
-               );
-    }
-
-    if(type & 2)
-    {
-        double time_pop_total = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_pop_total)).count();
-        double time_pop_try = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_pop_try)).count();
-        double time_pop_complete = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_pop_complete)).count();
-        double time_pop_try_rate = st.time_pop_try*100.f/ st.time_pop_total;
-        double time_pop_complete_rate = st.time_pop_complete*100.f/ st.time_pop_total;
-        double time_pop_callback_rate = st.time_pop_cb*100.f/ st.time_pop_total;
-        double time_pop_all_rate = (st.time_pop_cb + st.time_pop_try + st.time_pop_complete)*100.f/ st.time_pop_total;
-
-
-        double pop_total = st.pop_total * 1.f / 1000;
-        double pop_error_rate = (st.pop_error*100.f)/st.pop_total;
-        double pop_miss_rate = (st.pop_miss*100.f)/st.pop_total;
-
-        // double pop_size = st.pop_size*1.f / 0x100000;
-        // size_t pop_success = st.pop_total - st.pop_error;
-        // double pop_success_size_one = pop_size/pop_total;
-        // double pop_speed = pop_success_size_one;
-
-        // double time_pop_one = st.time_pop_total*1.f / st.pop_total;
-        // double avg_time_pop_one = time_pop_one / thread_num;
-        // double avg_pop_speed = pop_size*thread_num/time_pop_total;
-        double opss = st.pop_total * 0.001f / real_total_time;
-        printf(" pop : %9.3f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %.f\n",
-               pop_total, pop_error_rate, pop_miss_rate
-               , time_pop_try_rate, time_pop_complete_rate, time_pop_callback_rate, time_pop_all_rate
-               // avg_time_pop_one
-               , opss
-               );
-    }
-}
-
 bool verifyWithTemplate(int &index, const std::vector<char> &sb, const std::vector<char> temp_data [] )
 {
     index=0;
@@ -179,8 +105,9 @@ bool verifyWithTemplate(int &index, const std::vector<char> &sb, const std::vect
 
 
 template <int thread_num, class FIFO>
-bool testCCB(const std::string &fifo_type, size_t fifo_size, size_t write_size, tll::time::Counter<> &counter, size_t *opss=nullptr)
+bool testCCB(const std::string &fifo_type, size_t fifo_size, size_t write_size, double *time, size_t *ops=nullptr)
 {
+    tll::time::Counter<> counter;
     constexpr int omp_thread_num = thread_num * 2;
     FIFO fifo(fifo_size);
     std::vector<char> store_buff[thread_num];
@@ -310,22 +237,23 @@ bool testCCB(const std::string &fifo_type, size_t fifo_size, size_t write_size, 
                 }
             }
         }
-        LOGD("          %d Done", tid);
+        // LOGD("          %d Done", tid);
     }
     counter.elapsed();
+    *time = counter.lastElapsed().count();
 
 #ifdef DUMPER
     dumper.join();
 #endif
 
 // #if (!defined PERF_TUNNEL) || (PERF_TUNNEL==0)
-    printf("FIFO type: %s\n", fifo_type.data());
-    dumpStat<>(fifo.stat(), counter.lastElapsed().count());
+    // printf("FIFO type: %s\n", fifo_type.data());
+    tll::cc::dumpStat<>(fifo.stat(), *time);
 // #endif
 
-    if(opss) {
-        opss[0] = fifo.stat().push_total;
-        opss[1] = fifo.stat().pop_total;
+    if(ops) {
+        ops[0] = fifo.stat().push_total;
+        ops[1] = fifo.stat().pop_total;
     }
     // tll::util::dump(fifo.buffer_.data(), fifo.buffer_.size());
     // for(int i=0; i<thread_num; i++)
@@ -333,7 +261,6 @@ bool testCCB(const std::string &fifo_type, size_t fifo_size, size_t write_size, 
     //     LOGD("%d", i);
     //     tll::util::dump(store_buff[i].data(), store_buff[i].size(), 0, -1, false);
     // }
-
 
     if(total_push_size.load(std::memory_order_relaxed) != total_pop_size.load(std::memory_order_relaxed))
     {
@@ -363,8 +290,9 @@ bool testCCB(const std::string &fifo_type, size_t fifo_size, size_t write_size, 
 }
 
 template <int prod_num, class CQ>
-bool testCQ(size_t capacity, size_t write_count, tll::time::Counter<> &counter, size_t *opss=nullptr)
+bool testCQ(size_t capacity, size_t write_count, double *time, size_t *ops=nullptr)
 {
+    tll::time::Counter<> counter;
     constexpr int kThreadNum = prod_num * 2;
     CQ cq{capacity};
     std::vector<char> store_buff[prod_num];
@@ -436,7 +364,7 @@ bool testCQ(size_t capacity, size_t write_count, tll::time::Counter<> &counter, 
         int tid = omp_get_thread_num();
         if(!(tid & 1))
         {
-            // LOGD("Producer: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
+            LOGD("Producer: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
             int i=0;
             for(;total_push_count.load(std::memory_order_relaxed) < (write_count);)
             {
@@ -469,7 +397,7 @@ bool testCQ(size_t capacity, size_t write_count, tll::time::Counter<> &counter, 
         }
         else if (tid & 1)
         {
-            // LOGD("Consumer: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
+            LOGD("Consumer: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
             size_t pop_size=0;
             for(;w_threads.load(std::memory_order_relaxed) < prod_num /*- (prod_num + 1) / 2*/
                 || total_push_count.load(std::memory_order_relaxed) > total_pop_count.load(std::memory_order_relaxed);)
@@ -504,13 +432,14 @@ bool testCQ(size_t capacity, size_t write_count, tll::time::Counter<> &counter, 
     dumper.join();
 #endif
     // LOGD("%s", cq.dump().data());
+    *time = counter.lastElapsed().count();
 // #if (!defined PERF_TUNNEL) || (PERF_TUNNEL==0)
-    dumpStat<>(cq.stat(), counter.lastElapsed().count());
+    tll::cc::dumpStat<>(cq.stat(), *time);
 // #endif
 
-    if(opss) {
-        opss[0] = cq.stat().push_total;
-        opss[1] = cq.stat().pop_total;
+    if(ops) {
+        ops[0] = cq.stat().push_total;
+        ops[1] = cq.stat().pop_total;
     }
 
     // tll::util::dump(cq.buffer_.data(), cq.buffer_.size());
@@ -552,21 +481,21 @@ int main(int argc, char **argv)
 {
     // size_t write_count = 0x400;
     // if(argc > 1) write_count = std::stoul(argv[1]);
-    tll::time::Counter<> counter;
-    size_t opss[2];
-
+    size_t ops[2];
+    double time;
     bool rs = false;
+    static_assert(NUM_CPU > 0);
     // rs = testTimer();
     // LOGD("testTimer: %s", rs?"Passed":"FAILED");
 
     // rs = testGuard();
     // LOGD("testGuard: %s", rs?"Passed":"FAILED");
 
-    rs = testCCB<NUM_CPU / 2, tll::lf::CCFIFO<char>>("lf", 0x1000, 0x100000, counter, opss);
-    printf("testCCB: %s\n", rs?"Passed":"FAILED");
+    rs = testCCB<(NUM_CPU+1)/2, tll::lf::CCFIFO<char>>("lf", 0x1000, 0x100000, &time, ops);
+    printf("testCCB: %s\t%.3f(s)\n", rs?"Passed":"FAILED", time);
 
-    rs = testCQ<NUM_CPU, tll::lf::CCFIFO< std::vector<char> >>(0x1000, opss[0], counter);
-    printf("testCQ: %s\n", rs?"Passed":"FAILED");
+    rs = testCQ<NUM_CPU * 2, tll::lf::CCFIFO< std::vector<char> >>(0x1000, ops[0], &time);
+    printf("testCQ: %s\t%.3f(s)\n", rs?"Passed":"FAILED", time);
 
     return rs ? 0 : 1;
 }

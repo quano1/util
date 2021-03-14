@@ -97,6 +97,19 @@ constexpr auto make_array_from_sequence(Seq)
     return make_array_from_sequence_impl(Seq{});
 }
 
+template<int beg, class F, int... Is>
+constexpr void magic(F f, std::integer_sequence<int, Is...>)
+{
+    int expand[] = { (f(std::integral_constant<int, beg+Is>{}), void(), 0)... };
+    (void)expand;
+}
+
+template<int beg, int end, class F>
+constexpr auto magic(F f)
+{
+    return magic<beg>(f, std::make_integer_sequence<int, end-beg+1>{});
+}
+
 inline std::thread::id tid()
 {
     static const thread_local auto tid=std::this_thread::get_id();
