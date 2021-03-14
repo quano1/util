@@ -9,7 +9,7 @@
 
 #include <boost/lockfree/queue.hpp>
 #include <tbb/concurrent_queue.h>
-
+#include <concurrentqueue/concurrentqueue.h>
 // #include "../libs/timer.h"
 // #include "../libs/util.h"
 // #include "../libs/log.h"
@@ -188,7 +188,7 @@ void benchmark()
     //     LOGD("=========================");
     // });
 
-    magic<1, NUM_CPU * 4>( [&](auto x)
+    magic<1, NUM_CPU * 8>( [&](auto x)
     {
         double time[2], opss[2];
         LOGD("Number Of Threads: %d", x.value);
@@ -222,6 +222,15 @@ void benchmark()
             _benchmark<x.value>(doPush, doPop, kCount, time, opss);
             ofs << (opss[0] * 0.000001) / time[0] << " " << (opss[1] * 0.000001) / time[1] << " ";
             LOGD("TBB time(s)\tpush:%.3f, pop: %.3f", time[0], time[1]);
+        }
+
+        {
+            moodycamel::ConcurrentQueue<char> fifo;
+            auto doPush = [&fifo]() -> bool { fifo.enqueue((char)1); return true; };
+            auto doPop = [&fifo]() -> bool { char val; return fifo.try_dequeue(val); };
+            _benchmark<x.value>(doPush, doPop, kCount, time, opss);
+            ofs << (opss[0] * 0.000001) / time[0] << " " << (opss[1] * 0.000001) / time[1] << " ";
+            LOGD("MC time(s)\tpush:%.3f, pop: %.3f", time[0], time[1]);
         }
 
         // {
