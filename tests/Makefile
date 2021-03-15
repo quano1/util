@@ -37,6 +37,7 @@ clean:
 # g++ test_cc.cc -std=c++17 -lpthread -fopenmp -O3 -D NUM_CPU=$(grep -c ^processor /proc/cpuinfo)
 
 plot: benchmark.dat
-	gnuplot -c benchmarkplot.gp $< $(<:%.dat=%_`date +'%y%m%d_%H%M'`.png) $(NUM_CPU)
+	gnuplot -c benchmarkplot.gp $< push_`date +'%y%m%d_%H%M'`.png $(NUM_CPU) 'push'
+	gnuplot -c benchmarkplot.gp $< pop_`date +'%y%m%d_%H%M'`.png $(NUM_CPU) 'pop'
 
 -include test_cc.d benchmark.d

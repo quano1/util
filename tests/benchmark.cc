@@ -92,19 +92,7 @@ void benchmark()
     std::ofstream ofs{"benchmark.dat"};
     constexpr size_t kCount = 10000000;
 
-    // CallFuncInSeq<1, NUM_CPU>( [&](auto x)
-    // {
-    //     double time[2], ops[2];
-    //     tll::lf::CCFIFO<char> fifo{kCount * 2};
-    //     auto doPush = [&]() -> bool { return fifo.push([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }, 1); };
-    //     auto doPop = [&]() -> bool { return fifo.pop([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }, 1); };
-
-    //     LOGD("Number Of Threads: %d", index.value);
-    //     _benchmark<index.value>(doPush, doPop, kCount, time, ops);
-    //     LOGD("=========================");
-    // });
-
-    tll::util::CallFuncInSeq<NUM_CPU, 4>( [&](auto index_seq)
+    tll::util::CallFuncInSeq<NUM_CPU, 5>( [&](auto index_seq)
     {
         size_t ops[2];
         double time[2];
@@ -142,7 +130,7 @@ void benchmark()
             auto doPop = [&fifo]() -> bool { NOP_LOOP(PERF_TUNNEL); char val; return fifo.pop(val); };
             _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
             ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
-            LOGD("Boost time\tpush:%.3f, pop: %.3f (s)", time[0], time[1]);
+            LOGD("boost time\tpush:%.3f, pop: %.3f (s)", time[0], time[1]);
         }
 
         {
@@ -151,7 +139,7 @@ void benchmark()
             auto doPop = [&fifo]() -> bool { NOP_LOOP(PERF_TUNNEL); char val; return fifo.try_pop(val); };
             _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
             ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
-            LOGD("TBB time\tpush:%.3f, pop: %.3f (s)", time[0], time[1]);
+            LOGD("tbb time\tpush:%.3f, pop: %.3f (s)", time[0], time[1]);
         }
 
         {
@@ -160,7 +148,7 @@ void benchmark()
             auto doPop = [&fifo]() -> bool { NOP_LOOP(PERF_TUNNEL); char val; return fifo.try_dequeue(val); };
             _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
             ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
-            LOGD("MC time\tpush:%.3f, pop: %.3f (s)", time[0], time[1]);
+            LOGD("moodycamel time\tpush:%.3f, pop: %.3f (s)", time[0], time[1]);
         }
 
         // {
