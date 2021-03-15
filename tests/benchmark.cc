@@ -15,7 +15,7 @@
 // #include "../libs/log.h"
 
 #define ENABLE_PROFILING 0
-#define PERF_TUNNEL 0
+#define PERF_TUNNEL 0x200
 // #define DUMPER
 #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 
@@ -35,7 +35,7 @@ void _benchmark(const auto &doPush, const auto &doPop, size_t write_count, doubl
     counter.start();
     #pragma omp parallel num_threads ( kThreadNum ) shared(doPush)
     {
-        int i=0;
+        // LOGD("Thread: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
         for(;total_push_count.load(std::memory_order_relaxed) < (write_count);)
         {
             // bool ws = fifo.push([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }, 1);
@@ -50,6 +50,7 @@ void _benchmark(const auto &doPush, const auto &doPop, size_t write_count, doubl
             }
         }
 
+        // LOGD("Done");
         w_threads.fetch_add(1, std::memory_order_relaxed);
     }
     counter.elapsed();
@@ -58,6 +59,7 @@ void _benchmark(const auto &doPush, const auto &doPop, size_t write_count, doubl
     counter.start();
     #pragma omp parallel num_threads ( kThreadNum ) shared(doPop)
     {
+        // LOGD("Thread: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
         for(;total_push_count.load(std::memory_order_relaxed) > total_pop_count.load(std::memory_order_relaxed);)
         {
             if(doPop())
@@ -66,16 +68,18 @@ void _benchmark(const auto &doPush, const auto &doPop, size_t write_count, doubl
             }
             else
             {
+                // LOGD("");
                 break;
             }
         }
+        // LOGD("Done");
     }
     counter.elapsed();
     time[1] = counter.lastElapsed().count();
 
     if(total_push_count.load(std::memory_order_relaxed) != total_pop_count.load(std::memory_order_relaxed))
     {
-        printf(" - w:%ld r:%ld\n", total_push_count.load(std::memory_order_relaxed), total_pop_count.load(std::memory_order_relaxed));
+        LOGD(" - w:%ld r:%ld\n", total_push_count.load(std::memory_order_relaxed), total_pop_count.load(std::memory_order_relaxed));
         abort();
     }
 
@@ -86,7 +90,7 @@ void _benchmark(const auto &doPush, const auto &doPop, size_t write_count, doubl
 void benchmark()
 {
     std::ofstream ofs{"benchmark.dat"};
-    constexpr size_t kCount = 2000000;
+    constexpr size_t kCount = 1000000;
 
     // CallFuncInSeq<1, NUM_CPU>( [&](auto x)
     // {
@@ -100,7 +104,7 @@ void benchmark()
     //     LOGD("=========================");
     // });
 
-    tll::util::CallFuncInSeq<NUM_CPU, 12>( [&](auto index_seq)
+    tll::util::CallFuncInSeq<NUM_CPU, 10>( [&](auto index_seq)
     {
         size_t ops[2];
         double time[2];
@@ -120,8 +124,8 @@ void benchmark()
 
         {
             boost::lockfree::queue<char> fifo{kCount * 2};
-            auto doPush = [&fifo]() -> bool { return fifo.push((char)1); };
-            auto doPop = [&fifo]() -> bool { char val; return fifo.pop(val); };
+            auto doPush = [&fifo]() -> bool { NOP_LOOP(PERF_TUNNEL); return fifo.push((char)1); };
+            auto doPop = [&fifo]() -> bool { NOP_LOOP(PERF_TUNNEL); char val; return fifo.pop(val); };
             _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
             ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
             LOGD("Boost time(s)\tpush:%.3f, pop: %.3f", time[0], time[1]);
@@ -129,8 +133,8 @@ void benchmark()
 
         {
             tbb::concurrent_queue<char> fifo;
-            auto doPush = [&fifo]() -> bool { fifo.push((char)1); return true; };
-            auto doPop = [&fifo]() -> bool { char val; return fifo.try_pop(val); };
+            auto doPush = [&fifo]() -> bool { NOP_LOOP(PERF_TUNNEL); fifo.push((char)1); return true; };
+            auto doPop = [&fifo]() -> bool { NOP_LOOP(PERF_TUNNEL); char val; return fifo.try_pop(val); };
             _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
             ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
             LOGD("TBB time(s)\tpush:%.3f, pop: %.3f", time[0], time[1]);
@@ -138,8 +142,8 @@ void benchmark()
 
         {
             moodycamel::ConcurrentQueue<char> fifo;
-            auto doPush = [&fifo]() -> bool { fifo.enqueue((char)1); return true; };
-            auto doPop = [&fifo]() -> bool { char val; return fifo.try_dequeue(val); };
+            auto doPush = [&fifo]() -> bool { NOP_LOOP(PERF_TUNNEL); fifo.enqueue((char)1); return true; };
+            auto doPop = [&fifo]() -> bool { NOP_LOOP(PERF_TUNNEL); char val; return fifo.try_dequeue(val); };
             _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
             ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
             LOGD("MC time(s)\tpush:%.3f, pop: %.3f", time[0], time[1]);
