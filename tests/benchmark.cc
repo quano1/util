@@ -90,7 +90,7 @@ void _benchmark(const auto &doPush, const auto &doPop, size_t write_count, doubl
 void benchmark()
 {
     std::ofstream ofs{"benchmark.dat"};
-    constexpr size_t kCount = 1000000;
+    constexpr size_t kCount = 10000000;
 
     // CallFuncInSeq<1, NUM_CPU>( [&](auto x)
     // {
@@ -104,7 +104,7 @@ void benchmark()
     //     LOGD("=========================");
     // });
 
-    tll::util::CallFuncInSeq<NUM_CPU, 10>( [&](auto index_seq)
+    tll::util::CallFuncInSeq<NUM_CPU, 9>( [&](auto index_seq)
     {
         size_t ops[2];
         double time[2];
