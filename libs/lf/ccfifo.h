@@ -110,7 +110,7 @@ public:
                 }
             }
 
-            if(cons_head_.compare_exchange_strong(cons, next_cons + size, std::memory_order_acquire, std::memory_order_relaxed)) break;
+            if(cons_head_.compare_exchange_weak(cons, next_cons + size, std::memory_order_acquire, std::memory_order_relaxed)) break;
         }
 
         PROF_ADD(stat_pop_total, 1);
@@ -145,7 +145,7 @@ public:
                         if(size <= wrap(cons))
                         {
                             next_prod = next(next_prod);
-                            if(!prod_head_.compare_exchange_strong(prod, next_prod + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                            if(!prod_head_.compare_exchange_weak(prod, next_prod + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
                             break;
                         }
                         else
@@ -158,7 +158,7 @@ public:
                     }
                     else
                     {
-                        if(!prod_head_.compare_exchange_strong(prod, next_prod + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                        if(!prod_head_.compare_exchange_weak(prod, next_prod + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
                         else break;
                     }
                 }
@@ -172,7 +172,7 @@ public:
                         PROF_ADD(stat_push_error, 1);
                         break;
                     }
-                    if(!prod_head_.compare_exchange_strong(prod, next_prod + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                    if(!prod_head_.compare_exchange_weak(prod, next_prod + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
                     else break;
                 }
             }
@@ -274,7 +274,7 @@ public:
                 tail.fetch_add(cnt, std::memory_order_relaxed);
             }
 
-            if(out_index[wrap(idx, num_threads)].compare_exchange_strong(next, kIdx, std::memory_order_relaxed, std::memory_order_relaxed)) break;
+            if(out_index[wrap(idx, num_threads)].compare_exchange_weak(next, kIdx, std::memory_order_relaxed, std::memory_order_relaxed)) break;
 
             // LOGD("M-(%ld:%ld:%ld:%ld) [%ld] {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads), tmp_tail, next, this->to_string(out_index).data());
         }

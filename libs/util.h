@@ -66,23 +66,26 @@ constexpr auto make_array(T && value)
     return make_array_impl<T, N>(std::forward<T>(value), std::make_index_sequence<N>{});
 }
 
-template <size_t threshold, typename T = std::size_t>
+template <size_t end, typename T = std::size_t>
 constexpr T generate_ith_number(const std::size_t index) {
   static_assert(std::is_integral<T>::value, "T must to be an integral type");
-  if(index < threshold) return index + 1;
-  return (index - threshold + 2) * threshold;
+  if(index < end) return index + 1;
+  // return (index - threshold + 2) * threshold;
+  // return (index - threshold + 2) * threshold;
+  // return pow(threshold, index - threshold + 2);
+  return end * pow(2, index - end + 1);
 }
 
-template <size_t threshold, std::size_t... Is> 
+template <size_t end, std::size_t... Is> 
 constexpr auto make_sequence_impl(std::index_sequence<Is...>)
 {
-    return std::index_sequence<generate_ith_number<threshold>(Is)...>{};
+    return std::index_sequence<generate_ith_number<end>(Is)...>{};
 }
 
-template <std::size_t N, size_t threshold> 
+template <std::size_t N, size_t extended> 
 constexpr auto make_sequence()
 {
-    return make_sequence_impl<threshold>(std::make_index_sequence<N>{});
+    return make_sequence_impl<N>(std::make_index_sequence<N + extended>{});
 }
 
 template <std::size_t... Is>
@@ -103,11 +106,11 @@ constexpr void CallFuncInSeq(F f, std::integer_sequence<size_t, ints...>)
     (f(std::integral_constant<size_t, ints>{}),...);
 }
 
-template<size_t threshold, size_t end, class F>
+template<size_t end, size_t extended, class F>
 constexpr auto CallFuncInSeq(F f)
 {
     // return CallFuncInSeq<>(f, std::make_integer_sequence<size_t, end>{});
-    return CallFuncInSeq<>(f, make_sequence<end, threshold>());
+    return CallFuncInSeq<>(f, make_sequence<end, extended>());
 }
 
 inline std::thread::id tid()

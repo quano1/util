@@ -104,7 +104,7 @@ void benchmark()
     //     LOGD("=========================");
     // });
 
-    tll::util::CallFuncInSeq<NUM_CPU, 9>( [&](auto index_seq)
+    tll::util::CallFuncInSeq<NUM_CPU, 4>( [&](auto index_seq)
     {
         size_t ops[2];
         double time[2];
@@ -113,13 +113,27 @@ void benchmark()
         constexpr size_t kN2 = index_seq.value * 512;
         constexpr size_t kTN = (tll::util::isPowerOf2(kN2) ? kN2 : tll::util::nextPowerOf2(kN2));
 
+        if(index_seq.value <= NUM_CPU)
+        {
+            tll::lf::CCFIFO<char, kTN> fifo{kCount * 2};
+            auto doPush = [&fifo]() -> bool { return fifo.push([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); },1); };
+            auto doPop = [&fifo]() -> bool { return fifo.pop([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); },1); };
+            _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
+            ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
+            LOGD("CCFIFO time\tpush:%.3f, pop: %.3f (s)", time[0], time[1]);
+        }
+        else
+        {
+            ofs << 0 << " " << 0 << " ";
+        }
+
         {
             tll::lf::CCFIFO<char, kTN> fifo{kCount * 2};
             auto doPush = [&fifo]() -> bool { return fifo.enQueue([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }); };
             auto doPop = [&fifo]() -> bool { return fifo.deQueue([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }); };
             _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
             ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
-            LOGD("CCFIFO time(s)\tpush:%.3f, pop: %.3f", time[0], time[1]);
+            LOGD("CCFIFO time\tpush:%.3f, pop: %.3f (s)", time[0], time[1]);
         }
 
         {
@@ -128,7 +142,7 @@ void benchmark()
             auto doPop = [&fifo]() -> bool { NOP_LOOP(PERF_TUNNEL); char val; return fifo.pop(val); };
             _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
             ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
-            LOGD("Boost time(s)\tpush:%.3f, pop: %.3f", time[0], time[1]);
+            LOGD("Boost time\tpush:%.3f, pop: %.3f (s)", time[0], time[1]);
         }
 
         {
@@ -137,7 +151,7 @@ void benchmark()
             auto doPop = [&fifo]() -> bool { NOP_LOOP(PERF_TUNNEL); char val; return fifo.try_pop(val); };
             _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
             ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
-            LOGD("TBB time(s)\tpush:%.3f, pop: %.3f", time[0], time[1]);
+            LOGD("TBB time\tpush:%.3f, pop: %.3f (s)", time[0], time[1]);
         }
 
         {
@@ -146,7 +160,7 @@ void benchmark()
             auto doPop = [&fifo]() -> bool { NOP_LOOP(PERF_TUNNEL); char val; return fifo.try_dequeue(val); };
             _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
             ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
-            LOGD("MC time(s)\tpush:%.3f, pop: %.3f", time[0], time[1]);
+            LOGD("MC time\tpush:%.3f, pop: %.3f (s)", time[0], time[1]);
         }
 
         // {
