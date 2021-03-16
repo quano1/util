@@ -24,7 +24,7 @@
 #include "../libs/contiguouscircular.h"
 
 template <int prod_num>
-void _benchmark(const auto &doPush, const auto &doPop, size_t write_count, double *time, size_t *ops)
+void benchmark(const auto &doPush, const auto &doPop, size_t write_count, double *time, size_t *ops)
 {
     constexpr int kThreadNum = prod_num;
     static_assert(kThreadNum > 0);
@@ -87,7 +87,7 @@ void _benchmark(const auto &doPush, const auto &doPop, size_t write_count, doubl
     ops[1] = total_pop_count.load(std::memory_order_relaxed);
 }
 
-void benchmark()
+int main(int argc, char **argv)
 {
     std::ofstream ofs{"benchmark.dat"};
     constexpr size_t kCount = 10000000;
@@ -106,7 +106,7 @@ void benchmark()
             tll::lf::CCFIFO<char, kTN> fifo{kCount * 2};
             auto doPush = [&fifo]() -> bool { return fifo.push([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); },1); };
             auto doPop = [&fifo]() -> bool { return fifo.pop([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); },1); };
-            _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
+            benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
             ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
             LOGD("CCFIFO time\tpush:%.3f, pop: %.3f (s)", time[0], time[1]);
         }
@@ -119,7 +119,7 @@ void benchmark()
             tll::lf::CCFIFO<char, kTN> fifo{kCount * 2};
             auto doPush = [&fifo]() -> bool { return fifo.enQueue([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }); };
             auto doPop = [&fifo]() -> bool { return fifo.deQueue([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }); };
-            _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
+            benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
             ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
             LOGD("CCFIFO time\tpush:%.3f, pop: %.3f (s)", time[0], time[1]);
         }
@@ -128,7 +128,7 @@ void benchmark()
             boost::lockfree::queue<char> fifo{kCount * 2};
             auto doPush = [&fifo]() -> bool { NOP_LOOP(PERF_TUNNEL); return fifo.push((char)1); };
             auto doPop = [&fifo]() -> bool { NOP_LOOP(PERF_TUNNEL); char val; return fifo.pop(val); };
-            _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
+            benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
             ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
             LOGD("boost time\tpush:%.3f, pop: %.3f (s)", time[0], time[1]);
         }
@@ -137,7 +137,7 @@ void benchmark()
             tbb::concurrent_queue<char> fifo;
             auto doPush = [&fifo]() -> bool { NOP_LOOP(PERF_TUNNEL); fifo.push((char)1); return true; };
             auto doPop = [&fifo]() -> bool { NOP_LOOP(PERF_TUNNEL); char val; return fifo.try_pop(val); };
-            _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
+            benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
             ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
             LOGD("tbb time\tpush:%.3f, pop: %.3f (s)", time[0], time[1]);
         }
@@ -146,27 +146,15 @@ void benchmark()
             moodycamel::ConcurrentQueue<char> fifo;
             auto doPush = [&fifo]() -> bool { NOP_LOOP(PERF_TUNNEL); fifo.enqueue((char)1); return true; };
             auto doPop = [&fifo]() -> bool { NOP_LOOP(PERF_TUNNEL); char val; return fifo.try_dequeue(val); };
-            _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
+            benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
             ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
             LOGD("moodycamel time\tpush:%.3f, pop: %.3f (s)", time[0], time[1]);
         }
-
-        // {
-        //     tll::lf::CCFIFO<char> fifo{kCount * 2};
-        //     auto doPush = [&]() -> bool { return fifo.push([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }, 1); };
-        //     auto doPop = [&]() -> bool { return fifo.pop([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); }, 1); };
-        //     _benchmark<index.value>(doPush, doPop, kCount, time, ops);
-        //     ofs << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
-        // }
 
         ofs << "\n";
         LOGD("=========================");
     });
     ofs.flush();
-}
 
-int main(int argc, char **argv)
-{
-    benchmark();
     return 0;
 }
