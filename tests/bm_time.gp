@@ -11,8 +11,8 @@ set terminal png size 1280, 800
 set output sprintf('%s', ARG2)
 
 set title sprintf("push/pop 1 byte 10 million times\nLower is better")
-set ylabel "Time to complete (second)"
-set xlabel sprintf("Number Of Threads (Max CPU: %s)", ARG3)
+set ylabel "Time Of Execution (second)"
+set xlabel sprintf("Number Of Threads/2 (Max CPU: %s)", ARG3)
 
 # set logscale x
 # set xtics scale 0
