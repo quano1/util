@@ -13,6 +13,7 @@
 
 #define ENABLE_PROFILING 1
 #define PERF_TUNNEL 0
+// #define NO_ALLOCATE
 #define DUMPER
 #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 

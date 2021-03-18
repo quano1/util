@@ -27,7 +27,7 @@ benchmark.out: benchmark.o
 	objcopy --only-keep-debug $@ $(@:%.out=%.debug)
 	strip -g $@
 
-benchmark.dat: benchmark.out
+bm_throughput.dat: benchmark.out
 	@echo "Running benchmark..."
 	./$<
 
@@ -36,8 +36,9 @@ clean:
 
 # g++ test_cc.cc -std=c++17 -lpthread -fopenmp -O3 -D NUM_CPU=$(grep -c ^processor /proc/cpuinfo)
 
-plot: benchmark.dat
-	gnuplot -c benchmarkplot.gp $< push_`date +'%y%m%d_%H%M'`.png $(NUM_CPU) 'push'
-	gnuplot -c benchmarkplot.gp $< pop_`date +'%y%m%d_%H%M'`.png $(NUM_CPU) 'pop'
+plot: bm_throughput.dat
+	gnuplot -c bm_throughput.gp bm_throughput.dat push_`date +'%y%m%d_%H%M'`.png $(NUM_CPU) 'push'
+	gnuplot -c bm_throughput.gp bm_throughput.dat pop_`date +'%y%m%d_%H%M'`.png $(NUM_CPU) 'pop'
+	gnuplot -c bm_time.gp bm_time.dat pp_`date +'%y%m%d_%H%M'`.png $(NUM_CPU)
 
 -include test_cc.d benchmark.d

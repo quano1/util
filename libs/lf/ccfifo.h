@@ -466,7 +466,7 @@ public:
     inline void reserve(size_t size)
     {
         cci_.reserve(size);
-#if (!defined PERF_TUNNEL) || (PERF_TUNNEL==0)
+#if (!defined NO_ALLOCATE)
         buffer_.resize(cci_.capacity());
 #endif
     }
@@ -526,7 +526,7 @@ public:
         return &buffer_[wrap(id)];
     }
 
-private:
+// private:
     CCIndex<num_threads> cci_;
     std::vector<T> buffer_;
 };

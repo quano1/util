@@ -10,9 +10,9 @@
 set terminal png size 1280, 800
 set output sprintf('%s', ARG2)
 
-set title sprintf("%s 1 byte 10 million times\nMax CPU %s", ARG4, ARG3)
-set ylabel "Ops(million)/second"
-set xlabel "Threads"
+set title sprintf("%s 1 byte 10 million times\nHigher is better", ARG4)
+set ylabel "Throughput (millions of operation/second)"
+set xlabel sprintf("Number Of Threads (Max CPU: %s)", ARG3)
 
 # set logscale x
 # set xtics scale 0
@@ -47,17 +47,15 @@ set style line 9 lc rgb '#f57c00' pt 6 ps 1 lt 1 lw 2
 set style line 10 lc rgb '#ffad42' pt 6 ps 1 lt 1 lw 2
 
 if(ARG4 eq "push") {
-    plot sprintf('%s', ARG1) u 1:2:xtic(1) t "CCFIFO push" w lp ls 1, \
-          ""      u 1:4:xtic(1) t "CCFIFO enQ" w lp ls 3, \
-          ""      u 1:6:xtic(1) t "boost push" w lp ls 5, \
-          ""      u 1:8:xtic(1) t "tbb push" w lp ls 7, \
-          ""      u 1:10:xtic(1) t "moodycamel push" w lp ls 9
+    plot sprintf('%s', ARG1) u 1:2:xtic(1) t "CCFIFO" w lp ls 1, \
+          ""      u 1:4:xtic(1) t "boost" w lp ls 3, \
+          ""      u 1:6:xtic(1) t "tbb" w lp ls 5, \
+          ""      u 1:8:xtic(1) t "moodycamel" w lp ls 7
 }
 else {
-    plot sprintf('%s', ARG1) u 1:3:xtic(1) t "CCFIFO pop" w lp ls 1, \
-          ""      u 1:5:xtic(1) t "CCFIFO deQ" w lp ls 3, \
-          ""      u 1:7:xtic(1) t "boost pop" w lp ls 5, \
-          ""      u 1:9:xtic(1) t "tbb pop" w lp ls 7, \
-          ""      u 1:11:xtic(1) t "moodycamel pop" w lp ls 9
+    plot sprintf('%s', ARG1) u 1:3:xtic(1) t "CCFIFO" w lp ls 1, \
+          ""      u 1:5:xtic(1) t "boost" w lp ls 3, \
+          ""      u 1:7:xtic(1) t "tbb" w lp ls 5, \
+          ""      u 1:9:xtic(1) t "moodycamel" w lp ls 7
 }
 
