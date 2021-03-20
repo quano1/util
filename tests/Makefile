@@ -4,7 +4,7 @@
 NUM_CPU=`grep -c ^processor /proc/cpuinfo`
 CXX=g++
 LD=g++
-CXX_FLAGS = -std=c++17 -fopenmp -O3 -DNUM_CPU=$(NUM_CPU) -g
+CXX_FLAGS = -std=c++17 -fopenmp -O3 -DNUM_CPU=$(NUM_CPU) -g -rdynamic
 LD_FLAGS = -lpthread -fopenmp
 
 default: all
@@ -20,12 +20,12 @@ benchmark.o: benchmark.cc
 test_cc.out: test_cc.o
 	$(LD) $(LD_FLAGS) $? -o $@
 	objcopy --only-keep-debug $@ $(@:%.out=%.debug)
-	strip -g $@
+# 	strip -g $@
 
 benchmark.out: benchmark.o
 	$(LD) $(LD_FLAGS) $? -o $@ -ltbb
 	objcopy --only-keep-debug $@ $(@:%.out=%.debug)
-	strip -g $@
+# 	strip -g $@
 
 bm_throughput.dat: benchmark.out
 	@echo "Running benchmark..."

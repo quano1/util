@@ -33,6 +33,12 @@ public:
         reserve(size);
     }
 
+    ~CCIndex()
+    {
+        delete prod_out_;
+        delete cons_out_;
+    }
+
     inline auto dump() const
     {
         return util::stringFormat("sz:%ld ph:%ld pt:%ld wm:%ld ch:%ld ct:%ld", capacity(), 
@@ -48,7 +54,8 @@ public:
         prod_tail_.store(capacity_,std::memory_order_relaxed);
         cons_tail_.store(capacity_,std::memory_order_relaxed);
         water_mark_.store(0,std::memory_order_relaxed);
-
+        prod_out_ = new std::atomic<size_t> [num_threads];
+        cons_out_ = new std::atomic<size_t> [num_threads];
         for(int i=0; i<num_threads; i++)
         {
             prod_out_[i].store(0, std::memory_order_relaxed);
@@ -425,8 +432,8 @@ private:
     }
 
     std::atomic<size_t> prod_head_{0}, prod_tail_{0}, water_mark_{0}, cons_head_{0}, cons_tail_{0};
-    std::atomic<size_t> prod_in_[num_threads], cons_in_[num_threads];
-    std::atomic<size_t> prod_out_[num_threads], cons_out_[num_threads];
+    // std::atomic<size_t> *prod_in_[num_threads], *cons_in_[num_threads];
+    std::atomic<size_t> *prod_out_, *cons_out_;
     size_t capacity_;
     /// Statistic
     std::atomic<size_t> stat_push_size{0}, stat_pop_size{0};
