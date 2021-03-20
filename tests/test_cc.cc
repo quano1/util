@@ -495,7 +495,7 @@ int main(int argc, char **argv)
     rs = testCCB<(NUM_CPU+1)/2, tll::lf::CCFIFO<char>>("lf", 0x1000, 0x100000, &time, ops);
     printf("testCCB: %s\t%.3f(s)\n", rs?"Passed":"FAILED", time);
 
-    rs = testCQ<NUM_CPU * 2, tll::lf::CCFIFO< std::vector<char> >>(0x1000, ops[0], &time);
+    rs = testCQ<NUM_CPU, tll::lf::CCFIFO< std::vector<char>, 0x1000 >>(0x1000, ops[0], &time);
     printf("testCQ: %s\t%.3f(s)\n", rs?"Passed":"FAILED", time);
 
     return rs ? 0 : 1;

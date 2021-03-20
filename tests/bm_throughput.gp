@@ -10,9 +10,9 @@
 set terminal png size 1280, 800
 set output sprintf('%s', ARG2)
 
-set title sprintf("%s 1 byte 10 million times\nHigher is better", ARG4)
-set ylabel "Throughput (millions of operation/second)"
-set xlabel sprintf("Number Of Threads (Max CPU: %s)", ARG3)
+set title sprintf("%s 1 byte contigously\nLower is better", ARG4)
+set ylabel "Avg time for one thread to complete the test (ms)"
+set xlabel sprintf("Number of threads (Max CPU: %s)", ARG3)
 
 # set logscale x
 # set xtics scale 0
@@ -22,8 +22,17 @@ set xlabel sprintf("Number Of Threads (Max CPU: %s)", ARG3)
 
 # set nonlinear x via map(x) inverse inv_map(x)
 
-f(x) = x <= ARG3 ? x : log(x)/log(2) + ARG3 - 2
-g(x) = x <= ARG3 ? x : 2**(x - ARG3 + 2)
+arg3 = ARG3
+
+f(x) = (x == 1) ? 1. : (x == arg3/2) ? 2. : (x == arg3) ? 3. : log(x/arg3)/log(2) + 3
+g(x) = (x == 1) ? 1. : (x == 2) ? (arg3/2) : (x == 3) ? arg3 : ((2**(x - 3)) * arg3)
+# arg3 = ARG3 / 2
+# f(x) = x < arg3 ? x : x == 4 ? 3. : log(x)/log(2) + arg3 - 2
+# g(x) = x <= arg3 ? x : 2**(x - arg3 + 2)
+# f(x) = x == 1 ? 0 : x == 2 ? 1 : x == 4 ? 2 : x == 8 ? 3 : 4
+# g(x) = x == 0 ? 1 : x == 1 ? 2 : x == 2 ? 4 : x == 3 ? 8 : 16
+
+# 2**(x - arg3 + 2)
 set nonlinear x via f(x) inv g(x)
 
 # set x2tics

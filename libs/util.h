@@ -52,6 +52,31 @@ namespace tll{ namespace util{
 // using this_tid std::this_thread::get_id();
 template <class T> class Guard;
 
+
+template <typename T=size_t>
+constexpr T nextPowerOf2(T val)
+{
+    val--;
+    val |= val >> 1;
+    val |= val >> 2;
+    if(sizeof(T) >= 1)
+        val |= val >> 4;
+    if(sizeof(T) >= 2)
+        val |= val >> 8;
+    if(sizeof(T) >= 4)
+        val |= val >> 16;
+    if(sizeof(T) > 4)
+        val |= val >> 32;
+    val++;
+    return val;
+}
+
+template <typename T=size_t>
+constexpr bool isPowerOf2(T val)
+{
+    return (val & (val - 1)) == 0;
+}
+
 template<typename T, std::size_t N, std::size_t... I>
 constexpr auto make_array_impl(T && value, std::index_sequence<I...>)
 {
@@ -68,12 +93,13 @@ constexpr auto make_array(T && value)
 
 template <size_t end, typename T = std::size_t>
 constexpr T generate_ith_number(const std::size_t index) {
-  static_assert(std::is_integral<T>::value, "T must to be an integral type");
-  if(index < end) return index + 1;
-  // return (index - threshold + 2) * threshold;
-  // return (index - threshold + 2) * threshold;
-  // return pow(threshold, index - threshold + 2);
-  return end * pow(2, index - end + 1);
+    static_assert(std::is_integral<T>::value, "T must to be an integral type");
+    if(index == 0) return 1;
+    if(index == 1) return end/2;
+    if(index == 2) return end;
+    // if(index <= (end / 2)) return (index * 2);
+    
+    return end * pow(2, index - 2);
 }
 
 template <size_t end, std::size_t... Is> 
@@ -85,7 +111,7 @@ constexpr auto make_sequence_impl(std::index_sequence<Is...>)
 template <std::size_t N, size_t extended> 
 constexpr auto make_sequence()
 {
-    return make_sequence_impl<N>(std::make_index_sequence<N + extended>{});
+    return make_sequence_impl<N>(std::make_index_sequence<3 + extended>{});
 }
 
 template <std::size_t... Is>
@@ -214,29 +240,6 @@ std::basic_string<T> stringFormat(
     return buffer;
 }
 
-template <typename T=size_t>
-constexpr T nextPowerOf2(T val)
-{
-    val--;
-    val |= val >> 1;
-    val |= val >> 2;
-    if(sizeof(T) >= 1)
-        val |= val >> 4;
-    if(sizeof(T) >= 2)
-        val |= val >> 8;
-    if(sizeof(T) >= 4)
-        val |= val >> 16;
-    if(sizeof(T) > 4)
-        val |= val >> 32;
-    val++;
-    return val;
-}
-
-template <typename T=size_t>
-constexpr bool isPowerOf2(T val)
-{
-    return (val & (val - 1)) == 0;
-}
 
 // inline int countConsZero(uint64_t v)
 // {

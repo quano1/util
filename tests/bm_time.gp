@@ -10,9 +10,9 @@
 set terminal png size 1280, 800
 set output sprintf('%s', ARG2)
 
-set title sprintf("push/pop 1 byte 10 million times\nLower is better")
-set ylabel "Time Of Execution (second)"
-set xlabel sprintf("Number Of Threads/2 (Max CPU: %s)", ARG3)
+set title sprintf("push and pop 1 byte contiguously\nLower is better")
+set ylabel "Avg time for one thread to complete the test (ms)"
+set xlabel sprintf("Number of threads (Max CPU: %s)", ARG3)
 
 # set logscale x
 # set xtics scale 0
@@ -21,9 +21,9 @@ set xlabel sprintf("Number Of Threads/2 (Max CPU: %s)", ARG3)
 # inv_map(x) = x
 
 # set nonlinear x via map(x) inverse inv_map(x)
-
-f(x) = x <= ARG3 ? x : log(x)/log(2) + ARG3 - 2
-g(x) = x <= ARG3 ? x : 2**(x - ARG3 + 2)
+arg3 = ARG3 / 2
+f(x) = (x == 1) ? 1. : (x == arg3/2) ? 2. : (x == arg3) ? 3. : log(x/arg3)/log(2) + 3
+g(x) = (x == 1) ? 1. : (x == 2) ? (arg3/2) : (x == 3) ? arg3 : ((2**(x - 3)) * arg3)
 set nonlinear x via f(x) inv g(x)
 
 # set x2tics
