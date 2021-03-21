@@ -10,8 +10,8 @@
 set terminal png size 1280, 800
 set output sprintf('%s', ARG2)
 
-set title sprintf("push and pop 1 byte contiguously\nLower is better")
-set ylabel "Avg time for one thread to complete the test (ms)"
+set title sprintf("push and pop 1 byte simultaneously\nLower is better")
+set ylabel "Avg time to complete the test (ms)"
 set xlabel sprintf("Number of threads (Max CPU: %s)", ARG3)
 
 # set logscale x

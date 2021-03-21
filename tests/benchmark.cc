@@ -133,16 +133,28 @@ int main(int argc, char **argv)
 
     tll::util::CallFuncInSeq<NUM_CPU, 3>( [&](auto index_seq)
     {
-        constexpr size_t kCount = 1000000 * index_seq.value;
-        // if(index_seq.value <= 64) return;
+        // if(index_seq.value > 2) return;
+        constexpr size_t kCount = 500000 * index_seq.value;
         size_t ops[3];
         double time[3];
-        LOGD("Number Of Threads: %ld, count: %ld", index_seq.value, kCount);
+        LOGD("Number Of Threads: %ld, total count: %ld", index_seq.value, kCount);
         ofs_throughput << index_seq.value << " ";
         ofs_time << index_seq.value * 2 << " ";
         // constexpr size_t kN2 = 0x800000;
         constexpr size_t kTN = (tll::util::isPowerOf2(kCount) ? kCount : tll::util::nextPowerOf2(kCount));
         // LOGD("%lx", kTN);
+
+        // {
+        //     tbb::concurrent_queue<char> fifo;
+        //     auto doPush = [&fifo]() -> bool { NOP_LOOP(LOOP_COUNT); fifo.push((char)1); return true; };
+        //     auto doPop = [&fifo]() -> bool { NOP_LOOP(LOOP_COUNT); char val; return fifo.try_pop(val); };
+            
+        //     std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        //     benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
+        //     ofs_throughput << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
+        //     ofs_time << time[2] << " ";
+        //     LOGD("tbb time\tpush:%.3f, pop: %.3f, pp: %.3f (ms)", time[0]*1000/ops[0], time[1]*1000/ops[1], time[2]*1000/ops[2]);
+        // }
 
         // if(index_seq.value <= NUM_CPU)
         // {
@@ -167,14 +179,12 @@ int main(int argc, char **argv)
             
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
-            // ofs_throughput << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
-            // ofs_time << time[2] << " ";
-            time[0]/=index_seq.value;
-            time[1]/=index_seq.value;
-            time[2]/=index_seq.value;
-            ofs_throughput << (time[0]) << " " << (time[1]) << " ";
-            ofs_time << (time[2]) << " ";
-            LOGD("CCFIFO\tpush:%.3f, pop: %.3f, pp: %.3f (ms)", time[0], time[1], time[2]);
+            
+            double avg_time[3] = {time[0]/index_seq.value, time[1]/index_seq.value, time[2]/index_seq.value};
+            double throughput[3] = {time[0]*1000/ops[0], time[1]*1000/ops[1], time[2]*1000/ops[2]};
+            ofs_throughput << (throughput[0]) << " " << (throughput[1]) << " ";
+            ofs_time << (avg_time[2]) << " ";
+            LOGD("CCFIFO\t[0]:%.3f(us)/%.3f(ms), [1]:%.3f(us)/%.3f(ms), [2]:%.3f(us)/%.3f(ms)", throughput[0], avg_time[0], throughput[1], avg_time[1], throughput[2], avg_time[2]);
         }
         {
             boost::lockfree::queue<char> fifo{kCount * 2};
@@ -183,28 +193,13 @@ int main(int argc, char **argv)
             
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
-            // ofs_throughput << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
-            // ofs_time << time[2] << " ";
-            time[0]/=index_seq.value;
-            time[1]/=index_seq.value;
-            time[2]/=index_seq.value;
-            ofs_throughput << (time[0]) << " " << (time[1]) << " ";
-            ofs_time << (time[2]) << " ";
-            LOGD("boost\tpush:%.3f, pop: %.3f, pp: %.3f (ms)", time[0], time[1], time[2]);
-        }
-
-        // {
-        //     tbb::concurrent_queue<char> fifo;
-        //     auto doPush = [&fifo]() -> bool { NOP_LOOP(LOOP_COUNT); fifo.push((char)1); return true; };
-        //     auto doPop = [&fifo]() -> bool { NOP_LOOP(LOOP_COUNT); char val; return fifo.try_pop(val); };
             
-        //     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        //     benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
-        //     ofs_throughput << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
-        //     ofs_time << time[2] << " ";
-        //     LOGD("tbb time\tpush:%.3f, pop: %.3f, pp: %.3f (ms)", time[0], time[1], time[2]);
-        // }
-
+            double avg_time[3] = {time[0]/index_seq.value, time[1]/index_seq.value, time[2]/index_seq.value};
+            double throughput[3] = {time[0]*1000/ops[0], time[1]*1000/ops[1], time[2]*1000/ops[2]};
+            ofs_throughput << (throughput[0]) << " " << (throughput[1]) << " ";
+            ofs_time << (avg_time[2]) << " ";
+            LOGD("boost\t[0]:%.3f(us)/%.3f(ms), [1]:%.3f(us)/%.3f(ms), [2]:%.3f(us)/%.3f(ms)", throughput[0], avg_time[0], throughput[1], avg_time[1], throughput[2], avg_time[2]);
+        }
         {
             moodycamel::ConcurrentQueue<char> fifo{kCount * 2};
             auto doPush = [&fifo]() -> bool { NOP_LOOP(LOOP_COUNT); fifo.enqueue((char)1); return true; };
@@ -212,14 +207,12 @@ int main(int argc, char **argv)
 
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
-            // ofs_throughput << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
-            // ofs_time << time[2] << " ";
-            time[0]/=index_seq.value;
-            time[1]/=index_seq.value;
-            time[2]/=index_seq.value;
-            ofs_throughput << (time[0]) << " " << (time[1]) << " ";
-            ofs_time << (time[2]) << " ";
-            LOGD("MoodyC\tpush:%.3f, pop: %.3f, pp: %.3f (ms)", time[0], time[1], time[2]);
+
+            double avg_time[3] = {time[0]/index_seq.value, time[1]/index_seq.value, time[2]/index_seq.value};
+            double throughput[3] = {time[0]*1000/ops[0], time[1]*1000/ops[1], time[2]*1000/ops[2]};
+            ofs_throughput << (throughput[0]) << " " << (throughput[1]) << " ";
+            ofs_time << (avg_time[2]) << " ";
+            LOGD("MoodyC\t[0]:%.3f(us)/%.3f(ms), [1]:%.3f(us)/%.3f(ms), [2]:%.3f(us)/%.3f(ms)", throughput[0], avg_time[0], throughput[1], avg_time[1], throughput[2], avg_time[2]);
         }
 
         ofs_throughput << "\n";

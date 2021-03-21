@@ -49,10 +49,10 @@ public:
 
     inline void reset()
     {
-        prod_head_.store(capacity_,std::memory_order_relaxed);
-        cons_head_.store(capacity_,std::memory_order_relaxed);
-        prod_tail_.store(capacity_,std::memory_order_relaxed);
-        cons_tail_.store(capacity_,std::memory_order_relaxed);
+        prod_head_.store(0,std::memory_order_relaxed);
+        cons_head_.store(0,std::memory_order_relaxed);
+        prod_tail_.store(0,std::memory_order_relaxed);
+        cons_tail_.store(0,std::memory_order_relaxed);
         water_mark_.store(0,std::memory_order_relaxed);
         prod_out_ = new std::atomic<size_t> [num_threads];
         cons_out_ = new std::atomic<size_t> [num_threads];
@@ -258,32 +258,32 @@ public:
 
         for(;;)
         {
-            size_t next = out_index[wrap(idx, num_threads)].load(std::memory_order_relaxed);
-            size_t tmp_tail = tail.load(std::memory_order_relaxed);
-            // LOGD(">(%ld:%ld:%ld:%ld) [%ld] {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads), tmp_tail, next, this->to_string(out_index).data());
-            if(tmp_tail > idx)
+            size_t next_idx = out_index[wrap(idx, num_threads)].load(std::memory_order_relaxed);
+            size_t crr_tail = tail.load(std::memory_order_relaxed);
+            // LOGD(">(%ld:%ld:%ld:%ld) [%ld] {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads), crr_tail, next_idx, this->to_string(out_index).data());
+            if(crr_tail > idx)
             {
-                // LOGD("E-(%ld:%ld:%ld:%ld) [%ld] {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads), tmp_tail, next, this->to_string(out_index).data());
+                // LOGD("E-(%ld:%ld:%ld:%ld) [%ld] {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads), crr_tail, next_idx, this->to_string(out_index).data());
                 break;
             }
-            else if (tmp_tail == idx)
+            else if (crr_tail == idx)
             {
                 size_t cnt = 1;
-                next = out_index[wrap(idx + cnt, num_threads)].load(std::memory_order_relaxed);
-                for(; (cnt<num_threads) && (next>tmp_tail); cnt++)
+                next_idx = out_index[wrap(idx + cnt, num_threads)].load(std::memory_order_relaxed);
+                for(; (cnt<num_threads) && (next_idx>crr_tail); cnt++)
                 {
-                    next = out_index[wrap(idx + cnt + 1, num_threads)].load(std::memory_order_relaxed);
+                    next_idx = out_index[wrap(idx + cnt + 1, num_threads)].load(std::memory_order_relaxed);
                 }
 
                 idx += cnt;
-                // LOGD("=-(%ld:%ld:%ld:%ld) [%ld] +%ld {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads), tmp_tail, cnt, next, this->to_string(out_index).data());
-                // tail.store(tmp_tail + cnt);
+                // LOGD("=-(%ld:%ld:%ld:%ld) [%ld] +%ld {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads), crr_tail, cnt, next_idx, this->to_string(out_index).data());
+                // tail.store(crr_tail + cnt);
                 tail.fetch_add(cnt, std::memory_order_relaxed);
             }
 
-            if(out_index[wrap(idx, num_threads)].compare_exchange_weak(next, kIdx, std::memory_order_relaxed, std::memory_order_relaxed)) break;
+            if(out_index[wrap(idx, num_threads)].compare_exchange_weak(next_idx, kIdx, std::memory_order_relaxed, std::memory_order_relaxed)) break;
 
-            // LOGD("M-(%ld:%ld:%ld:%ld) [%ld] {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads), tmp_tail, next, this->to_string(out_index).data());
+            // LOGD("M-(%ld:%ld:%ld:%ld) [%ld] {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads), crr_tail, next_idx, this->to_string(out_index).data());
         }
 
         return true;

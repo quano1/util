@@ -11,7 +11,7 @@ set terminal png size 1280, 800
 set output sprintf('%s', ARG2)
 
 set title sprintf("%s 1 byte contigously\nLower is better", ARG4)
-set ylabel "Avg time for one thread to complete the test (ms)"
+set ylabel "Avg time of one operation (us)"
 set xlabel sprintf("Number of threads (Max CPU: %s)", ARG3)
 
 # set logscale x
