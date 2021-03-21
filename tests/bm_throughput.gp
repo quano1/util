@@ -24,8 +24,11 @@ set xlabel sprintf("Number of threads (Max CPU: %s)", ARG3)
 
 arg3 = ARG3
 
-f(x) = (x == 1) ? 1. : (x == arg3/2) ? 2. : (x == arg3) ? 3. : log(x/arg3)/log(2) + 3
-g(x) = (x == 1) ? 1. : (x == 2) ? (arg3/2) : (x == 3) ? arg3 : ((2**(x - 3)) * arg3)
+# f(x) = (x == 1) ? 0. : (x == arg3/2) ? 1. : (x == arg3) ? 2. : (log(x/arg3)/log(2))+2
+# g(x) = (x == 0) ? 1. : (x == 1) ? (arg3/2) : (x == 2) ? arg3 : ((2**(x - 2)) * arg3)
+
+f(x) = (x == 1) ? 0. : (x == arg3/2) ? 1. : x/arg3 + 1
+g(x) = (x == 0) ? 1. : (x == 1) ? (arg3/2) : (x - 1) * arg3
 # arg3 = ARG3 / 2
 # f(x) = x < arg3 ? x : x == 4 ? 3. : log(x)/log(2) + arg3 - 2
 # g(x) = x <= arg3 ? x : 2**(x - arg3 + 2)

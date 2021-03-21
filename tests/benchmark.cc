@@ -131,7 +131,7 @@ int main(int argc, char **argv)
     std::ofstream ofs_throughput{"bm_throughput.dat"};
     std::ofstream ofs_time{"bm_time.dat"};
 
-    tll::util::CallFuncInSeq<NUM_CPU, 3>( [&](auto index_seq)
+    tll::util::CallFuncInSeq<NUM_CPU, 7>( [&](auto index_seq)
     {
         // if(index_seq.value > 2) return;
         constexpr size_t kCount = 500000 * index_seq.value;

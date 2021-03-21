@@ -96,10 +96,10 @@ constexpr T generate_ith_number(const std::size_t index) {
     static_assert(std::is_integral<T>::value, "T must to be an integral type");
     if(index == 0) return 1;
     if(index == 1) return end/2;
-    if(index == 2) return end;
+    // if(index == 2) return end;
     // if(index <= (end / 2)) return (index * 2);
-    
-    return end * pow(2, index - 2);
+    return end * (index - 1);
+    // return end * pow(2, index - 2);
 }
 
 template <size_t end, std::size_t... Is> 

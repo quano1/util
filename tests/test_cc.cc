@@ -14,7 +14,7 @@
 #define ENABLE_PROFILING 1
 #define PERF_TUNNEL 0
 // #define NO_ALLOCATE
-#define DUMPER
+// #define DUMPER
 #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 
 #include "../libs/util.h"
@@ -181,7 +181,7 @@ bool testCCB(const std::string &fifo_type, size_t fifo_size, size_t write_size, 
         int tid = omp_get_thread_num();
         if(!(tid & 1))
         {
-            LOGD("Producer: %d, cpu: %d", tid, sched_getcpu());
+            // LOGD("Producer: %d, cpu: %d", tid, sched_getcpu());
             int i=0;
             for(;total_push_size.load(std::memory_order_relaxed) < (write_size);)
             {
@@ -212,7 +212,7 @@ bool testCCB(const std::string &fifo_type, size_t fifo_size, size_t write_size, 
         }
         else if (tid & 1)
         {
-            LOGD("Consumer: %d, cpu: %d", tid, sched_getcpu());
+            // LOGD("Consumer: %d, cpu: %d", tid, sched_getcpu());
             size_t pop_size=0;
             for(;w_threads.load(std::memory_order_relaxed) < thread_num /*- (thread_num + 1) / 2*/
                 || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
@@ -365,7 +365,7 @@ bool testCQ(size_t capacity, size_t write_count, double *time, size_t *ops=nullp
         int tid = omp_get_thread_num();
         if(!(tid & 1))
         {
-            LOGD("Producer: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
+            // LOGD("Producer: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
             int i=0;
             for(;total_push_count.load(std::memory_order_relaxed) < (write_count);)
             {
@@ -398,7 +398,7 @@ bool testCQ(size_t capacity, size_t write_count, double *time, size_t *ops=nullp
         }
         else if (tid & 1)
         {
-            LOGD("Consumer: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
+            // LOGD("Consumer: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
             size_t pop_size=0;
             for(;w_threads.load(std::memory_order_relaxed) < prod_num /*- (prod_num + 1) / 2*/
                 || total_push_count.load(std::memory_order_relaxed) > total_pop_count.load(std::memory_order_relaxed);)
@@ -492,8 +492,8 @@ int main(int argc, char **argv)
     // rs = testGuard();
     // LOGD("testGuard: %s", rs?"Passed":"FAILED");
 
-    rs = testCCB<(NUM_CPU+1)/2, tll::lf::CCFIFO<char>>("lf", 0x1000, 0x100000, &time, ops);
-    printf("testCCB: %s\t%.3f(s)\n", rs?"Passed":"FAILED", time);
+    // rs = testCCB<(NUM_CPU+1)/2, tll::lf::CCFIFO<char>>("lf", 0x1000, 0x100000, &time, ops);
+    // printf("testCCB: %s\t%.3f(s)\n", rs?"Passed":"FAILED", time);
 
     rs = testCQ<NUM_CPU, tll::lf::CCFIFO< std::vector<char>, 0x1000 >>(0x1000, ops[0], &time);
     printf("testCQ: %s\t%.3f(s)\n", rs?"Passed":"FAILED", time);

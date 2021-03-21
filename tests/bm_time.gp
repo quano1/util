@@ -21,9 +21,13 @@ set xlabel sprintf("Number of threads (Max CPU: %s)", ARG3)
 # inv_map(x) = x
 
 # set nonlinear x via map(x) inverse inv_map(x)
-arg3 = ARG3 / 2
-f(x) = (x == 1) ? 1. : (x == arg3/2) ? 2. : (x == arg3) ? 3. : log(x/arg3)/log(2) + 3
-g(x) = (x == 1) ? 1. : (x == 2) ? (arg3/2) : (x == 3) ? arg3 : ((2**(x - 3)) * arg3)
+arg3 = ARG3*2
+# f(x) = (x == 1) ? 1. : (x == arg3/2) ? 2. : (x == arg3) ? 3. : log(x/arg3)/log(2) + 3
+# g(x) = (x == 1) ? 1. : (x == 2) ? (arg3/2) : (x == 3) ? arg3 : ((2**(x - 3)) * arg3)
+
+f(x) = (x == 2) ? 0. : (x == arg3/2) ? 1. : x/arg3 + 1
+g(x) = (x == 0) ? 2. : (x == 1) ? (arg3/2) : (x - 1) * arg3
+
 set nonlinear x via f(x) inv g(x)
 
 # set x2tics
