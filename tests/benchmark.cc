@@ -94,7 +94,7 @@ void benchmark(const auto &doPush, const auto &doPop, size_t write_count, double
         int tid = omp_get_thread_num();
         if(!(tid & 1))
         {
-            for(;total_push_count.load(std::memory_order_relaxed) < (write_count);)
+            for(;total_push_count.load(std::memory_order_relaxed) < (write_count*2);)
             {
                 if(doPush())
                 {
@@ -134,10 +134,10 @@ int main(int argc, char **argv)
     tll::util::CallFuncInSeq<NUM_CPU, 7>( [&](auto index_seq)
     {
         // if(index_seq.value > 2) return;
-        constexpr size_t kCount = 500000 * index_seq.value;
+        constexpr size_t kCount = 250000 * index_seq.value;
         size_t ops[3];
         double time[3];
-        LOGD("Number Of Threads: %ld, total count: %ld", index_seq.value, kCount);
+        LOGD("Number Of Threads: %ld, total count: %ldk", index_seq.value, kCount/1000);
         ofs_throughput << index_seq.value << " ";
         ofs_time << index_seq.value * 2 << " ";
         // constexpr size_t kN2 = 0x800000;

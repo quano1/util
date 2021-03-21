@@ -14,7 +14,7 @@
 #define ENABLE_PROFILING 1
 #define PERF_TUNNEL 0
 // #define NO_ALLOCATE
-// #define DUMPER
+// #define DUMPER 100
 #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 
 #include "../libs/util.h"
@@ -108,6 +108,7 @@ bool verifyWithTemplate(int &index, const std::vector<char> &sb, const std::vect
 template <int thread_num, class FIFO>
 bool testCCB(const std::string &fifo_type, size_t fifo_size, size_t write_size, double *time, size_t *ops=nullptr)
 {
+    LOGD("fifo_size: 0x%lx, write_size: 0x%lx", fifo_size, write_size);
     tll::time::Counter<> counter;
     constexpr int omp_thread_num = thread_num * 2;
     FIFO fifo(fifo_size);
@@ -170,7 +171,7 @@ bool testCCB(const std::string &fifo_type, size_t fifo_size, size_t write_size, 
         for(;w_threads.load(std::memory_order_relaxed) < thread_num /*- (prod_num + 1) / 2*/
             || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            std::this_thread::sleep_for(std::chrono::milliseconds(DUMPER));
             LOGD("DUMPER: %s", fifo.dump().data());
         }
     }};
@@ -290,12 +291,13 @@ bool testCCB(const std::string &fifo_type, size_t fifo_size, size_t write_size, 
     return ret;
 }
 
-template <int prod_num, class CQ>
+template <int prod_num, class CCFIFO>
 bool testCQ(size_t capacity, size_t write_count, double *time, size_t *ops=nullptr)
 {
+    LOGD("capacity: 0x%lx, write_count: %ld", capacity, write_count);
     tll::time::Counter<> counter;
     constexpr int kThreadNum = prod_num * 2;
-    CQ cq{capacity};
+    CCFIFO fifo{capacity};
     std::vector<char> store_buff[prod_num];
 
 #if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
@@ -340,7 +342,7 @@ bool testCQ(size_t capacity, size_t write_count, double *time, size_t *ops=nullp
 
     for(int i=0; i<prod_num; i++)
     {
-        store_buff[i].resize(34 * write_count * prod_num); /// temp_data
+        store_buff[i].resize(34 * write_count); /// temp_data
         memset(store_buff[i].data(), 0, store_buff[i].size());
     }
 #endif
@@ -354,13 +356,13 @@ bool testCQ(size_t capacity, size_t write_count, double *time, size_t *ops=nullp
         for(;w_threads.load(std::memory_order_relaxed) < prod_num /*- (prod_num + 1) / 2*/
             || total_push_count.load(std::memory_order_relaxed) > total_pop_count.load(std::memory_order_relaxed);)
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            LOGD("DUMPER: %s", cq.dump().data());
+            std::this_thread::sleep_for(std::chrono::milliseconds(DUMPER));
+            LOGD("DUMPER: %s {%s} {%s}", fifo.dump().data(), fifo.cci_.to_string(0).data(), fifo.cci_.to_string(1).data());
         }
     }};
 #endif
 
-    #pragma omp parallel num_threads ( kThreadNum ) shared(cq, store_buff, temp_data)
+    #pragma omp parallel num_threads ( kThreadNum ) shared(fifo, store_buff, temp_data)
     {
         int tid = omp_get_thread_num();
         if(!(tid & 1))
@@ -370,10 +372,10 @@ bool testCQ(size_t capacity, size_t write_count, double *time, size_t *ops=nullp
             for(;total_push_count.load(std::memory_order_relaxed) < (write_count);)
             {
 #if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
-                bool ws = cq.enQueue([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); });
+                bool ws = fifo.enQueue([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); });
 #else
-                bool ws = cq.enQueue([&cq, &temp_data, &i](size_t id, size_t size) {
-                        std::vector<char> *dst = cq.elemAt(id);
+                bool ws = fifo.enQueue([&fifo, &temp_data, &i](size_t id, size_t size) {
+                        std::vector<char> *dst = fifo.elemAt(id);
                         *dst = temp_data[i];
                         // LOGD("> %ld %ld", id, dst->size());
                     });
@@ -404,11 +406,11 @@ bool testCQ(size_t capacity, size_t write_count, double *time, size_t *ops=nullp
                 || total_push_count.load(std::memory_order_relaxed) > total_pop_count.load(std::memory_order_relaxed);)
             {
 #if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
-                bool ps = cq.deQueue([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); });
+                bool ps = fifo.deQueue([](size_t, size_t){ NOP_LOOP(PERF_TUNNEL); });
 #else
-                bool ps = cq.deQueue([&cq, &store_buff, &pop_size, tid](size_t id, size_t size) {
+                bool ps = fifo.deQueue([&fifo, &store_buff, &pop_size, tid](size_t id, size_t size) {
                     auto dst = store_buff[tid/2].data() + pop_size;
-                    std::vector<char> *src = cq.elemAt(id);
+                    std::vector<char> *src = fifo.elemAt(id);
                     memcpy(dst, src->data(), src->size());
                     pop_size += src->size();
                     // LOGD("< %ld %ld", id, src->size());
@@ -435,12 +437,12 @@ bool testCQ(size_t capacity, size_t write_count, double *time, size_t *ops=nullp
     // LOGD("%s", cq.dump().data());
     *time = counter.lastElapsed().count();
 // #if (!defined PERF_TUNNEL) || (PERF_TUNNEL==0)
-    tll::cc::dumpStat<>(cq.stat(), *time);
+    tll::cc::dumpStat<>(fifo.stat(), *time);
 // #endif
 
     if(ops) {
-        ops[0] = cq.stat().push_total;
-        ops[1] = cq.stat().pop_total;
+        ops[0] = fifo.stat().push_total;
+        ops[1] = fifo.stat().pop_total;
     }
 
     // tll::util::dump(cq.buffer_.data(), cq.buffer_.size());
@@ -453,7 +455,7 @@ bool testCQ(size_t capacity, size_t write_count, double *time, size_t *ops=nullp
 
     if(total_push_count.load(std::memory_order_relaxed) != total_pop_count.load(std::memory_order_relaxed))
     {
-        tll::cc::Stat stat = cq.stat();
+        tll::cc::Stat stat = fifo.stat();
         // printf("\n");
         printf(" - w:%ld r:%ld\n", total_push_count.load(std::memory_order_relaxed), total_pop_count.load(std::memory_order_relaxed));
         printf(" - w:%ld r:%ld\n", stat.push_size, stat.pop_size);
@@ -492,11 +494,12 @@ int main(int argc, char **argv)
     // rs = testGuard();
     // LOGD("testGuard: %s", rs?"Passed":"FAILED");
 
-    // rs = testCCB<(NUM_CPU+1)/2, tll::lf::CCFIFO<char>>("lf", 0x1000, 0x100000, &time, ops);
-    // printf("testCCB: %s\t%.3f(s)\n", rs?"Passed":"FAILED", time);
+    rs = testCCB<(NUM_CPU+1)/2, tll::lf::CCFIFO<char>>("lf", 0x100000, 0x40000000, &time, ops);
+    LOGD("testCCB: %s\t%.3f(s)\n", rs?"Passed":"FAILED", time);
 
-    rs = testCQ<NUM_CPU, tll::lf::CCFIFO< std::vector<char>, 0x1000 >>(0x1000, ops[0], &time);
-    printf("testCQ: %s\t%.3f(s)\n", rs?"Passed":"FAILED", time);
+    // ops[0] = 58040112;
+    rs = testCQ<NUM_CPU, tll::lf::CCFIFO< std::vector<char>, 0x10000 >>(0x10000, ops[0], &time);
+    LOGD("testCQ: %s\t%.3f(s)\n", rs?"Passed":"FAILED", time);
 
     return rs ? 0 : 1;
 }

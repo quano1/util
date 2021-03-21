@@ -37,8 +37,9 @@ clean:
 # g++ test_cc.cc -std=c++17 -lpthread -fopenmp -O3 -D NUM_CPU=$(grep -c ^processor /proc/cpuinfo)
 
 plot: bm_throughput.dat
-	gnuplot -c bm_throughput.gp bm_throughput.dat push_`date +'%y%m%d_%H%M'`.png $(NUM_CPU) 'push'
-	gnuplot -c bm_throughput.gp bm_throughput.dat pop_`date +'%y%m%d_%H%M'`.png $(NUM_CPU) 'pop'
-	gnuplot -c bm_time.gp bm_time.dat pp_`date +'%y%m%d_%H%M'`.png $(NUM_CPU)
+	mkdir -p tmp
+	gnuplot -c bm_throughput.gp bm_throughput.dat tmp/push_`date +'%y%m%d_%H%M'`.png $(NUM_CPU) 'push'
+	gnuplot -c bm_throughput.gp bm_throughput.dat tmp/pop_`date +'%y%m%d_%H%M'`.png $(NUM_CPU) 'pop'
+	gnuplot -c bm_time.gp bm_time.dat tmp/pp_`date +'%y%m%d_%H%M'`.png $(NUM_CPU)
 
 -include test_cc.d benchmark.d

@@ -49,11 +49,11 @@ public:
 
     inline void reset()
     {
-        prod_head_.store(0,std::memory_order_relaxed);
-        cons_head_.store(0,std::memory_order_relaxed);
-        prod_tail_.store(0,std::memory_order_relaxed);
-        cons_tail_.store(0,std::memory_order_relaxed);
-        water_mark_.store(0,std::memory_order_relaxed);
+        prod_head_.store(capacity_,std::memory_order_relaxed);
+        cons_head_.store(capacity_,std::memory_order_relaxed);
+        prod_tail_.store(capacity_,std::memory_order_relaxed);
+        cons_tail_.store(capacity_,std::memory_order_relaxed);
+        water_mark_.store(capacity_,std::memory_order_relaxed);
         prod_out_ = new std::atomic<size_t> [num_threads];
         cons_out_ = new std::atomic<size_t> [num_threads];
         for(int i=0; i<num_threads; i++)
@@ -248,9 +248,12 @@ public:
         return size;
     }
 
-    inline bool completeQueue(size_t idx, std::atomic<size_t> &tail, std::atomic<size_t> out_index [])
+    // inline bool completeQueue(size_t idx, std::atomic<size_t> &tail, std::atomic<size_t> out_index [])
+    inline bool completeQueue(size_t idx, int type)
     {
         size_t t_pos = wrap(idx, num_threads);
+        auto &tail = (type == 0) ? prod_tail_ : cons_tail_;
+        auto &out_index = (type == 0) ? prod_out_ : cons_out_;
 
         if(idx >= (tail.load(std::memory_order_relaxed) + num_threads)) return false;
         
@@ -316,7 +319,8 @@ public:
             cb(idx, 1);
             PROF_ADD(time_pop_cb, timer.elapse().count());
             PROF_TIMER_START(timer);
-            while(!completeQueue(idx, cons_tail_, cons_out_)) {std::this_thread::yield();}
+            // while(!completeQueue(idx, cons_tail_, cons_out_)) {std::this_thread::yield();}
+            while(!completeQueue(idx, 1)) {std::this_thread::yield();}
             PROF_ADD(time_pop_complete, timer.elapse().count());
             PROF_ADD(stat_pop_size, 1);
         }
@@ -352,7 +356,8 @@ public:
             cb(idx, 1);
             PROF_ADD(time_push_cb, timer.elapse().count());
             PROF_TIMER_START(timer);
-            while(!completeQueue(idx, prod_tail_, prod_out_)) {std::this_thread::yield();}
+            // while(!completeQueue(idx, prod_tail_, prod_out_)) {std::this_thread::yield();}
+            while(!completeQueue(idx, 0)) {std::this_thread::yield();}
             PROF_ADD(time_push_complete, timer.elapse().count());
             PROF_ADD(stat_push_size, 1);
         }
@@ -414,22 +419,23 @@ public:
     inline size_t wm() const {return water_mark_.load(std::memory_order_relaxed);}
     // inline size_t pef() const {return prod_exit_flag_.load(std::memory_order_relaxed);}
     // inline size_t cef() const {return cons_exit_flag_.load(std::memory_order_relaxed);}
-private:
-
-    inline std::string to_string(std::atomic<size_t> idxs [])
+    inline std::string to_string(int type)
     {
         std::string ret;
         ret.resize(num_threads);
         size_t ct = this->ct();
+        auto &idxs = type == 0 ? prod_out_ : cons_out_;
         for(int i=0; i<num_threads; i++)
         {
             if(idxs[i].load(std::memory_order_relaxed) > ct)
-                ret[i] = '1';
+                ret[i] = '^';
             else
-                ret[i] = '0';
+                ret[i] = '.';
         }
         return ret;
     }
+
+private:
 
     std::atomic<size_t> prod_head_{0}, prod_tail_{0}, water_mark_{0}, cons_head_{0}, cons_tail_{0};
     // std::atomic<size_t> *prod_in_[num_threads], *cons_in_[num_threads];

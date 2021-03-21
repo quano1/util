@@ -43,11 +43,12 @@ void dumpStat(const tll::cc::Stat &st, double real_total_time)
         double time_push_total = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_push_total)).count();
         double time_push_try = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_push_try)).count();
         double time_push_complete = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_push_complete)).count();
-        double time_push_try_rate = st.time_push_try*100.f/ st.time_push_total;
-        double time_push_complete_rate = st.time_push_complete*100.f/ st.time_push_total;
-        double time_push_callback_rate = st.time_push_cb*100.f/ st.time_push_total;
-        double time_push_all_rate = (st.time_push_cb + st.time_push_try + st.time_push_complete)*100.f/ st.time_push_total;
 
+        double time_push_real = st.time_push_cb + st.time_push_try + st.time_push_complete;
+        double time_push_try_rate = st.time_push_try*100.f/ time_push_real;
+        double time_push_complete_rate = st.time_push_complete*100.f/ time_push_real;
+        double time_push_callback_rate = st.time_push_cb*100.f/ time_push_real;
+        double time_push_real_rate = (time_push_real)*100.f/ st.time_push_total;
 
         double push_total = st.push_total * 1.f / 1000;
         double push_error_rate = (st.push_error*100.f)/st.push_total;
@@ -66,7 +67,7 @@ void dumpStat(const tll::cc::Stat &st, double real_total_time)
 
         printf(" push: %9.3f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %.f\n",
                push_total, push_error_rate, push_miss_rate
-               , time_push_try_rate, time_push_complete_rate, time_push_callback_rate, time_push_all_rate
+               , time_push_try_rate, time_push_complete_rate, time_push_callback_rate, time_push_real_rate
                // avg_time_push_one, avg_push_speed
                , opss
                );
@@ -77,11 +78,12 @@ void dumpStat(const tll::cc::Stat &st, double real_total_time)
         double time_pop_total = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_pop_total)).count();
         double time_pop_try = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_pop_try)).count();
         double time_pop_complete = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_pop_complete)).count();
-        double time_pop_try_rate = st.time_pop_try*100.f/ st.time_pop_total;
-        double time_pop_complete_rate = st.time_pop_complete*100.f/ st.time_pop_total;
-        double time_pop_callback_rate = st.time_pop_cb*100.f/ st.time_pop_total;
-        double time_pop_all_rate = (st.time_pop_cb + st.time_pop_try + st.time_pop_complete)*100.f/ st.time_pop_total;
 
+        double time_pop_real = st.time_pop_cb + st.time_pop_try + st.time_pop_complete;
+        double time_pop_try_rate = st.time_pop_try*100.f/ time_pop_real;
+        double time_pop_complete_rate = st.time_pop_complete*100.f/ time_pop_real;
+        double time_pop_callback_rate = st.time_pop_cb*100.f/ time_pop_real;
+        double time_pop_real_rate = (time_pop_real)*100.f/ st.time_pop_total;
 
         double pop_total = st.pop_total * 1.f / 1000;
         double pop_error_rate = (st.pop_error*100.f)/st.pop_total;
@@ -98,7 +100,7 @@ void dumpStat(const tll::cc::Stat &st, double real_total_time)
         double opss = st.pop_total * 0.001f / real_total_time;
         printf(" pop : %9.3f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %.f\n",
                pop_total, pop_error_rate, pop_miss_rate
-               , time_pop_try_rate, time_pop_complete_rate, time_pop_callback_rate, time_pop_all_rate
+               , time_pop_try_rate, time_pop_complete_rate, time_pop_callback_rate, time_pop_real_rate
                // avg_time_pop_one
                , opss
                );
