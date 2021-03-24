@@ -297,7 +297,7 @@ bool testCQ(size_t capacity, size_t write_count, double *time, size_t *ops=nullp
     LOGD("capacity: 0x%lx, write_count: %ld", capacity, write_count);
     tll::time::Counter<> counter;
     constexpr int kThreadNum = prod_num * 2;
-    CCFIFO fifo{capacity};
+    CCFIFO fifo{capacity, capacity};
     std::vector<char> store_buff[prod_num];
 
 #if (defined PERF_TUNNEL) && (PERF_TUNNEL > 0)
@@ -498,7 +498,7 @@ int main(int argc, char **argv)
     LOGD("testCCB: %s\t%.3f(s)\n", rs?"Passed":"FAILED", time);
 
     // ops[0] = 58040112;
-    rs = testCQ<NUM_CPU, tll::lf::CCFIFO< std::vector<char>, 0x10000 >>(0x10000, ops[0], &time);
+    rs = testCQ<NUM_CPU, tll::lf::CCFIFO< std::vector<char>>>(0x10000, ops[0], &time);
     LOGD("testCQ: %s\t%.3f(s)\n", rs?"Passed":"FAILED", time);
 
     return rs ? 0 : 1;

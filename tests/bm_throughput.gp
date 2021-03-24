@@ -10,8 +10,8 @@
 set terminal png size 1280, 800
 set output sprintf('%s', ARG2)
 
-set title sprintf("%s 1 byte contigously\nLower is better", ARG4)
-set ylabel "Avg time of one operation (us)"
+set title sprintf("%s 1 byte contigously\nHigher is better", ARG4)
+set ylabel "Number of (millions) operations per seconds"
 set xlabel sprintf("Number of threads (Max CPU: %s)", ARG3)
 
 # set logscale x

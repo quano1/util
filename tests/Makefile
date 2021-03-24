@@ -9,12 +9,15 @@ LD_FLAGS = -lpthread -fopenmp
 
 default: all
 
-all: test_cc.out benchmark.out
+all: test_cc.out benchmark.out perf_tunnel.out
 
 test_cc.o: test_cc.cc
 	$(CXX) -c $(CXX_FLAGS) -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" $< -o $@
 
 benchmark.o: benchmark.cc
+	$(CXX) -c $(CXX_FLAGS) -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" $< -o $@
+
+perf_tunnel.o: perf_tunnel.cc
 	$(CXX) -c $(CXX_FLAGS) -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" $< -o $@
 
 test_cc.out: test_cc.o
@@ -26,6 +29,10 @@ benchmark.out: benchmark.o
 	$(LD) $(LD_FLAGS) $? -o $@ -ltbb
 	objcopy --only-keep-debug $@ $(@:%.out=%.debug)
 # 	strip -g $@
+
+perf_tunnel.out: perf_tunnel.o
+	$(LD) $(LD_FLAGS) $? -o $@ -ltbb
+	objcopy --only-keep-debug $@ $(@:%.out=%.debug)
 
 bm_throughput.dat: benchmark.out
 	@echo "Running benchmark..."
@@ -42,4 +49,4 @@ plot: bm_throughput.dat
 	gnuplot -c bm_throughput.gp bm_throughput.dat tmp/pop_`date +'%y%m%d_%H%M'`.png $(NUM_CPU) 'pop'
 	gnuplot -c bm_time.gp bm_time.dat tmp/pp_`date +'%y%m%d_%H%M'`.png $(NUM_CPU)
 
--include test_cc.d benchmark.d
+-include test_cc.d benchmark.d perf_tunnel.d

@@ -21,16 +21,16 @@
 namespace tll::lf {
 
 /// Contiguous Circular Index
-template <size_t num_threads=0x400>
+// template <size_t num_threads=0x400>
 struct CCIndex
 {
 public:
     CCIndex() = default;
 
-    CCIndex(size_t size)
+    CCIndex(size_t size, size_t num_threads)
     {
-        static_assert(util::isPowerOf2(num_threads));
-        reserve(size);
+        // static_assert(util::isPowerOf2(num_threads));
+        reserve(size, num_threads);
     }
 
     ~CCIndex()
@@ -54,19 +54,19 @@ public:
         prod_tail_.store(capacity_,std::memory_order_relaxed);
         cons_tail_.store(capacity_,std::memory_order_relaxed);
         water_mark_.store(capacity_,std::memory_order_relaxed);
-        prod_out_ = new std::atomic<size_t> [num_threads];
-        cons_out_ = new std::atomic<size_t> [num_threads];
-        for(int i=0; i<num_threads; i++)
+        prod_out_ = new std::atomic<size_t> [num_threads_];
+        cons_out_ = new std::atomic<size_t> [num_threads_];
+        for(int i=0; i<num_threads_; i++)
         {
             prod_out_[i].store(0, std::memory_order_relaxed);
             cons_out_[i].store(0, std::memory_order_relaxed);
         }
     }
 
-    inline void reserve(size_t size)
+    inline void reserve(size_t size, size_t num_threads=0x400)
     {
-        size = util::isPowerOf2(size) ? size : util::nextPowerOf2(size);
-        capacity_= size;
+        capacity_ = util::isPowerOf2(size) ? size : util::nextPowerOf2(size);
+        num_threads_ = tll::util::isPowerOf2(num_threads) ? num_threads : tll::util::nextPowerOf2(num_threads);
         reset();
     }
 
@@ -251,42 +251,42 @@ public:
     // inline bool completeQueue(size_t idx, std::atomic<size_t> &tail, std::atomic<size_t> out_index [])
     inline bool completeQueue(size_t idx, int type)
     {
-        size_t t_pos = wrap(idx, num_threads);
+        size_t t_pos = wrap(idx, num_threads_);
         auto &tail = (type == 0) ? prod_tail_ : cons_tail_;
         auto &out_index = (type == 0) ? prod_out_ : cons_out_;
 
-        if(idx >= (tail.load(std::memory_order_relaxed) + num_threads)) return false;
+        if(idx >= (tail.load(std::memory_order_relaxed) + num_threads_)) return false;
         
         size_t const kIdx = idx;
 
         for(;;)
         {
-            size_t next_idx = out_index[wrap(idx, num_threads)].load(std::memory_order_relaxed);
+            size_t next_idx = out_index[wrap(idx, num_threads_)].load(std::memory_order_relaxed);
             size_t crr_tail = tail.load(std::memory_order_relaxed);
-            // LOGD(">(%ld:%ld:%ld:%ld) [%ld] {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads), crr_tail, next_idx, this->to_string(out_index).data());
+            // LOGD(">(%ld:%ld:%ld:%ld) [%ld] {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads_), crr_tail, next_idx, this->to_string(out_index).data());
             if(crr_tail > idx)
             {
-                // LOGD("E-(%ld:%ld:%ld:%ld) [%ld] {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads), crr_tail, next_idx, this->to_string(out_index).data());
+                // LOGD("E-(%ld:%ld:%ld:%ld) [%ld] {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads_), crr_tail, next_idx, this->to_string(out_index).data());
                 break;
             }
             else if (crr_tail == idx)
             {
                 size_t cnt = 1;
-                next_idx = out_index[wrap(idx + cnt, num_threads)].load(std::memory_order_relaxed);
-                for(; (cnt<num_threads) && (next_idx>crr_tail); cnt++)
+                next_idx = out_index[wrap(idx + cnt, num_threads_)].load(std::memory_order_relaxed);
+                for(; (cnt<num_threads_) && (next_idx>crr_tail); cnt++)
                 {
-                    next_idx = out_index[wrap(idx + cnt + 1, num_threads)].load(std::memory_order_relaxed);
+                    next_idx = out_index[wrap(idx + cnt + 1, num_threads_)].load(std::memory_order_relaxed);
                 }
 
                 idx += cnt;
-                // LOGD("=-(%ld:%ld:%ld:%ld) [%ld] +%ld {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads), crr_tail, cnt, next_idx, this->to_string(out_index).data());
+                // LOGD("=-(%ld:%ld:%ld:%ld) [%ld] +%ld {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads_), crr_tail, cnt, next_idx, this->to_string(out_index).data());
                 // tail.store(crr_tail + cnt);
                 tail.fetch_add(cnt, std::memory_order_relaxed);
             }
 
-            if(out_index[wrap(idx, num_threads)].compare_exchange_weak(next_idx, kIdx, std::memory_order_relaxed, std::memory_order_relaxed)) break;
+            if(out_index[wrap(idx, num_threads_)].compare_exchange_weak(next_idx, kIdx, std::memory_order_relaxed, std::memory_order_relaxed)) break;
 
-            // LOGD("M-(%ld:%ld:%ld:%ld) [%ld] {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads), crr_tail, next_idx, this->to_string(out_index).data());
+            // LOGD("M-(%ld:%ld:%ld:%ld) [%ld] {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads_), crr_tail, next_idx, this->to_string(out_index).data());
         }
 
         return true;
@@ -422,10 +422,10 @@ public:
     inline std::string to_string(int type)
     {
         std::string ret;
-        ret.resize(num_threads);
+        ret.resize(num_threads_);
         size_t ct = this->ct();
         auto &idxs = type == 0 ? prod_out_ : cons_out_;
-        for(int i=0; i<num_threads; i++)
+        for(int i=0; i<num_threads_; i++)
         {
             if(idxs[i].load(std::memory_order_relaxed) > ct)
                 ret[i] = '^';
@@ -440,7 +440,7 @@ private:
     std::atomic<size_t> prod_head_{0}, prod_tail_{0}, water_mark_{0}, cons_head_{0}, cons_tail_{0};
     // std::atomic<size_t> *prod_in_[num_threads], *cons_in_[num_threads];
     std::atomic<size_t> *prod_out_, *cons_out_;
-    size_t capacity_;
+    size_t capacity_, num_threads_;
     /// Statistic
     std::atomic<size_t> stat_push_size{0}, stat_pop_size{0};
     std::atomic<size_t> stat_push_total{0}, stat_pop_total{0};
@@ -455,15 +455,15 @@ private:
 
 
 /// Contiguous Circular FIFO
-template <typename T, size_t num_threads=0x400>
+template <typename T>
 struct CCFIFO
 {
 public:
     CCFIFO() = default;
 
-    CCFIFO(size_t size)
+    CCFIFO(size_t size, size_t num_threads=0x400)
     {
-        reserve(size);
+        reserve(size, num_threads);
     }
 
     inline auto dump() const
@@ -476,9 +476,9 @@ public:
         cci_.reset();
     }
 
-    inline void reserve(size_t size)
+    inline void reserve(size_t size, size_t num_threads=0x400)
     {
-        cci_.reserve(size);
+        cci_.reserve(size, num_threads);
 #if (!defined NO_ALLOCATE)
         buffer_.resize(cci_.capacity());
 #endif
@@ -540,7 +540,7 @@ public:
     }
 
 // private:
-    CCIndex<num_threads> cci_;
+    CCIndex cci_;
     std::vector<T> buffer_;
 };
 
