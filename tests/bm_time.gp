@@ -11,7 +11,7 @@ set terminal png size 1280, 800
 set output sprintf('%s', ARG2)
 
 set title sprintf("push and pop 1 byte simultaneously\nLower is better")
-set ylabel "Avg time to complete the test (ms)"
+set ylabel "Avg time for completing the test (ms)"
 set xlabel sprintf("Number of threads (Max CPU: %s)", ARG3)
 
 # set logscale x
@@ -50,8 +50,8 @@ set style line 8 lc rgb '#99d066' pt 6 ps 1 lt 1 lw 2
 set style line 9 lc rgb '#f57c00' pt 6 ps 1 lt 1 lw 2
 set style line 10 lc rgb '#ffad42' pt 6 ps 1 lt 1 lw 2
 
-plot sprintf('%s', ARG1) u 1:2:xtic(1) t "CCFIFO" w lp ls 1, \
-      ""      u 1:3:xtic(1) t "boost" w lp ls 5, \
-      ""      u 1:4:xtic(1) t "moodycamel" w lp ls 7
+plot sprintf('%s', ARG1) u 1:2:xtic(1) t "boost" w lp ls 5, \
+      ""      u 1:3:xtic(1) t "moodycamel" w lp ls 7, \
+      ""      u 1:4:xtic(1) t "CCFIFO" w lp ls 1
 
       # ""      u 1:5:xtic(1) t "tbb" w lp ls 7
