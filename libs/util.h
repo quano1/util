@@ -783,7 +783,7 @@ static T &instance()
 
 };
 
-void dump(const char *ptr, size_t size, size_t off=0, size_t hl=-1, bool p_zero=true)
+inline void dump(const char *ptr, size_t size, size_t off=0, size_t hl=-1, bool p_zero=true)
 {
     for(size_t i=off; i<size; i++)
     {

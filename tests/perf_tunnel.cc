@@ -7,9 +7,9 @@
 #include <thread>
 #include <utility>
 
-#include <boost/lockfree/queue.hpp>
-#include <tbb/concurrent_queue.h>
-#include <concurrentqueue/concurrentqueue.h>
+// #include <boost/lockfree/queue.hpp>
+// #include <tbb/concurrent_queue.h>
+// #include <concurrentqueue/concurrentqueue.h>
 // #include "../libs/timer.h"
 // #include "../libs/util.h"
 // #include "../libs/log.h"
@@ -24,12 +24,12 @@
 #include "../libs/contiguouscircular.h"
 
 template <int num_of_threads>
-static void _benchmark(const auto &doPush, const auto &doPop, size_t write_count, double *time, size_t *ops)
+static void _perfTunnel(const auto &doPush, const auto &doPop, size_t write_count, double *time, size_t *ops)
 {
     // constexpr int kThreadNum = num_of_threads / 2;
     static_assert(num_of_threads > 0);
     std::atomic<size_t> total_push_count{0}, total_pop_count{0};
-    tll::time::Counter<std::chrono::duration<double, std::ratio<1>>> counter; /// seconds
+    tll::time::Counter<std::chrono::duration<double, std::ratio<1, 1000>>> counter; /// us
     std::atomic<int> w_threads{0};
 
     counter.start();
@@ -126,102 +126,96 @@ static void _benchmark(const auto &doPush, const auto &doPop, size_t write_count
     }
 }
 
-int benchmark()
+int perfTunnel()
 {
-    std::ofstream ofs_throughput{"bm_throughput.dat"};
-    std::ofstream ofs_time{"bm_time.dat"};
+    std::ofstream ofs_pt{"pt.dat"};
+    std::ofstream ofs_time{"pt_time.dat"};
 
     tll::util::CallFuncInSeq<NUM_CPU, 7>( [&](auto index_seq)
     {
-        // if(index_seq.value > 2) return;
+        // if(index_seq.value == 1) return;
         constexpr size_t kCount = 250000 * index_seq.value;
         size_t ops[3];
         double time[3];
         LOGD("Number Of Threads: %ld, total count: %ldk", index_seq.value, kCount/1000);
-        ofs_throughput << index_seq.value << " ";
+        ofs_pt << index_seq.value << " ";
         ofs_time << index_seq.value * 2 << " ";
         // constexpr size_t kN2 = 0x800000;
         constexpr size_t kTN = (tll::util::isPowerOf2(kCount) ? kCount : tll::util::nextPowerOf2(kCount));
-        // LOGD("%lx", kTN);
-
-        // {
-        //     tbb::concurrent_queue<char> fifo;
-        //     auto doPush = [&fifo]() -> bool { NOP_LOOP(LOOP_COUNT); fifo.push((char)1); return true; };
-        //     auto doPop = [&fifo]() -> bool { NOP_LOOP(LOOP_COUNT); char val; return fifo.try_pop(val); };
-            
-        //     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        //     _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
-        //     ofs_throughput << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
-        //     ofs_time << time[2] << " ";
-        //     LOGD("tbb time\tpush:%.3f, pop: %.3f, pp: %.3f (ms)", time[0]*1000/ops[0], time[1]*1000/ops[1], time[2]*1000/ops[2]);
-        // }
-
-        // if(index_seq.value <= NUM_CPU)
-        // {
-        //     tll::lf::CCFIFO<char, kTN> fifo{kCount * 2};
-        //     auto doPush = [&fifo]() -> bool { return fifo.push([&fifo](size_t i, size_t s){ NOP_LOOP(LOOP_COUNT); *(fifo.elemAt(i)) = 1; },1); };
-        //     auto doPop = [&fifo]() -> bool { return fifo.pop([&fifo](size_t i, size_t s){ NOP_LOOP(LOOP_COUNT); char val; val = *fifo.elemAt(i); },1); };
-        //     _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
-        //     ofs_throughput << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
-        //     ofs_time << time[2] << " ";
-        //     LOGD("CCFIFO time\tpush:%.3f, pop: %.3f, pp: %.3f (s)", time[0], time[1], time[2]);
-        // }
-        // else
-        // {
-        //     ofs_throughput << 0 << " " << 0 << " ";
-        //     ofs_time << -1 << " ";
-        // }
-        LOGD("\tpush/avg(ms)\tpop/avg(ms)\tpp/avg(ms)\tpush/pop");
-        {
-            boost::lockfree::queue<char> fifo{kCount * 2};
-            auto doPush = [&fifo]() -> bool { NOP_LOOP(LOOP_COUNT); return fifo.push((char)1); };
-            auto doPop = [&fifo]() -> bool { NOP_LOOP(LOOP_COUNT); char val; return fifo.pop(val); };
-            
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
-            
-            double avg_time[3] = {time[0]*1000/index_seq.value, time[1]*1000/index_seq.value, time[2]*1000/index_seq.value};
-            double throughput[3] = {ops[0]*0.000001/time[0], ops[1]*0.000001/time[1], ops[2]*0.000001/time[2]};
-            ofs_throughput << (throughput[0]) << " " << (throughput[1]) << " ";
-            ofs_time << (avg_time[2]) << " ";
-            LOGD("boost\t%.3f/%.3f\t%.3f/%.3f\t%.3f/%.3f\t%.3f", throughput[0], avg_time[0], throughput[1], avg_time[1], throughput[2], avg_time[2], throughput[0]/throughput[1]);
-        }
-        
-        {
-            moodycamel::ConcurrentQueue<char> fifo{kCount * 2};
-            auto doPush = [&fifo]() -> bool { NOP_LOOP(LOOP_COUNT); fifo.enqueue((char)1); return true; };
-            auto doPop = [&fifo]() -> bool { NOP_LOOP(LOOP_COUNT); char val; return fifo.try_dequeue(val); };
-
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
-
-            double avg_time[3] = {time[0]*1000/index_seq.value, time[1]*1000/index_seq.value, time[2]*1000/index_seq.value};
-            double throughput[3] = {ops[0]*0.000001/time[0], ops[1]*0.000001/time[1], ops[2]*0.000001/time[2]};
-            ofs_throughput << (throughput[0]) << " " << (throughput[1]) << " ";
-            ofs_time << (avg_time[2]) << " ";
-            LOGD("MoodyC\t%.3f/%.3f\t%.3f/%.3f\t%.3f/%.3f\t%.3f", throughput[0], avg_time[0], throughput[1], avg_time[1], throughput[2], avg_time[2], throughput[0]/throughput[1]);
-        }
 
         {
-            tll::lf::CCFIFO<char> fifo{kCount * 2, index_seq.value * 0x4000};
+            constexpr size_t kMul = 0x1000;
+            constexpr size_t kTmp = (tll::util::isPowerOf2(index_seq.value * kMul) ? index_seq.value * kMul : tll::util::nextPowerOf2(index_seq.value * kMul));
+            tll::lf::CCFIFO<char> fifo{kCount * 2, kTmp};
             auto doPush = [&fifo]() -> bool { return fifo.enQueue([&fifo](size_t i, size_t s){ NOP_LOOP(LOOP_COUNT); *(fifo.elemAt(i)) = 1; }); };
             auto doPop = [&fifo]() -> bool { return fifo.deQueue([&fifo](size_t i, size_t s){ NOP_LOOP(LOOP_COUNT); char val; val = *fifo.elemAt(i); }); };
             
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
+            _perfTunnel<index_seq.value>(doPush, doPop, kCount, time, ops);
             
-            double avg_time[3] = {time[0]*1000/index_seq.value, time[1]*1000/index_seq.value, time[2]*1000/index_seq.value};
-            double throughput[3] = {ops[0]*0.000001/time[0], ops[1]*0.000001/time[1], ops[2]*0.000001/time[2]};
-            ofs_throughput << (throughput[0]) << " " << (throughput[1]) << " ";
+            double avg_time[3] = {time[0]/index_seq.value, time[1]/index_seq.value, time[2]/index_seq.value};
+            double throughput[3] = {time[0]*1000/ops[0], time[1]*1000/ops[1], time[2]*1000/ops[2]};
+            ofs_pt << (throughput[0]) << " " << (throughput[1]) << " ";
             ofs_time << (avg_time[2]) << " ";
-            LOGD("CCFIFO\t%.3f/%.3f\t%.3f/%.3f\t%.3f/%.3f\t%.3f", throughput[0], avg_time[0], throughput[1], avg_time[1], throughput[2], avg_time[2], throughput[0]/throughput[1]);
+            LOGD("mul:0x%lx\t[0]:%.3f(us)/%.3f(ms), [1]:%.3f(us)/%.3f(ms), [2]:%.3f(us)/%.3f(ms)", kMul, throughput[0], avg_time[0], throughput[1], avg_time[1], throughput[2], avg_time[2]);
         }
 
-        ofs_throughput << "\n";
+        {
+            constexpr size_t kMul = 0x2000;
+            constexpr size_t kTmp = (tll::util::isPowerOf2(index_seq.value * kMul) ? index_seq.value * kMul : tll::util::nextPowerOf2(index_seq.value * kMul));
+            tll::lf::CCFIFO<char> fifo{kCount * 2, kTmp};
+            auto doPush = [&fifo]() -> bool { return fifo.enQueue([&fifo](size_t i, size_t s){ NOP_LOOP(LOOP_COUNT); *(fifo.elemAt(i)) = 1; }); };
+            auto doPop = [&fifo]() -> bool { return fifo.deQueue([&fifo](size_t i, size_t s){ NOP_LOOP(LOOP_COUNT); char val; val = *fifo.elemAt(i); }); };
+            
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            _perfTunnel<index_seq.value>(doPush, doPop, kCount, time, ops);
+            
+            double avg_time[3] = {time[0]/index_seq.value, time[1]/index_seq.value, time[2]/index_seq.value};
+            double throughput[3] = {time[0]*1000/ops[0], time[1]*1000/ops[1], time[2]*1000/ops[2]};
+            ofs_pt << (throughput[0]) << " " << (throughput[1]) << " ";
+            ofs_time << (avg_time[2]) << " ";
+            LOGD("mul:0x%lx\t[0]:%.3f(us)/%.3f(ms), [1]:%.3f(us)/%.3f(ms), [2]:%.3f(us)/%.3f(ms)", kMul, throughput[0], avg_time[0], throughput[1], avg_time[1], throughput[2], avg_time[2]);
+        }
+
+        {
+            constexpr size_t kMul = 0x4000;
+            constexpr size_t kTmp = (tll::util::isPowerOf2(index_seq.value * kMul) ? index_seq.value * kMul : tll::util::nextPowerOf2(index_seq.value * kMul));
+            tll::lf::CCFIFO<char> fifo{kCount * 2, kTmp};
+            auto doPush = [&fifo]() -> bool { return fifo.enQueue([&fifo](size_t i, size_t s){ NOP_LOOP(LOOP_COUNT); *(fifo.elemAt(i)) = 1; }); };
+            auto doPop = [&fifo]() -> bool { return fifo.deQueue([&fifo](size_t i, size_t s){ NOP_LOOP(LOOP_COUNT); char val; val = *fifo.elemAt(i); }); };
+            
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            _perfTunnel<index_seq.value>(doPush, doPop, kCount, time, ops);
+            
+            double avg_time[3] = {time[0]/index_seq.value, time[1]/index_seq.value, time[2]/index_seq.value};
+            double throughput[3] = {time[0]*1000/ops[0], time[1]*1000/ops[1], time[2]*1000/ops[2]};
+            ofs_pt << (throughput[0]) << " " << (throughput[1]) << " ";
+            ofs_time << (avg_time[2]) << " ";
+            LOGD("mul:0x%lx\t[0]:%.3f(us)/%.3f(ms), [1]:%.3f(us)/%.3f(ms), [2]:%.3f(us)/%.3f(ms)", kMul, throughput[0], avg_time[0], throughput[1], avg_time[1], throughput[2], avg_time[2]);
+        }
+
+        {
+            constexpr size_t kMul = 0x8000;
+            constexpr size_t kTmp = (tll::util::isPowerOf2(index_seq.value * kMul) ? index_seq.value * kMul : tll::util::nextPowerOf2(index_seq.value * kMul));
+            tll::lf::CCFIFO<char> fifo{kCount * 2, kTmp};
+            auto doPush = [&fifo]() -> bool { return fifo.enQueue([&fifo](size_t i, size_t s){ NOP_LOOP(LOOP_COUNT); *(fifo.elemAt(i)) = 1; }); };
+            auto doPop = [&fifo]() -> bool { return fifo.deQueue([&fifo](size_t i, size_t s){ NOP_LOOP(LOOP_COUNT); char val; val = *fifo.elemAt(i); }); };
+            
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            _perfTunnel<index_seq.value>(doPush, doPop, kCount, time, ops);
+            
+            double avg_time[3] = {time[0]/index_seq.value, time[1]/index_seq.value, time[2]/index_seq.value};
+            double throughput[3] = {time[0]*1000/ops[0], time[1]*1000/ops[1], time[2]*1000/ops[2]};
+            ofs_pt << (throughput[0]) << " " << (throughput[1]) << " ";
+            ofs_time << (avg_time[2]) << " ";
+            LOGD("mul:0x%lx\t[0]:%.3f(us)/%.3f(ms), [1]:%.3f(us)/%.3f(ms), [2]:%.3f(us)/%.3f(ms)", kMul, throughput[0], avg_time[0], throughput[1], avg_time[1], throughput[2], avg_time[2]);
+        }
+
+        ofs_pt << "\n";
         ofs_time << "\n";
         LOGD("=========================");
     });
-    ofs_throughput.flush();
+    ofs_pt.flush();
     ofs_time.flush();
 
     return 0;

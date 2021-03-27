@@ -35,3 +35,7 @@
 *.dat
 *.png
 *.debug
+
+
+.build
+*.zip

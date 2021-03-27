@@ -21,7 +21,7 @@
 #include "../libs/counter.h"
 #include "../libs/contiguouscircular.h"
 
-bool verifyWithTemplate(int &index, const std::vector<char> &sb, const std::vector<char> temp_data [] )
+static bool verifyWithTemplate(int &index, const std::vector<char> &sb, const std::vector<char> temp_data [] )
 {
     index=0;
     for(; index<sb.size();)
@@ -106,7 +106,7 @@ bool verifyWithTemplate(int &index, const std::vector<char> &sb, const std::vect
 
 
 template <int thread_num, class FIFO>
-bool testCCB(const std::string &fifo_type, size_t fifo_size, size_t write_size, double *time, size_t *ops=nullptr)
+static bool testCCB(const std::string &fifo_type, size_t fifo_size, size_t write_size, double *time, size_t *ops=nullptr)
 {
     LOGD("fifo_size: 0x%lx, write_size: 0x%lx", fifo_size, write_size);
     tll::time::Counter<> counter;
@@ -292,7 +292,7 @@ bool testCCB(const std::string &fifo_type, size_t fifo_size, size_t write_size, 
 }
 
 template <int prod_num, class CCFIFO>
-bool testCQ(size_t capacity, size_t write_count, double *time, size_t *ops=nullptr)
+static bool testCQ(size_t capacity, size_t write_count, double *time, size_t *ops=nullptr)
 {
     LOGD("capacity: 0x%lx, write_count: %ld", capacity, write_count);
     tll::time::Counter<> counter;
@@ -480,7 +480,7 @@ bool testCQ(size_t capacity, size_t write_count, double *time, size_t *ops=nullp
     return ret;
 }
 
-int main(int argc, char **argv)
+int ftests()
 {
     // size_t write_count = 0x400;
     // if(argc > 1) write_count = std::stoul(argv[1]);

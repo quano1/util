@@ -489,9 +489,24 @@ public:
         return cci_.pop(cb, size);
     }
 
+    inline auto pop(T &val)
+    {
+        return cci_.pop([&val, this](size_t idx, size_t){ val = std::move(this->buffer_[idx]); }, 1);
+    }
+
     inline auto push(const tll::cc::Callback &cb, size_t size=1)
     {
         return cci_.push(cb, size);
+    }
+
+    inline auto push(const T &val)
+    {
+        return cci_.push([&val, this](size_t idx, size_t){ this->buffer_[idx] = val; }, 1);
+    }
+
+    inline auto push(T &&val)
+    {
+        return cci_.push([&val, this](size_t idx, size_t){ this->buffer_[idx] = std::move(val); }, 1);
     }
 
     inline auto enQueue(const tll::cc::Callback &cb, size_t size=1)
