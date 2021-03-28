@@ -18,38 +18,46 @@ find_package(cxxopts REQUIRED)
 
 find_package(GTest QUIET)
 if(GTEST_FOUND)
-  set(GTEST_TEST 1)
-  # set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${GTest_CXX_FLAGS}")
-  # set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+    set(HAVE_GTEST 1)
+    # set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${GTest_CXX_FLAGS}")
+    # set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 else()
-  message(STATUS "Disabled GTEST")
+    set(HAVE_GTEST 0)
+    message(STATUS "Disabled GTEST")
 endif()
 
 find_package(Boost QUIET)
 if(BOOST_FOUND)
-  set(BOOST_TEST 1)
+    set(HAVE_BOOST 1)
 else()
-  message(STATUS "Disabled BOOST")
+    set(HAVE_BOOST 0)
+    message(STATUS "Disabled BOOST")
 endif()
 
 find_package(TBB QUIET)
 if(TBB_FOUND)
-  set(TBB_TEST 1)
+    set(HAVE_TBB 1)
 else()
-  message(STATUS "Disabled TBB")
+    set(HAVE_TBB 0)
+    message(STATUS "Disabled TBB")
 endif()
 
-CHECK_INCLUDE_FILE_CXX("concurrentqueue/concurrentqueue.h" MC_TEST)
-if(NOT MC_TEST)
-  message(STATUS "Disabled MC_TEST")
+CHECK_INCLUDE_FILE_CXX("concurrentqueue/concurrentqueue.h" HAVE_MC)
+if(NOT HAVE_MC)
+    set(HAVE_MC 0)
+    message(STATUS "Disabled MoodyCamel")
 endif()
 
 
 find_package(OpenMP)
 if (OPENMP_FOUND)
+    set (HAVE_OPENMP 1)
     set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
     set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+else()
+    set (HAVE_OPENMP 0)
+    message(STATUS "Disabled OpenMP")
 endif()
 
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
@@ -86,9 +94,9 @@ set(CMAKE_SKIP_BUILD_RPATH TRUE)
 set(PRJ_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 
 include_directories(
-  ${PRJ_ROOT}
-  ${PRJ_ROOT}/libs
-  ${PRJ_ROOT}/tests
+    ${PRJ_ROOT}
+    ${PRJ_ROOT}/libs
+    ${PRJ_ROOT}/tests
 )
 
 set( CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE} )
@@ -98,6 +106,15 @@ set( CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE} )
 #   $<$<STREQUAL:${CMAKE_SYSTEM_NAME},QNX>:socket>
 #   $<$<STREQUAL:${CMAKE_SYSTEM_NAME},Linux>:pthread>
 # )
+
+
+add_definitions(
+    -DHAVE_GTEST=${HAVE_GTEST}
+    -DHAVE_BOOST=${HAVE_BOOST}
+    -DHAVE_TBB=${HAVE_TBB}
+    -DHAVE_MC=${HAVE_MC}
+    -DHAVE_OPENMP=${HAVE_OPENMP}
+)
 
 # add_subdirectory(libs)
 add_subdirectory(tests)

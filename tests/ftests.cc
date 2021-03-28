@@ -494,11 +494,11 @@ int ftests()
     // rs = testGuard();
     // LOGD("testGuard: %s", rs?"Passed":"FAILED");
 
-    rs = testCCB<(NUM_CPU+1)/2, tll::lf::CCFIFO<char>>("lf", 0x100000, 0x40000000, &time, ops);
+    rs = testCCB<(NUM_CPU+1)/2, tll::lf::CCFIFO<char, true>>("lf", 0x100000, 0x40000000, &time, ops);
     LOGD("testCCB: %s\t%.3f(s)\n", rs?"Passed":"FAILED", time);
 
     // ops[0] = 58040112;
-    rs = testCQ<NUM_CPU, tll::lf::CCFIFO< std::vector<char>>>(0x10000, ops[0], &time);
+    rs = testCQ<NUM_CPU, tll::lf::CCFIFO< std::vector<char>, true>>(0x10000, ops[0], &time);
     LOGD("testCQ: %s\t%.3f(s)\n", rs?"Passed":"FAILED", time);
 
     return rs ? 0 : 1;

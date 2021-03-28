@@ -11,17 +11,21 @@
 #include "../counter.h"
 #include "../util.h"
 
-#if (defined ENABLE_PROFILING) && (ENABLE_PROFILING == 1)
-    #ifdef PROF_ADD
-        #undef PROF_ADD
-    #endif
-    #define PROF_ADD(atomic, val)  atomic.fetch_add(val, std::memory_order_relaxed)
-#endif
+// #if (defined ENABLE_PROFILING) && (ENABLE_PROFILING == 1)
+//     #ifdef PROF_ADD
+//         #undef PROF_ADD
+//     #endif
+// #endif
+
+// #define PROF_ADD(atomic, val)  if(profiling) atomic.fetch_add(val, std::memory_order_relaxed)
 
 namespace tll::lf {
 
+static thread_local tll::time::Counter<StatDuration, StatClock> counter;
+
 /// Contiguous Circular Index
 // template <size_t num_threads=0x400>
+template <bool profiling=false>
 struct CCIndex
 {
 public:
@@ -77,7 +81,7 @@ public:
         size_t prod;
         size_t wmark;
         size_t tmp_size = size;
-        for(;;PROF_ADD(stat_pop_miss, 1))
+        for(;;profAdd(stat_pop_miss, 1))
         {
             next_cons = cons;
             size = tmp_size;
@@ -87,7 +91,7 @@ public:
             {
                 // LOGE("Underrun!");dump();
                 size = 0;
-                PROF_ADD(stat_pop_error, 1);
+                profAdd(stat_pop_error, 1);
                 break;
             }
 
@@ -98,7 +102,7 @@ public:
                 {
                     // LOGE("Underrun!");dump();
                     size = 0;
-                    PROF_ADD(stat_pop_error, 1);
+                    profAdd(stat_pop_error, 1);
                     break;
                 }
                 if(size > (prod - next_cons))
@@ -120,7 +124,7 @@ public:
             if(cons_head_.compare_exchange_weak(cons, next_cons + size, std::memory_order_acquire, std::memory_order_relaxed)) break;
         }
 
-        PROF_ADD(stat_pop_total, 1);
+        profAdd(stat_pop_total, 1);
         return next_cons;
     }
 
@@ -129,14 +133,14 @@ public:
         for(;cons_tail_.load(std::memory_order_relaxed) != cons;){}
         // {std::this_thread::yield();}
         cons_tail_.store(next + size, std::memory_order_relaxed);
-        PROF_ADD(stat_pop_size, size);
+        profAdd(stat_pop_size, size);
     }
 
     inline size_t tryPush(size_t &prod, size_t &size)
     {
         prod = prod_head_.load(std::memory_order_relaxed);
         size_t next_prod;
-        for(;;PROF_ADD(stat_push_miss, 1))
+        for(;;profAdd(stat_push_miss, 1))
         {
             next_prod = prod;
             size_t wmark = water_mark_.load(std::memory_order_relaxed);
@@ -159,7 +163,7 @@ public:
                         {
                             // LOGE("OVERRUN");dump();
                             size = 0;
-                            PROF_ADD(stat_push_error, 1);
+                            profAdd(stat_push_error, 1);
                             break;
                         }
                     }
@@ -176,7 +180,7 @@ public:
                     {
                         // LOGE("OVERRUN");dump();
                         size = 0;
-                        PROF_ADD(stat_push_error, 1);
+                        profAdd(stat_push_error, 1);
                         break;
                     }
                     if(!prod_head_.compare_exchange_weak(prod, next_prod + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
@@ -187,11 +191,11 @@ public:
             {
                 // LOGE("OVERRUN");dump();
                 size = 0;
-                PROF_ADD(stat_push_error, 1);
+                profAdd(stat_push_error, 1);
                 break;
             }
         }
-        PROF_ADD(stat_push_total, 1);
+        profAdd(stat_push_total, 1);
         return next_prod;
     }
 
@@ -205,26 +209,30 @@ public:
             water_mark_.store(prod, std::memory_order_relaxed);
         }
         prod_tail_.store(next + size, std::memory_order_release);
-        PROF_ADD(stat_push_size, size);
+        profAdd(stat_push_size, size);
     }
 
     // template <typename ...Args>
     inline size_t pop(const tll::cc::Callback &cb, size_t size)
     {
         size_t cons;
-        PROF_TIMER(timer);
+        profTimerReset();
         size_t next = tryPop(cons, size);
-        PROF_ADD(time_pop_try, timer.elapse().count());
-        PROF_TIMER_START(timer);
+        // profAdd(time_pop_try, timer.elapse().count());
+        profTimerElapse(time_pop_try);
+        profTimerStart();
         if(size)
         {
-            cb(next, size);
-            PROF_ADD(time_pop_cb, timer.elapse().count());
-            PROF_TIMER_START(timer);
+            cb(wrap(next), size);
+            // profAdd(time_pop_cb, timer.elapse().count());
+            profTimerElapse(time_pop_cb);
+            profTimerStart();
             completePop(cons, next, size);
-            PROF_ADD(time_pop_complete, timer.elapse().count());
+            // profAdd(time_pop_complete, timer.elapse().count());
+            profTimerElapse(time_pop_complete);
         }
-        PROF_ADD(time_pop_total, timer.absElapse().count());
+        // profAdd(time_pop_total, timer.absElapse().count());
+        profTimerAbsElapse(time_pop_total);
         return size;
     }
 
@@ -232,19 +240,23 @@ public:
     inline size_t push(const tll::cc::Callback &cb, size_t size)
     {
         size_t prod;
-        PROF_TIMER(timer);
+        profTimerReset();
         size_t next = tryPush(prod, size);
-        PROF_ADD(time_push_try, timer.elapse().count());
-        PROF_TIMER_START(timer);
+        // profAdd(time_push_try, timer.elapse().count());
+        profTimerElapse(time_push_try);
+        profTimerStart();
         if(size)
         {
-            cb(next, size);
-            PROF_ADD(time_push_cb, timer.elapse().count());
-            PROF_TIMER_START(timer);
+            cb(wrap(next), size);
+            // profAdd(time_push_cb, timer.elapse().count());
+            profTimerElapse(time_push_cb);
+            profTimerStart();
             completePush(prod, next, size);
-            PROF_ADD(time_push_complete, timer.elapse().count());
+            // profAdd(time_push_complete, timer.elapse().count());
+            profTimerElapse(time_push_complete);
         }
-        PROF_ADD(time_push_total, timer.absElapse().count());
+        // profAdd(time_push_total, timer.absElapse().count());
+        profTimerAbsElapse(time_push_total);
         return size;
     }
 
@@ -294,14 +306,14 @@ public:
 
     inline bool deQueue(const tll::cc::Callback &cb)
     {
-        PROF_TIMER(timer);
+        profTimerReset();
         bool ret = false;
         size_t idx = cons_head_.load(std::memory_order_relaxed);
         for(;;)
         {
             if (idx == prod_tail_.load(std::memory_order_relaxed))
             {
-                PROF_ADD(stat_pop_error, 1);
+                profAdd(stat_pop_error, 1);
                 break;
             }
 
@@ -310,35 +322,39 @@ public:
                 ret = true;
                 break;
             }
-            PROF_ADD(stat_pop_miss, 1);
+            profAdd(stat_pop_miss, 1);
         }
-        PROF_ADD(time_pop_try, timer.elapse().count());
-        PROF_TIMER_START(timer);
+        // profAdd(time_pop_try, timer.elapse().count());
+        profTimerElapse(time_pop_try);
+        profTimerStart();
         if(ret)
         {
             cb(idx, 1);
-            PROF_ADD(time_pop_cb, timer.elapse().count());
-            PROF_TIMER_START(timer);
+            // profAdd(time_pop_cb, timer.elapse().count());
+            profTimerElapse(time_pop_cb);
+            profTimerStart();
             // while(!completeQueue(idx, cons_tail_, cons_out_)) {std::this_thread::yield();}
             while(!completeQueue(idx, 1)) {std::this_thread::yield();}
-            PROF_ADD(time_pop_complete, timer.elapse().count());
-            PROF_ADD(stat_pop_size, 1);
+            // profAdd(time_pop_complete, timer.elapse().count());
+            profTimerElapse(time_pop_complete);
+            profAdd(stat_pop_size, 1);
         }
-        PROF_ADD(time_pop_total, timer.absElapse().count());
-        PROF_ADD(stat_pop_total, 1);
+        // profAdd(time_pop_total, timer.absElapse().count());
+        profTimerAbsElapse(time_pop_total);
+        profAdd(stat_pop_total, 1);
         return ret;
     }
 
     inline bool enQueue(const tll::cc::Callback &cb)
     {
-        PROF_TIMER(timer);
+        profTimerReset();
         bool ret = false;
         size_t idx = prod_head_.load(std::memory_order_relaxed);
         for(;;)
         {
             if (idx == (cons_tail_.load(std::memory_order_relaxed) + capacity_))
             {
-                PROF_ADD(stat_push_error, 1);
+                profAdd(stat_push_error, 1);
                 break;
             }
 
@@ -347,22 +363,26 @@ public:
                 ret = true;
                 break;
             }
-            PROF_ADD(stat_push_miss, 1);
+            profAdd(stat_push_miss, 1);
         }
-        PROF_ADD(time_push_try, timer.elapse().count());
-        PROF_TIMER_START(timer);
+        // profAdd(time_push_try, timer.elapse().count());
+        profTimerElapse(time_push_try);
+        profTimerStart();
         if(ret)
         {
             cb(idx, 1);
-            PROF_ADD(time_push_cb, timer.elapse().count());
-            PROF_TIMER_START(timer);
+            // profAdd(time_push_cb, timer.elapse().count());
+            profTimerElapse(time_push_cb);
+            profTimerStart();
             // while(!completeQueue(idx, prod_tail_, prod_out_)) {std::this_thread::yield();}
             while(!completeQueue(idx, 0)) {std::this_thread::yield();}
-            PROF_ADD(time_push_complete, timer.elapse().count());
-            PROF_ADD(stat_push_size, 1);
+            // profAdd(time_push_complete, timer.elapse().count());
+            profTimerElapse(time_push_complete);
+            profAdd(stat_push_size, 1);
         }
-        PROF_ADD(time_push_total, timer.absElapse().count());
-        PROF_ADD(stat_push_total, 1);
+        // profAdd(time_push_total, timer.absElapse().count());
+        profTimerAbsElapse(time_push_total);
+        profAdd(stat_push_total, 1);
         return ret;
     }
 
@@ -437,6 +457,37 @@ public:
 
 private:
 
+    inline void profTimerReset()
+    {
+        if(profiling)
+            counter.reset();
+    }
+
+    inline void profTimerStart()
+    {
+        if(profiling)
+            counter.start();
+    }
+
+    inline void profTimerElapse(auto &atomic)
+    {
+        if(profiling) 
+            atomic.fetch_add(counter.elapse().count(), std::memory_order_relaxed);
+    }
+
+    inline void profTimerAbsElapse(auto &atomic)
+    {
+        if(profiling) 
+            atomic.fetch_add(counter.absElapse().count(), std::memory_order_relaxed);
+    }
+
+    template <typename U>
+    inline void profAdd(auto &atomic, const U &val)
+    {
+        if(profiling)
+            atomic.fetch_add(val, std::memory_order_relaxed);
+    }
+
     std::atomic<size_t> prod_head_{0}, prod_tail_{0}, water_mark_{0}, cons_head_{0}, cons_tail_{0};
     // std::atomic<size_t> *prod_in_[num_threads], *cons_in_[num_threads];
     std::atomic<size_t> *prod_out_, *cons_out_;
@@ -455,7 +506,7 @@ private:
 
 
 /// Contiguous Circular FIFO
-template <typename T>
+template <typename T, bool P=false>
 struct CCFIFO
 {
 public:
@@ -551,11 +602,11 @@ public:
 
     inline T *elemAt(size_t id)
     {
-        return &buffer_[wrap(id)];
+        return &buffer_[id];
     }
 
-// private:
-    CCIndex cci_;
+private:
+    CCIndex<P> cci_;
     std::vector<T> buffer_;
 };
 

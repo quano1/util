@@ -11,12 +11,12 @@ include(ProcessorCount)
 ProcessorCount(NUM_CPU)
 
 target_sources(tll_tests
-  PRIVATE
+PRIVATE
     tll_tests.cc
-    benchmark.cc
+    # benchmark.cc
     ftests.cc
-    perf_tunnel.cc
-    unittests.cc
+    # perf_tunnel.cc
+    $<$<EQUAL:${HAVE_GTEST},1>:unittests.cc>
 )
 
 # print to console
@@ -37,7 +37,7 @@ target_sources(tll_tests
 #   # Debug
 #   set(CMAKE_C_FLAGS_DEBUG "-g -O0")
 add_definitions(
-  -DNUM_CPU=${NUM_CPU}
+    -DNUM_CPU=${NUM_CPU}
 )
 # elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 #   # Release

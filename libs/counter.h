@@ -21,7 +21,7 @@ public:
     using Tp = std::chrono::time_point<C,D>;
 private:
     Tp begin_=std::chrono::time_point_cast<D>(Clock::now());
-    const Tp abs_begin_=begin_;
+    Tp abs_begin_=begin_;
 
     Duration total_elapsed_{0}, last_elapsed_{0};
 public:
@@ -37,7 +37,8 @@ public:
     void reset(Tp tp=std::chrono::time_point_cast<D>(Clock::now()))
     {
         begin_ = tp;
-        total_elapsed_ = 0;
+        abs_begin_ = begin_;
+        total_elapsed_ = Duration::zero();
     }
 
     Duration elapse() const

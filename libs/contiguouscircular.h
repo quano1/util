@@ -44,7 +44,7 @@ void dumpStat(const tll::cc::Stat &st, double real_total_time)
         double time_push_try = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_push_try)).count();
         double time_push_complete = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_push_complete)).count();
 
-        double time_push_real = st.time_push_cb + st.time_push_try + st.time_push_complete;
+        size_t time_push_real = st.time_push_cb + st.time_push_try + st.time_push_complete;
         double time_push_try_rate = st.time_push_try*100.f/ time_push_real;
         double time_push_complete_rate = st.time_push_complete*100.f/ time_push_real;
         double time_push_callback_rate = st.time_push_cb*100.f/ time_push_real;

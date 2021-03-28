@@ -1,9 +1,21 @@
 #include <cxxopts.hpp>
 
-int benchmark();
-int ftests();
-int perfTunnel();
-int unittests(int argc, char **argv);
+int __attribute__((weak)) benchmark()
+{
+    printf("benchmark is disabled!\n");
+}
+int __attribute__((weak)) ftests()
+{
+    printf("ftests is disabled!\n");
+}
+int __attribute__((weak)) perfTunnel()
+{
+    printf("perfTunnel is disabled!\n");
+}
+int __attribute__((weak)) unittests(int argc, char **argv)
+{
+    printf("unittests is disabled!\n");
+}
 
 int main(int argc, char *argv[])
 {
