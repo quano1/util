@@ -70,7 +70,10 @@ public:
     inline void reserve(size_t size, size_t num_threads=0x400)
     {
         capacity_ = util::isPowerOf2(size) ? size : util::nextPowerOf2(size);
-        num_threads_ = tll::util::isPowerOf2(num_threads) ? num_threads : tll::util::nextPowerOf2(num_threads);
+        if(num_threads > capacity_)
+            num_threads_ = capacity_;
+        else
+            num_threads_ = tll::util::isPowerOf2(num_threads) ? num_threads : tll::util::nextPowerOf2(num_threads);
         reset();
     }
 
@@ -603,6 +606,16 @@ public:
     inline T *elemAt(size_t id)
     {
         return &buffer_[id];
+    }
+
+    inline T &operator[](size_t id)
+    {
+        return buffer_[id];
+    }
+
+    inline const T &operator[](size_t id) const
+    {
+        return buffer_[id];
     }
 
 private:

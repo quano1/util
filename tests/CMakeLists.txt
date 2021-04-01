@@ -16,6 +16,7 @@ PRIVATE
     # benchmark.cc
     ftests.cc
     # perf_tunnel.cc
+    $<$<EQUAL:${HAVE_GTEST},1>:CBUnittests.cc>
     $<$<EQUAL:${HAVE_GTEST},1>:unittests.cc>
 )
 
