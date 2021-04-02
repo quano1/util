@@ -60,7 +60,7 @@ else()
     message(STATUS "Disabled OpenMP")
 endif()
 
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g")
 
 # if(CMAKE_BUILD_TYPE STREQUAL "")
 #   set(CMAKE_BUILD_TYPE Debug)

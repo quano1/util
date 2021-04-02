@@ -45,10 +45,14 @@ public:
 
     inline auto dump() const
     {
-        return util::stringFormat("sz:%ld ph:%ld pt:%ld wm:%ld ch:%ld ct:%ld", capacity(), 
-             prod_head_.load(std::memory_order_relaxed), prod_tail_.load(std::memory_order_relaxed), 
-             water_mark_.load(std::memory_order_relaxed), 
-             cons_head_.load(std::memory_order_relaxed), cons_tail_.load(std::memory_order_relaxed));
+        size_t ph = prod_head_.load(std::memory_order_relaxed);
+        size_t pt = prod_tail_.load(std::memory_order_relaxed);
+        size_t wm = water_mark_.load(std::memory_order_relaxed);
+        size_t ch = cons_head_.load(std::memory_order_relaxed);
+        size_t ct = cons_tail_.load(std::memory_order_relaxed);
+
+        return util::stringFormat("sz:%ld ph:%ld/%ld pt:%ld/%ld wm:%ld/%ld ch:%ld/%ld ct:%ld/%ld", capacity(), 
+            wrap(ph), ph, wrap(pt), pt, wrap(wm), wm, wrap(ch), ch, wrap(ct), ct);
     }
 
     inline void reset()
@@ -207,7 +211,7 @@ public:
         for(;prod_tail_.load(std::memory_order_relaxed) != prod;){}
         // {std::this_thread::yield();}
 
-        if(prod < next)
+        if(prod < next || prod == this->next(next))
         {
             water_mark_.store(prod, std::memory_order_relaxed);
         }
@@ -332,7 +336,7 @@ public:
         profTimerStart();
         if(ret)
         {
-            cb(idx, 1);
+            cb(wrap(idx), 1);
             // profAdd(time_pop_cb, timer.elapse().count());
             profTimerElapse(time_pop_cb);
             profTimerStart();
@@ -373,7 +377,7 @@ public:
         profTimerStart();
         if(ret)
         {
-            cb(idx, 1);
+            cb(wrap(idx), 1);
             // profAdd(time_push_cb, timer.elapse().count());
             profTimerElapse(time_push_cb);
             profTimerStart();
@@ -605,17 +609,17 @@ public:
 
     inline T *elemAt(size_t id)
     {
-        return &buffer_[id];
+        return &buffer_[wrap(id)];
     }
 
     inline T &operator[](size_t id)
     {
-        return buffer_[id];
+        return buffer_[wrap(id)];
     }
 
     inline const T &operator[](size_t id) const
     {
-        return buffer_[id];
+        return buffer_[wrap(id)];
     }
 
 private:
