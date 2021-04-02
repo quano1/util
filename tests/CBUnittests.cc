@@ -58,6 +58,74 @@ TEST_F(CCFIFOBufferBasicTest, RWInSequence)
             EXPECT_EQ(val, i);
         }
     }
+
+    /// wrap(wmark) == 0
+    {
+        tll::lf::CCFIFO<int32_t, true> fifo{8};
+        int32_t val;
+        for(size_t i=0; i < fifo.capacity(); i++)
+        {
+            EXPECT_TRUE(fifo.push((int32_t)i));
+        }
+
+        /// overrun
+        EXPECT_FALSE(fifo.push((int32_t)0));
+        size_t ret = fifo.pop([](size_t, size_t){}, fifo.capacity());
+        EXPECT_EQ(ret, fifo.capacity());
+
+        /// underrun
+        EXPECT_FALSE(fifo.pop(val));
+    }
+
+    /// wrap(wmark) == 0
+    {
+        tll::lf::CCFIFO<int32_t, true> fifo{8};
+        int32_t val;
+        for(size_t i=0; i < fifo.capacity(); i++)
+        {
+            EXPECT_TRUE(fifo.push((int32_t)i));
+        }
+
+        /// overrun
+        EXPECT_FALSE(fifo.push((int32_t)0));
+
+        fifo.pop([&fifo](size_t id, size_t size)
+        {
+            EXPECT_EQ(size, fifo.capacity() / 2);
+        }, fifo.capacity() / 2);
+
+        for(size_t i=0; i < fifo.capacity() / 2; i++)
+        {
+            EXPECT_TRUE(fifo.push((int32_t)i));
+        }
+        size_t ret = fifo.pop([](size_t, size_t){}, fifo.capacity());
+        EXPECT_EQ(ret, fifo.capacity() / 2);
+        ret = fifo.pop([](size_t, size_t){}, fifo.capacity());
+        EXPECT_EQ(ret, fifo.capacity() / 2);
+    }
+
+
+    /// wrap(wmark) == 7
+    {
+        tll::lf::CCFIFO<int8_t, true> fifo{8};
+        int8_t val;
+        for(size_t i=0; i < fifo.capacity() - 1; i++)
+        {
+            EXPECT_TRUE(fifo.push((int8_t)i));
+        }
+
+        for(size_t i=0; i < fifo.capacity() - 1; i++)
+        {
+            EXPECT_TRUE(fifo.pop(val));
+        }
+
+        size_t ret = fifo.push([](size_t,size_t){},2);
+        EXPECT_EQ(fifo.wrap(fifo.wm()), 7);
+
+        fifo.pop([](size_t id,size_t){
+            EXPECT_EQ(id, 0);
+        },2);
+    }
 }
 
 #if (HAVE_OPENMP)

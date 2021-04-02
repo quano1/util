@@ -622,6 +622,12 @@ public:
         return buffer_[wrap(id)];
     }
 
+    inline size_t ph() const {return cci_.ph();}
+    inline size_t pt() const {return cci_.pt();}
+    inline size_t ch() const {return cci_.ch();}
+    inline size_t ct() const {return cci_.ct();}
+    inline size_t wm() const {return cci_.wm();}
+
 private:
     CCIndex<P> cci_;
     std::vector<T> buffer_;
