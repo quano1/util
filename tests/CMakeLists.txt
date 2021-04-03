@@ -13,7 +13,7 @@ ProcessorCount(NUM_CPU)
 target_sources(tll_tests
 PRIVATE
     tll_tests.cc
-    # benchmark.cc
+    benchmark.cc
     perf_tunnel.cc
     $<$<EQUAL:${HAVE_GTEST},1>:CBUnittests.cc>
     $<$<EQUAL:${HAVE_GTEST},1>:unittests.cc>
@@ -57,10 +57,10 @@ add_definitions(
 
 # set environments
 # set(PRJ_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
-
-include_directories(${GTest_SOURCE_DIR}/include ${GTest_SOURCE_DIR})
-target_link_libraries(tll_tests gtest)
-
+if(HAVE_GTEST)
+	include_directories(${GTest_SOURCE_DIR}/include ${GTest_SOURCE_DIR})
+	target_link_libraries(tll_tests gtest)
+endif()
 # include_directories(
 #   ${PRJ_ROOT}
 #   ${PRJ_ROOT}/libs

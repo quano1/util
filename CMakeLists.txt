@@ -14,7 +14,7 @@ message( STATUS "Building with system: " ${CMAKE_SYSTEM_NAME})
 # message(STATUS "CXX : ")
 # execute_process(COMMAND ${CMAKE_CXX_COMPILER} -v)
 
-find_package(cxxopts REQUIRED)
+# find_package(cxxopts REQUIRED)
 
 find_package(GTest QUIET)
 if(GTEST_FOUND)
@@ -26,27 +26,27 @@ else()
     message(STATUS "Disabled GTEST")
 endif()
 
-find_package(Boost QUIET)
-if(BOOST_FOUND)
-    set(HAVE_BOOST 1)
-else()
-    set(HAVE_BOOST 0)
-    message(STATUS "Disabled BOOST")
-endif()
+# find_package(Boost QUIET)
+# if(BOOST_FOUND)
+#     set(HAVE_BOOST 1)
+# else()
+#     set(HAVE_BOOST 0)
+#     message(STATUS "Disabled BOOST")
+# endif()
 
-find_package(TBB QUIET)
-if(TBB_FOUND)
-    set(HAVE_TBB 1)
-else()
-    set(HAVE_TBB 0)
-    message(STATUS "Disabled TBB")
-endif()
+# find_package(TBB QUIET)
+# if(TBB_FOUND)
+#     set(HAVE_TBB 1)
+# else()
+#     set(HAVE_TBB 0)
+#     message(STATUS "Disabled TBB")
+# endif()
 
-CHECK_INCLUDE_FILE_CXX("concurrentqueue/concurrentqueue.h" HAVE_MC)
-if(NOT HAVE_MC)
-    set(HAVE_MC 0)
-    message(STATUS "Disabled MoodyCamel")
-endif()
+# CHECK_INCLUDE_FILE_CXX("concurrentqueue/concurrentqueue.h" HAVE_MC)
+# if(NOT HAVE_MC)
+#     set(HAVE_MC 0)
+#     message(STATUS "Disabled MoodyCamel")
+# endif()
 
 
 find_package(OpenMP)
@@ -97,6 +97,23 @@ include_directories(
     ${PRJ_ROOT}
     ${PRJ_ROOT}/libs
     ${PRJ_ROOT}/tests
+    ${PRJ_ROOT}/tests/third-party
+    ${PRJ_ROOT}/tests/third-party/boostorg/lockfree/include
+    ${PRJ_ROOT}/tests/third-party/boostorg/core/include
+    ${PRJ_ROOT}/tests/third-party/boostorg/config/include
+    ${PRJ_ROOT}/tests/third-party/boostorg/parameter/include
+    ${PRJ_ROOT}/tests/third-party/boostorg/mp11/include
+    ${PRJ_ROOT}/tests/third-party/boostorg/assert/include/
+    ${PRJ_ROOT}/tests/third-party/boostorg/static_assert/include/
+    ${PRJ_ROOT}/tests/third-party/boostorg/type_traits/include/
+    ${PRJ_ROOT}/tests/third-party/boostorg/mpl/include/
+    ${PRJ_ROOT}/tests/third-party/boostorg/preprocessor/include/
+    ${PRJ_ROOT}/tests/third-party/boostorg/array/include/
+    ${PRJ_ROOT}/tests/third-party/boostorg/throw_exception/include
+    ${PRJ_ROOT}/tests/third-party/boostorg/align/include
+    ${PRJ_ROOT}/tests/third-party/boostorg/utility/include
+    ${PRJ_ROOT}/tests/third-party/boostorg/predef/include
+
 )
 
 set( CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE} )

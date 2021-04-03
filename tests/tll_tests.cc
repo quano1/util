@@ -1,4 +1,4 @@
-#include <cxxopts.hpp>
+#include <tests/third-party/cxxopts/include/cxxopts.hpp>
 
 int __attribute__((weak)) benchmark()
 {
@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
 
     options.add_options()
         ("b,benchmark", "Run benchmark", cxxopts::value<bool>()->default_value("false"))
-        ("p,perftun", "Run performance tunnel", cxxopts::value<bool>()->default_value("false"))
+        ("p,perftunnel", "Run performance tunnel", cxxopts::value<bool>()->default_value("false"))
         ("u,unittests", "Run unit tests", cxxopts::value<bool>()->default_value("false"))
         ("h,help", "Print help")
     ;
@@ -42,7 +42,7 @@ int main(int argc, char *argv[])
         benchmark();
     }
 
-    if (result.count("perftun"))
+    if (result.count("perftunnel"))
     {
         perfTunnel();
     }

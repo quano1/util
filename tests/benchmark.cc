@@ -7,12 +7,8 @@
 #include <thread>
 #include <utility>
 
-#include <boost/lockfree/queue.hpp>
-#include <tbb/concurrent_queue.h>
-#include <concurrentqueue/concurrentqueue.h>
-// #include "../libs/timer.h"
-// #include "../libs/util.h"
-// #include "../libs/log.h"
+#include <tests/third-party/boostorg/lockfree/include/boost/lockfree/queue.hpp>
+#include <tests/third-party/concurrentqueue/concurrentqueue.h>
 
 #define ENABLE_PROFILING 0
 #define LOOP_COUNT 0x200

@@ -105,7 +105,7 @@ TEST_F(CCFIFOBufferBasicTest, Contiguously)
 /// Should run with --gtest_filter=CCFIFOBufferStressTest.* --gtest_repeat=10000
 struct CCFIFOBufferStressTest : public ::testing::Test
 {
-    void SetUp()
+    static void SetUpTestCase()
     {
         LOGD("Should run with --gtest_filter=CCFIFOBufferStressTest.* --gtest_repeat=100000");
     }

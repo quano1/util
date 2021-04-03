@@ -1,0 +1,51 @@
+[submodule "tests/third-party/concurrentqueue"]
+	path = tests/third-party/concurrentqueue
+	url = https://github.com/cameron314/concurrentqueue
+[submodule "tests/third-party/cxxopts"]
+	path = tests/third-party/cxxopts
+	url = https://github.com/jarro2783/cxxopts
+[submodule "tests/third-party/boostorg/lockfree"]
+	path = tests/third-party/boostorg/lockfree
+	url = https://github.com/boostorg/lockfree
+[submodule "tests/third-party/boostorg/core"]
+	path = tests/third-party/boostorg/core
+	url = https://github.com/boostorg/core
+[submodule "tests/third-party/boostorg/config"]
+	path = tests/third-party/boostorg/config
+	url = https://github.com/boostorg/config
+[submodule "tests/third-party/boostorg/parameter"]
+	path = tests/third-party/boostorg/parameter
+	url = https://github.com/boostorg/parameter
+[submodule "tests/third-party/boostorg/mp11"]
+	path = tests/third-party/boostorg/mp11
+	url = https://github.com/boostorg/mp11
+[submodule "tests/third-party/boostorg/assert"]
+	path = tests/third-party/boostorg/assert
+	url = https://github.com/boostorg/assert
+[submodule "tests/third-party/boostorg/static_assert"]
+	path = tests/third-party/boostorg/static_assert
+	url = https://github.com/boostorg/static_assert
+[submodule "tests/third-party/boostorg/type_traits"]
+	path = tests/third-party/boostorg/type_traits
+	url = https://github.com/boostorg/type_traits
+[submodule "tests/third-party/boostorg/mpl"]
+	path = tests/third-party/boostorg/mpl
+	url = https://github.com/boostorg/mpl
+[submodule "tests/third-party/boostorg/preprocessor"]
+	path = tests/third-party/boostorg/preprocessor
+	url = https://github.com/boostorg/preprocessor
+[submodule "tests/third-party/boostorg/array"]
+	path = tests/third-party/boostorg/array
+	url = https://github.com/boostorg/array
+[submodule "tests/third-party/boostorg/throw_exception"]
+	path = tests/third-party/boostorg/throw_exception
+	url = https://github.com/boostorg/throw_exception
+[submodule "tests/third-party/boostorg/align"]
+	path = tests/third-party/boostorg/align
+	url = https://github.com/boostorg/align
+[submodule "tests/third-party/boostorg/utility"]
+	path = tests/third-party/boostorg/utility
+	url = https://github.com/boostorg/utility
+[submodule "tests/third-party/boostorg/predef"]
+	path = tests/third-party/boostorg/predef
+	url = https://github.com/boostorg/predef
