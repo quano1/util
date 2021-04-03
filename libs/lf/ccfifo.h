@@ -211,7 +211,7 @@ public:
         for(;prod_tail_.load(std::memory_order_relaxed) != prod;){}
         // {std::this_thread::yield();}
 
-        if(prod < next || prod == this->next(next))
+        if(next >= this->next(prod))
         {
             water_mark_.store(prod, std::memory_order_relaxed);
         }
