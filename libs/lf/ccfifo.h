@@ -220,7 +220,8 @@ public:
     }
 
     // template <typename ...Args>
-    inline size_t pop(const tll::cc::Callback &cb, size_t size)
+    template <typename F, typename ...Args>
+    auto pop(F &&cb, size_t size, Args &&...args)
     {
         size_t cons;
         profTimerReset();
@@ -230,7 +231,7 @@ public:
         profTimerStart();
         if(size)
         {
-            cb(wrap(next), size);
+            cb(wrap(next), size, std::forward<Args>(args)...);
             // profAdd(time_pop_cb, timer.elapse().count());
             profTimerElapse(time_pop_cb);
             profTimerStart();
@@ -244,7 +245,8 @@ public:
     }
 
     // template <typename ...Args>
-    inline size_t push(const tll::cc::Callback &cb, size_t size)
+    template <typename F, typename ...Args>
+    auto push(F &&cb, size_t size, Args &&...args)
     {
         size_t prod;
         profTimerReset();
@@ -254,7 +256,7 @@ public:
         profTimerStart();
         if(size)
         {
-            cb(wrap(next), size);
+            cb(wrap(next), size, std::forward<Args>(args)...);
             // profAdd(time_push_cb, timer.elapse().count());
             profTimerElapse(time_push_cb);
             profTimerStart();
@@ -336,7 +338,7 @@ public:
         profTimerStart();
         if(ret)
         {
-            cb(wrap(idx), 1);
+            /*if(cb)*/ cb(wrap(idx), 1);
             // profAdd(time_pop_cb, timer.elapse().count());
             profTimerElapse(time_pop_cb);
             profTimerStart();
@@ -377,7 +379,7 @@ public:
         profTimerStart();
         if(ret)
         {
-            cb(wrap(idx), 1);
+            /*if(cb)*/ cb(wrap(idx), 1);
             // profAdd(time_push_cb, timer.elapse().count());
             profTimerElapse(time_push_cb);
             profTimerStart();
@@ -542,9 +544,10 @@ public:
 #endif
     }
 
-    inline auto pop(const tll::cc::Callback &cb, size_t size=1)
+    template <typename F, typename ...Args>
+    auto pop(F &&cb, size_t size, Args &&...args)
     {
-        return cci_.pop(cb, size);
+        return cci_.pop(std::forward<F>(cb), size, std::forward<Args>(args)...);
     }
 
     inline auto pop(T &val)
@@ -552,9 +555,10 @@ public:
         return cci_.pop([&val, this](size_t idx, size_t){ val = std::move(this->buffer_[idx]); }, 1);
     }
 
-    inline auto push(const tll::cc::Callback &cb, size_t size=1)
+    template <typename F, typename ...Args>
+    auto push(F &&cb, size_t size, Args &&...args)
     {
-        return cci_.push(cb, size);
+        return cci_.push(std::forward<F>(cb), size, std::forward<Args>(args)...);
     }
 
     inline auto push(const T &val)

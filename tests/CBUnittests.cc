@@ -8,131 +8,109 @@
 
 struct CCFIFOBufferBasicTest : public ::testing::Test
 {
+    template <typename elem_t>
+    void RWInSequenceT(size_t loop)
+    {
+        tll::lf::CCFIFO<elem_t> fifo;
+        elem_t val = -1;
+        size_t ret = -1;
+        tll::cc::Callback do_nothing = [](size_t, size_t){};
+        auto pushCb = [](size_t id, size_t sz, tll::lf::CCFIFO<elem_t> &fifo, elem_t val)
+        {
+            for(int i_=0; i_<sz; i_++) fifo[id + i_] = val;
+        };
+
+        /// reserve not power of 2
+        fifo.reserve(7);
+        ASSERT_EQ(fifo.capacity(), 8);
+        /// simple push/pop
+        for(size_t i=0; i < fifo.capacity()*loop; i++)
+        {
+            EXPECT_EQ(fifo.push((elem_t)i), 1);
+            fifo.pop(val);
+            EXPECT_EQ(val, (elem_t)i);
+        }
+        fifo.reset();
+        /// fill
+        for(size_t i=0; i < fifo.capacity(); i++) 
+            fifo.push((elem_t)i);
+        /// overrun
+        EXPECT_FALSE(fifo.empty());
+        EXPECT_EQ(fifo.push(val), 0);
+        /// pop all
+        ret = fifo.pop(do_nothing, -1);
+        EXPECT_EQ(ret, fifo.capacity());
+        /// underrun
+        EXPECT_TRUE(fifo.empty());
+        EXPECT_EQ(fifo.pop(val), 0);
+        /// push/pop odd size
+        fifo.reset();
+        constexpr size_t kPushSize = 3;
+        for(size_t i=0; i < fifo.capacity()*loop; i++)
+        {
+            ret = fifo.push(pushCb, kPushSize, fifo, (elem_t)i);
+            EXPECT_EQ(ret, kPushSize);
+
+            ret = fifo.pop([&fifo, i](size_t id, size_t sz)
+            {
+                EXPECT_EQ(fifo[id], (elem_t)i);
+                EXPECT_EQ(memcmp(&fifo[id], &fifo[id + 1], (sz - 1) * sizeof(elem_t)), 0);
+            }, -1);
+            EXPECT_EQ(ret, kPushSize);
+        }
+    }
 };
 
-TEST_F(CCFIFOBufferBasicTest, RWInSequence)
+TEST_F(CCFIFOBufferBasicTest, PrimitiveType)
 {
-    {
-        tll::lf::CCFIFO<int8_t> fifo{8};
-        int8_t val;
-        for(size_t i=0; i < fifo.capacity()*2; i++)
-        {
-            EXPECT_TRUE(fifo.push((int8_t)i));
-            fifo.pop(val);
-            EXPECT_EQ(val, (int8_t)i);
-        }
-    }
-
-    // TEST_F(CCFIFOBufferBasicTest, CB2Bytes)
-    {
-        tll::lf::CCFIFO<int16_t> fifo{8};
-        int16_t val;
-        for(size_t i=0; i < fifo.capacity()*2; i++)
-        {
-            EXPECT_TRUE(fifo.push((int16_t)i));
-            fifo.pop(val);
-            EXPECT_EQ(val, (int16_t)i);
-        }
-    }
-
-    // TEST_F(CCFIFOBufferBasicTest, CB4Bytes)
-    {
-        tll::lf::CCFIFO<int32_t> fifo{8};
-        int32_t val;
-        for(size_t i=0; i < fifo.capacity()*2; i++)
-        {
-            EXPECT_TRUE(fifo.push((int32_t)i));
-            fifo.pop(val);
-            EXPECT_EQ(val, (int32_t)i);
-        }
-    }
-
-    // TEST_F(CCFIFOBufferBasicTest, CB8Bytes)
-    {
-        tll::lf::CCFIFO<int64_t> fifo{8};
-        for(size_t i=0; i < fifo.capacity()*2; i++)
-        {
-            EXPECT_TRUE(fifo.push((int64_t)i));
-            int64_t val;
-            fifo.pop(val);
-            EXPECT_EQ(val, i);
-        }
-    }
-
-    /// wrap(wmark) == 0
-    {
-        tll::lf::CCFIFO<int32_t, true> fifo{8};
-        int32_t val;
-        for(size_t i=0; i < fifo.capacity(); i++)
-        {
-            EXPECT_TRUE(fifo.push((int32_t)i));
-        }
-
-        /// overrun
-        EXPECT_FALSE(fifo.push((int32_t)0));
-        size_t ret = fifo.pop([](size_t, size_t){}, fifo.capacity());
-        EXPECT_EQ(ret, fifo.capacity());
-
-        /// underrun
-        EXPECT_FALSE(fifo.pop(val));
-    }
-
-    /// wrap(wmark) == 0
-    {
-        tll::lf::CCFIFO<int32_t, true> fifo{8};
-        int32_t val;
-        for(size_t i=0; i < fifo.capacity(); i++)
-        {
-            EXPECT_TRUE(fifo.push((int32_t)i));
-        }
-
-        /// overrun
-        EXPECT_FALSE(fifo.push((int32_t)0));
-
-        fifo.pop([&fifo](size_t id, size_t size)
-        {
-            EXPECT_EQ(size, fifo.capacity() / 2);
-        }, fifo.capacity() / 2);
-
-        for(size_t i=0; i < fifo.capacity() / 2; i++)
-        {
-            EXPECT_TRUE(fifo.push((int32_t)i));
-        }
-        size_t ret = fifo.pop([](size_t, size_t){}, fifo.capacity());
-        EXPECT_EQ(ret, fifo.capacity() / 2);
-        ret = fifo.pop([](size_t, size_t){}, fifo.capacity());
-        EXPECT_EQ(ret, fifo.capacity() / 2);
-    }
-
-
-    /// wrap(wmark) == 7
-    {
-        tll::lf::CCFIFO<int8_t, true> fifo{8};
-        int8_t val;
-        for(size_t i=0; i < fifo.capacity() - 1; i++)
-        {
-            EXPECT_TRUE(fifo.push((int8_t)i));
-        }
-
-        for(size_t i=0; i < fifo.capacity() - 1; i++)
-        {
-            EXPECT_TRUE(fifo.pop(val));
-        }
-
-        size_t ret = fifo.push([](size_t,size_t){},2);
-        EXPECT_EQ(fifo.wrap(fifo.wm()), 7);
-
-        fifo.pop([](size_t id,size_t){
-            EXPECT_EQ(id, 0);
-        },2);
-    }
+    constexpr size_t kLoop = 0x100;
+    RWInSequenceT<int8_t>(kLoop);
+    RWInSequenceT<int16_t>(kLoop);
+    RWInSequenceT<int32_t>(kLoop);
+    RWInSequenceT<int64_t>(kLoop);
 }
+
+TEST_F(CCFIFOBufferBasicTest, Contiguously)
+{
+    typedef int8_t elem_t;
+    tll::lf::CCFIFO<elem_t, true> fifo{8};
+    tll::cc::Callback do_nothing = [](size_t, size_t){};
+    size_t capa = fifo.capacity();
+    size_t ret = -1;
+    elem_t val;
+
+    fifo.push(0);
+    fifo.pop(val);
+    /// Now the fifo is empty.
+    /// But should not be able to push capacity size
+    EXPECT_EQ(fifo.push(do_nothing, capa), 0);
+    /// Can only pushing the reset of the buffer.
+    EXPECT_EQ(fifo.push(do_nothing, capa - 1), capa - 1);
+    /// reset everything
+    fifo.reset();
+    fifo.push(do_nothing, capa);
+    fifo.pop(do_nothing, capa/2);
+    /// wrapped perfectly
+    fifo.push(do_nothing, capa/2);
+    /// should having the capacity elems
+    EXPECT_EQ(fifo.size(), capa);
+    /// Should only be able to pop capa/2 due to wrapped (contiguously)
+    EXPECT_EQ(fifo.pop(do_nothing, -1), capa/2);
+    EXPECT_EQ(fifo.pop(do_nothing, -1), capa/2);
+}
+
 
 #if (HAVE_OPENMP)
 
+/// Should run with --gtest_filter=CCFIFOBufferStressTest.* --gtest_repeat=10000
 struct CCFIFOBufferStressTest : public ::testing::Test
 {
-    static constexpr size_t kTotalWriteSize = 0x20 * 0x100000;
+    void SetUp()
+    {
+        LOGD("Should run with --gtest_filter=CCFIFOBufferStressTest.* --gtest_repeat=100000");
+    }
+
+    static constexpr size_t kTotalWriteSize = 0x20 * 0x100000; /// 20 Mbs
     static constexpr size_t kCapacity = kTotalWriteSize / 4;
     static constexpr size_t kMaxPkgSize = 0x1000;
     // static constexpr size_t kWrap = 16;
@@ -294,7 +272,7 @@ TEST_F(CCFIFOBufferStressTest, MPSCWRandSize)
                         auto src = fifo.elemAt(id);
                         std::atomic_thread_fence(std::memory_order_acquire);
                         memcpy(dst, src, size);
-                    }, fifo.capacity());
+                    }, -1);
 
                     if(ps > 0)
                     {
