@@ -4,10 +4,7 @@ int __attribute__((weak)) benchmark()
 {
     printf("benchmark is disabled!\n");
 }
-int __attribute__((weak)) ftests()
-{
-    printf("ftests is disabled!\n");
-}
+
 int __attribute__((weak)) perfTunnel()
 {
     printf("perfTunnel is disabled!\n");
@@ -23,7 +20,6 @@ int main(int argc, char *argv[])
 
     options.add_options()
         ("b,benchmark", "Run benchmark", cxxopts::value<bool>()->default_value("false"))
-        ("f,ftests", "Run fifo test", cxxopts::value<bool>()->default_value("false"))
         ("p,perftun", "Run performance tunnel", cxxopts::value<bool>()->default_value("false"))
         ("u,unittests", "Run unit tests", cxxopts::value<bool>()->default_value("false"))
         ("h,help", "Print help")
@@ -44,11 +40,6 @@ int main(int argc, char *argv[])
     if (result.count("benchmark"))
     {
         benchmark();
-    }
-
-    if (result.count("ftests"))
-    {
-        ftests();
     }
 
     if (result.count("perftun"))

@@ -14,8 +14,7 @@ target_sources(tll_tests
 PRIVATE
     tll_tests.cc
     # benchmark.cc
-    ftests.cc
-    # perf_tunnel.cc
+    perf_tunnel.cc
     $<$<EQUAL:${HAVE_GTEST},1>:CBUnittests.cc>
     $<$<EQUAL:${HAVE_GTEST},1>:unittests.cc>
 )
