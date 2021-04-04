@@ -2,9 +2,9 @@ Utilities & Logging Library
 ----
 
 ## Benchmark
-![push](./tests/push.png)
-![pop](./tests/pop.png)
-![push/pop](./tests/pp.png)
+![push](./res/push.png)
+![pop](./res/pop.png)
+![push/pop](./res/pp.png)
 
 TODO
 ---
