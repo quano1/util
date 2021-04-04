@@ -127,13 +127,11 @@ static void doFifing(const auto &doPush, const auto &doPop, size_t write_count, 
 }
 
 template <int num_of_threads>
-static void _perfTunnel(size_t test_val, size_t count, std::ofstream &ofs_pt, std::ofstream &ofs_time)
+static void _perfTunnel(size_t test_val, size_t count, std::ofstream &ofs_tp_push, std::ofstream &ofs_tp_pop, std::ofstream &ofs_time)
 {
     size_t ops[3];
     double time[3];
 
-    ofs_pt << num_of_threads << " ";
-    ofs_time << num_of_threads * 2 << " ";
     // size_t tn = (tll::util::isPowerOf2(count) ? count : tll::util::nextPowerOf2(count));
     size_t threads_indicies_size = (tll::util::isPowerOf2(test_val*num_of_threads) ? test_val*num_of_threads : tll::util::nextPowerOf2(test_val*num_of_threads));
     tll::lf::CCFIFO<char> fifo{count * 2, threads_indicies_size};
@@ -146,32 +144,66 @@ static void _perfTunnel(size_t test_val, size_t count, std::ofstream &ofs_pt, st
     double avg_time[3] = {time[0]/num_of_threads, time[1]/num_of_threads, time[2]/num_of_threads};
     /// number of operations per time
     double throughput[3] = {(ops[0]/time[0])*0.001, (ops[1]/time[1])*0.001, (ops[2]/time[2])*0.001};
-    ofs_pt << (throughput[0]) << " " << (throughput[1]) << " ";
+    ofs_tp_push << (throughput[0]) << " ";
+    ofs_tp_pop << (throughput[1]) << " ";
     ofs_time << (avg_time[2]) << " ";
     LOGD("val:0x%lx\t[0]:%.3f/%.3f\t[1]:%.3f/%.3f\t[2]:%.3f/%.3f", test_val, throughput[0], avg_time[0], throughput[1], avg_time[1], throughput[2], avg_time[2]);
-    ofs_pt << "\n";
-    ofs_time << "\n";
+    
 }
 
 int perfTunnel()
 {
-    std::ofstream ofs_pt{"pt.dat"};
+    std::ofstream ofs_tp_push{"pt_tp_push.dat"};
+    std::ofstream ofs_tp_pop{"pt_tp_pop.dat"};
     std::ofstream ofs_time{"pt_time.dat"};
+
+    ofs_tp_push << tll::util::stringFormat(";%d\n",NUM_CPU);
+    ofs_tp_pop << tll::util::stringFormat(";%d\n",NUM_CPU);
+    ofs_time << tll::util::stringFormat(";%d\n",NUM_CPU);
+    ofs_tp_push << tll::util::stringFormat(";push contiguously (max cpu: %d)\\nHigher is better\n",NUM_CPU);
+    ofs_tp_pop << tll::util::stringFormat(";pop contiguously (max cpu: %d)\\nHigher is better\n",NUM_CPU);
+    ofs_time << tll::util::stringFormat(";push and pop simultaneously (max cpu: %d)\\nLower is better\n",NUM_CPU);
+
+    ofs_tp_push << ";Number of threads\n";
+    ofs_tp_pop << ";Number of threads\n";
+    ofs_time << ";Number of threads\n";
+    ofs_tp_push << ";Operations (million) per second\n";
+    ofs_tp_pop << ";Operations (million) per second\n";
+    ofs_time << ";Average time for completing the test (ms)\n";
+
+    ofs_tp_push << ";NOT * 0x2000\n";
+    ofs_tp_pop << ";NOT * 0x2000\n";
+    ofs_time << ";NOT * 0x2000\n";
+    ofs_tp_push << ";NOT * 0x4000\n";
+    ofs_tp_pop << ";NOT * 0x4000\n";
+    ofs_time << ";NOT * 0x4000\n";
+    ofs_tp_push << ";NOT * 0x8000\n";
+    ofs_tp_pop << ";NOT * 0x8000\n";
+    ofs_time << ";NOT * 0x8000\n";
+
     LOGD("mul: Size of threads indices");
     LOGD("Million of operations per seconds (higher better)");
     LOGD("Average milliseconds to complete the test (lower better)");
     LOGD("\t\t[0]:push only\t\t[1]:pop only\t\t[2]:push pop simul (threads x 2)");
     tll::util::CallFuncInSeq<NUM_CPU, 15>( [&](auto index_seq)
     {
+        // if(index_seq.value < NUM_CPU) return;
+        ofs_tp_push << index_seq.value << " ";
+        ofs_tp_pop << index_seq.value << " ";
+        ofs_time << index_seq.value << " ";
         constexpr size_t kCount = 250000 * index_seq.value;
         LOGD("Number Of Threads: %ld, total count: %ldK", index_seq.value, kCount/1000);
         // for (size_t i=0,tis=0x10000; i<8; i++,tis*=2)
-        _perfTunnel<index_seq.value>(0x2000, kCount, ofs_pt, ofs_time);
-        _perfTunnel<index_seq.value>(0x4000, kCount, ofs_pt, ofs_time);
-        _perfTunnel<index_seq.value>(0x8000, kCount, ofs_pt, ofs_time);
+        _perfTunnel<index_seq.value>(0x2000, kCount, ofs_tp_push, ofs_tp_pop, ofs_time);
+        _perfTunnel<index_seq.value>(0x4000, kCount, ofs_tp_push, ofs_tp_pop, ofs_time);
+        _perfTunnel<index_seq.value>(0x8000, kCount, ofs_tp_push, ofs_tp_pop, ofs_time);
+        ofs_tp_push << "\n";
+        ofs_tp_pop << "\n";
+        ofs_time << "\n";
         LOGD("=========================");
     });
-    ofs_pt.flush();
+    ofs_tp_push.flush();
+    ofs_tp_pop.flush();
     ofs_time.flush();
 
     return 0;

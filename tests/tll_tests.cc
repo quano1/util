@@ -3,15 +3,18 @@
 int __attribute__((weak)) benchmark()
 {
     printf("benchmark is disabled!\n");
+    return 0;
 }
 
 int __attribute__((weak)) perfTunnel()
 {
     printf("perfTunnel is disabled!\n");
+    return 0;
 }
 int __attribute__((weak)) unittests(int argc, char **argv)
 {
     printf("unittests is disabled!\n");
+    return 0;
 }
 
 int main(int argc, char *argv[])
