@@ -14,10 +14,10 @@ struct CCFIFOBufferBasicTest : public ::testing::Test
         tll::lf::CCFIFO<elem_t> fifo;
         elem_t val = -1;
         size_t ret = -1;
-        tll::cc::Callback do_nothing = [](size_t, size_t){};
-        auto pushCb = [](size_t id, size_t sz, tll::lf::CCFIFO<elem_t> &fifo, elem_t val)
+        tll::cc::Callback<elem_t> do_nothing = [](const elem_t*, size_t){};
+        auto pushCb = [](elem_t *el, size_t sz, elem_t val)
         {
-            for(int i_=0; i_<sz; i_++) fifo[id + i_] = val;
+            for(int i=0; i<sz; i++) *(el+i) = val;
         };
 
         /// reserve not power of 2
@@ -48,13 +48,12 @@ struct CCFIFOBufferBasicTest : public ::testing::Test
         constexpr size_t kPushSize = 3;
         for(size_t i=0; i < fifo.capacity()*loop; i++)
         {
-            ret = fifo.push(pushCb, kPushSize, fifo, (elem_t)i);
+            ret = fifo.push(pushCb, kPushSize, (elem_t)i);
             EXPECT_EQ(ret, kPushSize);
 
-            ret = fifo.pop([&fifo, i](size_t id, size_t sz)
-            {
-                EXPECT_EQ(fifo[id], (elem_t)i);
-                EXPECT_EQ(memcmp(&fifo[id], &fifo[id + 1], (sz - 1) * sizeof(elem_t)), 0);
+            ret = fifo.pop([i](const elem_t *el, size_t sz){
+                EXPECT_EQ(*(el), (elem_t)i);
+                EXPECT_EQ(memcmp(el, el + 1, (sz - 1) * sizeof(elem_t)), 0);
             }, -1);
             EXPECT_EQ(ret, kPushSize);
         }
@@ -74,12 +73,12 @@ TEST_F(CCFIFOBufferBasicTest, Contiguously)
 {
     typedef int8_t elem_t;
     tll::lf::CCFIFO<elem_t, true> fifo{8};
-    tll::cc::Callback do_nothing = [](size_t, size_t){};
+    tll::cc::Callback<elem_t> do_nothing = [](const elem_t*, size_t){};
     size_t capa = fifo.capacity();
     size_t ret = -1;
     elem_t val;
 
-    fifo.push(0);
+    fifo.push((elem_t)0);
     fifo.pop(val);
     /// Now the fifo is empty.
     /// But should not be able to push capacity size
@@ -147,9 +146,8 @@ TEST_F(CCFIFOBufferStressTest, MPMCRWFixedSize)
                 char i=0;
                 for(;total_push_size.load(std::memory_order_relaxed) < (kTotalWriteSize);)
                 {
-                    size_t ws = fifo.push([&fifo, i](size_t id, size_t size) {
-                        auto dst = fifo.elemAt(id);
-                        memset(dst, i, size);
+                    size_t ws = fifo.push([i](char *el, size_t size) {
+                        memset(el, i, size);
                     }, kMaxPkgSize);
                     if(ws)
                     {
@@ -172,9 +170,9 @@ TEST_F(CCFIFOBufferStressTest, MPMCRWFixedSize)
                 for(;prod_completed.load(std::memory_order_relaxed) < index_seq.value /*- (thread_num + 1) / 2*/
                     || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
                 {
-                    size_t ps = fifo.pop([&fifo, &store_buff, &pop_size, kTid](size_t id, size_t size) {
+                    size_t ps = fifo.pop([&store_buff, &pop_size, kTid](const char *el, size_t size) {
                         auto dst = store_buff[kTid/2].data() + pop_size;
-                        auto src = fifo.elemAt(id);
+                        auto src = el;
                         memcpy(dst, src, size);
                     }, kMaxPkgSize);
 
@@ -239,10 +237,10 @@ TEST_F(CCFIFOBufferStressTest, MPSCWRandSize)
                 // uint8_t i=0;
                 for(;total_push_size.load(std::memory_order_relaxed) < (kTotalWriteSize);)
                 {
-                    size_t ws = fifo.push([&fifo, kTid](size_t id, size_t size) {
-                        fifo[id] = '{';
-                        fifo[id + size - 1] = '}';
-                        memset(&fifo[id + 1], (uint8_t)kTid, size - 2);
+                    size_t ws = fifo.push([kTid](char *el, size_t size) {
+                        *el = '{';
+                        *(el + size - 1) = '}';
+                        memset(el + 1, (uint8_t)kTid, size - 2);
                         std::atomic_thread_fence(std::memory_order_release);
                     }, (kTid * kMul) + 2);
                     if(ws)
@@ -266,10 +264,10 @@ TEST_F(CCFIFOBufferStressTest, MPSCWRandSize)
                 for(;prod_completed.load(std::memory_order_relaxed) < (kNumOfThreads - 1)
                     || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
                 {
-                    size_t ps = fifo.pop([&fifo, &store_buff, &pop_size, kTid](size_t id, size_t size) {
+                    size_t ps = fifo.pop([&store_buff, &pop_size, kTid](const char *el, size_t size) {
                         // LOGD("%ld %ld %ld", id, size, id + size);
                         auto dst = store_buff.data() + pop_size;
-                        auto src = fifo.elemAt(id);
+                        auto src = el;
                         std::atomic_thread_fence(std::memory_order_acquire);
                         memcpy(dst, src, size);
                     }, -1);

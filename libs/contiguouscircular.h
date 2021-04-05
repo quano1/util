@@ -29,8 +29,10 @@ struct Stat
     size_t push_miss=0, pop_miss=0;
 };
 
-typedef std::function<void(size_t index, size_t size)> Callback;
+// typedef std::function<void(size_t index, size_t size)> Callback;
 
+template <typename T>
+using Callback = std::function<void(const T *o, size_t s)>;
 
 template <uint8_t type = 3>
 void dumpStat(const tll::cc::Stat &st, double real_total_time)
@@ -109,4 +111,4 @@ void dumpStat(const tll::cc::Stat &st, double real_total_time)
 }
 
 #include "lf/ccfifo.h"
-#include "mt/ccbuffer.h"
+// #include "mt/ccbuffer.h"

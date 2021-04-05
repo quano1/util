@@ -2,8 +2,8 @@
 mkdir -p tmp
 dat_file=`echo ${1} | sed -e '/\//{ s/.*\/\([^.]*\)\.dat/\1/g; q; }' -e 's/\([^\.]*\)\.dat/\1/;'`;
 echo ${dat_file}
-output=tmp/${dat_file}.png
-# output=tmp/${dat_file}.`date +'%y%m%d_%H%M'`.png
+# output=tmp/${dat_file}.png
+output=tmp/${dat_file}.`date +'%y%m%d_%H%M'`.png
 # echo $dat_file;
 # exit 1;
 dat_file=.${dat_file}.dat

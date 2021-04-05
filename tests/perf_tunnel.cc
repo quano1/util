@@ -15,9 +15,12 @@
 // #include "../libs/log.h"
 
 #define ENABLE_PROFILING 0
-#define LOOP_COUNT 0x200
+#define LOOP_COUNT 0x800
+#define EXTENDING 7
 // #define DUMPER
-#define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
+// #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
+static char dst[LOOP_COUNT], src[LOOP_COUNT];
+#define DUMMY_LOOP() memcpy(dst, src, LOOP_COUNT)
 
 #include "../libs/util.h"
 #include "../libs/counter.h"
@@ -38,10 +41,11 @@ static void doFifing(const auto &doPush, const auto &doPop, size_t write_count, 
         // LOGD("Thread: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
         for(;total_push_count.load(std::memory_order_relaxed) < (write_count);)
         {
-            // bool ws = fifo.push([](size_t, size_t){ NOP_LOOP(LOOP_COUNT); }, 1);
+            // bool ws = fifo.push([](size_t, size_t){ DUMMY_LOOP(); }, 1);
             if(doPush())
             {
                 total_push_count.fetch_add(1, std::memory_order_relaxed);
+                std::this_thread::yield();
             }
             else
             {
@@ -65,6 +69,7 @@ static void doFifing(const auto &doPush, const auto &doPop, size_t write_count, 
             if(doPop())
             {
                 total_pop_count.fetch_add(1, std::memory_order_relaxed);
+                std::this_thread::yield();
             }
             else
             {
@@ -99,6 +104,7 @@ static void doFifing(const auto &doPush, const auto &doPop, size_t write_count, 
                 if(doPush())
                 {
                     total_push_count.fetch_add(1, std::memory_order_relaxed);
+                    std::this_thread::yield();
                 }
             }
             w_threads.fetch_add(1, std::memory_order_relaxed);
@@ -111,6 +117,7 @@ static void doFifing(const auto &doPush, const auto &doPop, size_t write_count, 
                 if(doPop())
                 {
                     total_pop_count.fetch_add(1, std::memory_order_relaxed);
+                    std::this_thread::yield();
                 }
             }
         }
@@ -135,12 +142,13 @@ static void _perfTunnel(size_t test_val, size_t count,
 {
     size_t ops[3];
     double time[3];
+    volatile char val;
 
     // size_t tn = (tll::util::isPowerOf2(count) ? count : tll::util::nextPowerOf2(count));
     size_t threads_indicies_size = (tll::util::isPowerOf2(test_val*num_of_threads) ? test_val*num_of_threads : tll::util::nextPowerOf2(test_val*num_of_threads));
     tll::lf::CCFIFO<char> fifo{count * 2, threads_indicies_size};
-    auto doPush = [&fifo]() -> bool { return fifo.enQueue([&fifo](size_t i, size_t s){ NOP_LOOP(LOOP_COUNT); *(fifo.elemAt(i)) = 1; }); };
-    auto doPop = [&fifo]() -> bool { return fifo.deQueue([&fifo](size_t i, size_t s){ NOP_LOOP(LOOP_COUNT); char val; val = *fifo.elemAt(i); }); };
+    auto doPush = [&fifo]() -> bool { return fifo.enQueue([](char *el){ DUMMY_LOOP(); *el = 1; }); };
+    auto doPop = [&fifo, &val]() -> bool { return fifo.deQueue([&val](const char *el){ DUMMY_LOOP(); val = *el; }); };
     
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     doFifing<num_of_threads>(doPush, doPop, count, time, ops);
@@ -192,7 +200,7 @@ int perfTunnel()
     LOGD("Million of operations per seconds (higher better)");
     LOGD("Average milliseconds to complete the test (lower better)");
     LOGD("\t\t[0]:push only\t\t[1]:pop only\t\t[2]:push pop simul (threads x 2)");
-    tll::util::CallFuncInSeq<NUM_CPU, 15>( [&](auto index_seq)
+    tll::util::CallFuncInSeq<NUM_CPU, EXTENDING>( [&](auto index_seq)
     {
         // if(index_seq.value < NUM_CPU) return;
         ofs_tp_push << index_seq.value << " ";

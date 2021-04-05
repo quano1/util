@@ -11,16 +11,27 @@
 #include <tests/third-party/concurrentqueue/concurrentqueue.h>
 
 #define ENABLE_PROFILING 0
-#define LOOP_COUNT 0x400
+#define LOOP_COUNT 0x800
+#define EXTENDING 7
 // #define DUMPER
-#define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
+// #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
+
+static char dst[LOOP_COUNT], src[LOOP_COUNT];
+#define DUMMY_LOOP() memcpy(dst, src, LOOP_COUNT)
+// #define DUMMY_LOOP() for(int i__=0; i__<LOOP_COUNT; i__++) __asm__("nop")
+
+
+// static void dummyCpy()
+// {
+//     memcpy(dst, src, LOOP_COUNT);
+// }
 
 #include "../libs/util.h"
 #include "../libs/counter.h"
 #include "../libs/contiguouscircular.h"
 
 template <int num_of_threads>
-static void _benchmark(const auto &doPush, const auto &doPop, size_t write_count, double *time, size_t *ops)
+static void _benchmark(const std::string &name, const auto &doPush, const auto &doPop, size_t write_count, double *time, size_t *ops, std::vector<std::ofstream> &ofss)
 {
     // constexpr int kThreadNum = num_of_threads / 2;
     static_assert(num_of_threads > 0);
@@ -38,6 +49,7 @@ static void _benchmark(const auto &doPush, const auto &doPop, size_t write_count
             if(doPush())
             {
                 total_push_count.fetch_add(1, std::memory_order_relaxed);
+                std::this_thread::yield();
             }
             else
             {
@@ -61,6 +73,7 @@ static void _benchmark(const auto &doPush, const auto &doPop, size_t write_count
             if(doPop())
             {
                 total_pop_count.fetch_add(1, std::memory_order_relaxed);
+                std::this_thread::yield();
             }
             else
             {
@@ -95,6 +108,7 @@ static void _benchmark(const auto &doPush, const auto &doPop, size_t write_count
                 if(doPush())
                 {
                     total_push_count.fetch_add(1, std::memory_order_relaxed);
+                    std::this_thread::yield();
                 }
             }
             w_threads.fetch_add(1, std::memory_order_relaxed);
@@ -107,6 +121,7 @@ static void _benchmark(const auto &doPush, const auto &doPop, size_t write_count
                 if(doPop())
                 {
                     total_pop_count.fetch_add(1, std::memory_order_relaxed);
+                    std::this_thread::yield();
                 }
             }
         }
@@ -120,13 +135,27 @@ static void _benchmark(const auto &doPush, const auto &doPop, size_t write_count
         LOGD(" - w:%ld r:%ld\n", total_push_count.load(std::memory_order_relaxed), total_pop_count.load(std::memory_order_relaxed));
         abort();
     }
+
+
+    double avg_time[3] = {time[0]*1000/num_of_threads, time[1]*1000/num_of_threads, time[2]*1000/num_of_threads};
+    double throughput[3] = {ops[0]*0.000001/time[0], ops[1]*0.000001/time[1], ops[2]*0.000001/time[2]};
+    ofss[0] << (throughput[0]) << " ";
+    ofss[1] << (throughput[1]) << " ";
+    ofss[2] << (avg_time[2]) << " ";
+    LOGD("%s\t%.3f/%.3f\t%.3f/%.3f\t%.3f/%.3f\t%.3f", name.data(), throughput[0], avg_time[0], throughput[1], avg_time[1], throughput[2], avg_time[2], throughput[0]/throughput[1]);
 }
 
 int benchmark()
 {
-    std::ofstream ofs_tp_push{"bm_tp_push.dat"};
-    std::ofstream ofs_tp_pop{"bm_tp_pop.dat"};
-    std::ofstream ofs_time{"bm_time.dat"};
+    std::vector<std::ofstream> ofss;
+    ofss.resize(3);
+    std::ofstream &ofs_tp_push = ofss[0];
+    std::ofstream &ofs_tp_pop = ofss[1];
+    std::ofstream &ofs_time = ofss[2];
+    ofs_tp_push.open("bm_tp_push.dat");
+    ofs_tp_pop.open("bm_tp_pop.dat");
+    ofs_time.open("bm_time.dat");
+
     ofs_tp_push << tll::util::stringFormat(";%d\n",NUM_CPU);
     ofs_tp_pop << tll::util::stringFormat(";%d\n",NUM_CPU);
     ofs_time << tll::util::stringFormat(";%d\n",NUM_CPU);
@@ -150,7 +179,7 @@ int benchmark()
     ofs_tp_pop << ";CCFIFO\n";
     ofs_time << ";CCFIFO\n";
 
-    tll::util::CallFuncInSeq<NUM_CPU, 7>( [&](auto index_seq)
+    tll::util::CallFuncInSeq<NUM_CPU, EXTENDING>( [&](auto index_seq)
     {
         // if(index_seq.value > 2) return;
         constexpr size_t kCount = 250000 * index_seq.value;
@@ -162,6 +191,7 @@ int benchmark()
         ofs_time << index_seq.value << " ";
         // constexpr size_t kN2 = 0x800000;
         constexpr size_t kTN = (tll::util::isPowerOf2(kCount) ? kCount : tll::util::nextPowerOf2(kCount));
+        volatile char val;
         // LOGD("%lx", kTN);
 
         // {
@@ -194,50 +224,29 @@ int benchmark()
         LOGD("\tpush/avg(ms)\tpop/avg(ms)\tpp/avg(ms)\tpush/pop");
         {
             boost::lockfree::queue<char> fifo{kCount * 2};
-            auto doPush = [&fifo]() -> bool { NOP_LOOP(LOOP_COUNT); return fifo.push((char)1); };
-            auto doPop = [&fifo]() -> bool { NOP_LOOP(LOOP_COUNT); char val; return fifo.pop(val); };
+            auto doPush = [&fifo]() -> bool { DUMMY_LOOP(); return fifo.push((char)1); };
+            auto doPop = [&fifo, &val]() -> bool { DUMMY_LOOP(); return fifo.pop(val); };
             
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
-            
-            double avg_time[3] = {time[0]*1000/index_seq.value, time[1]*1000/index_seq.value, time[2]*1000/index_seq.value};
-            double throughput[3] = {ops[0]*0.000001/time[0], ops[1]*0.000001/time[1], ops[2]*0.000001/time[2]};
-            ofs_tp_push << (throughput[0]) << " ";
-            ofs_tp_pop << (throughput[1]) << " ";
-            ofs_time << (avg_time[2]) << " ";
-            LOGD("boost\t%.3f/%.3f\t%.3f/%.3f\t%.3f/%.3f\t%.3f", throughput[0], avg_time[0], throughput[1], avg_time[1], throughput[2], avg_time[2], throughput[0]/throughput[1]);
+            _benchmark<index_seq.value>("boost", doPush, doPop, kCount, time, ops, ofss);
         }
         
         {
             moodycamel::ConcurrentQueue<char> fifo{kCount * 2};
-            auto doPush = [&fifo]() -> bool { NOP_LOOP(LOOP_COUNT); fifo.enqueue((char)1); return true; };
-            auto doPop = [&fifo]() -> bool { NOP_LOOP(LOOP_COUNT); char val; return fifo.try_dequeue(val); };
+            auto doPush = [&fifo]() -> bool { DUMMY_LOOP(); fifo.enqueue((char)1); return true; };
+            auto doPop = [&fifo, &val]() -> bool { DUMMY_LOOP(); return fifo.try_dequeue(val); };
 
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
-
-            double avg_time[3] = {time[0]*1000/index_seq.value, time[1]*1000/index_seq.value, time[2]*1000/index_seq.value};
-            double throughput[3] = {ops[0]*0.000001/time[0], ops[1]*0.000001/time[1], ops[2]*0.000001/time[2]};
-            ofs_tp_push << (throughput[0]) << " ";
-            ofs_tp_pop << (throughput[1]) << " ";
-            ofs_time << (avg_time[2]) << " ";
-            LOGD("MoodyC\t%.3f/%.3f\t%.3f/%.3f\t%.3f/%.3f\t%.3f", throughput[0], avg_time[0], throughput[1], avg_time[1], throughput[2], avg_time[2], throughput[0]/throughput[1]);
+            _benchmark<index_seq.value>("moody", doPush, doPop, kCount, time, ops, ofss);
         }
 
         {
             tll::lf::CCFIFO<char> fifo{kCount * 2, index_seq.value * 0x4000};
-            auto doPush = [&fifo]() -> bool { return fifo.enQueue([&fifo](size_t i, size_t s){ NOP_LOOP(LOOP_COUNT); *(fifo.elemAt(i)) = 1; }); };
-            auto doPop = [&fifo]() -> bool { return fifo.deQueue([&fifo](size_t i, size_t s){ NOP_LOOP(LOOP_COUNT); char val; val = *fifo.elemAt(i); }); };
+            auto doPush = [&fifo]() -> bool { return fifo.enQueue([](char *el){ DUMMY_LOOP(); *el = 1; }); };
+            auto doPop = [&fifo, &val]() -> bool { return fifo.deQueue([&val](const char *el){ DUMMY_LOOP(); val = *el; }); };
             
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
-            
-            double avg_time[3] = {time[0]*1000/index_seq.value, time[1]*1000/index_seq.value, time[2]*1000/index_seq.value};
-            double throughput[3] = {ops[0]*0.000001/time[0], ops[1]*0.000001/time[1], ops[2]*0.000001/time[2]};
-            ofs_tp_push << (throughput[0]) << " ";
-            ofs_tp_pop << (throughput[1]) << " ";
-            ofs_time << (avg_time[2]) << " ";
-            LOGD("CCFIFO\t%.3f/%.3f\t%.3f/%.3f\t%.3f/%.3f\t%.3f", throughput[0], avg_time[0], throughput[1], avg_time[1], throughput[2], avg_time[2], throughput[0]/throughput[1]);
+            _benchmark<index_seq.value>("ccfifo", doPush, doPop, kCount, time, ops, ofss);
         }
 
         ofs_tp_push << "\n";

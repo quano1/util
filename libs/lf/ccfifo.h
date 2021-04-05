@@ -219,9 +219,8 @@ public:
         profAdd(stat_push_size, size);
     }
 
-    // template <typename ...Args>
-    template <typename F, typename ...Args>
-    auto pop(F &&cb, size_t size, Args &&...args)
+    template <typename F, typename T, typename ...Args>
+    auto pop(F &&cb, T *el, size_t size, Args &&...args)
     {
         size_t cons;
         profTimerReset();
@@ -231,7 +230,7 @@ public:
         profTimerStart();
         if(size)
         {
-            cb(wrap(next), size, std::forward<Args>(args)...);
+            cb(el + wrap(next), size, std::forward<Args>(args)...);
             // profAdd(time_pop_cb, timer.elapse().count());
             profTimerElapse(time_pop_cb);
             profTimerStart();
@@ -244,9 +243,8 @@ public:
         return size;
     }
 
-    // template <typename ...Args>
-    template <typename F, typename ...Args>
-    auto push(F &&cb, size_t size, Args &&...args)
+    template <typename F, typename T, typename ...Args>
+    auto push(F &&cb, T *el, size_t size, Args &&...args)
     {
         size_t prod;
         profTimerReset();
@@ -256,7 +254,7 @@ public:
         profTimerStart();
         if(size)
         {
-            cb(wrap(next), size, std::forward<Args>(args)...);
+            cb(el + wrap(next), size, std::forward<Args>(args)...);
             // profAdd(time_push_cb, timer.elapse().count());
             profTimerElapse(time_push_cb);
             profTimerStart();
@@ -313,7 +311,9 @@ public:
         return true;
     }
 
-    inline bool deQueue(const tll::cc::Callback &cb)
+    // inline bool deQueue(const tll::cc::Callback &cb)
+    template <typename F, typename T, typename ...Args>
+    auto deQueue(F &&cb, T *el, Args &&...args)
     {
         profTimerReset();
         bool ret = false;
@@ -338,7 +338,7 @@ public:
         profTimerStart();
         if(ret)
         {
-            /*if(cb)*/ cb(wrap(idx), 1);
+            /*if(cb)*/ cb(el + wrap(idx), std::forward<Args>(args)...);
             // profAdd(time_pop_cb, timer.elapse().count());
             profTimerElapse(time_pop_cb);
             profTimerStart();
@@ -354,7 +354,8 @@ public:
         return ret;
     }
 
-    inline bool enQueue(const tll::cc::Callback &cb)
+    template <typename F, typename T, typename ...Args>
+    auto enQueue(F &&cb, T *el, Args &&...args)
     {
         profTimerReset();
         bool ret = false;
@@ -379,7 +380,7 @@ public:
         profTimerStart();
         if(ret)
         {
-            /*if(cb)*/ cb(wrap(idx), 1);
+            /*if(cb)*/ cb(el + wrap(idx), std::forward<Args>(args)...);
             // profAdd(time_push_cb, timer.elapse().count());
             profTimerElapse(time_push_cb);
             profTimerStart();
@@ -547,38 +548,36 @@ public:
     template <typename F, typename ...Args>
     auto pop(F &&cb, size_t size, Args &&...args)
     {
-        return cci_.pop(std::forward<F>(cb), size, std::forward<Args>(args)...);
+        return cci_.pop(std::forward<F>(cb), buffer_.data(), size, std::forward<Args>(args)...);
     }
 
     inline auto pop(T &val)
     {
-        return cci_.pop([&val, this](size_t idx, size_t){ val = std::move(this->buffer_[idx]); }, 1);
+        return cci_.pop([&val](T *el, size_t){ val = std::move(*el); }, buffer_.data(), 1);
     }
 
     template <typename F, typename ...Args>
     auto push(F &&cb, size_t size, Args &&...args)
     {
-        return cci_.push(std::forward<F>(cb), size, std::forward<Args>(args)...);
+        return cci_.push(std::forward<F>(cb), buffer_.data(), size, std::forward<Args>(args)...);
     }
 
-    inline auto push(const T &val)
+    template<typename U>
+    auto push(U &&val)
     {
-        return cci_.push([&val, this](size_t idx, size_t){ this->buffer_[idx] = val; }, 1);
+        return cci_.push([&val](T *el, size_t){ *el = std::forward<U>(val); }, buffer_.data(), 1);
     }
 
-    inline auto push(T &&val)
+    template <typename F, typename ...Args>
+    auto enQueue(F &&cb, Args &&...args)
     {
-        return cci_.push([&val, this](size_t idx, size_t){ this->buffer_[idx] = std::move(val); }, 1);
+        return cci_.enQueue(cb, buffer_.data(), std::forward<Args>(args)...);
     }
 
-    inline auto enQueue(const tll::cc::Callback &cb, size_t size=1)
+    template <typename F, typename ...Args>
+    auto deQueue(F &&cb, Args &&...args)
     {
-        return cci_.enQueue(cb);
-    }
-
-    inline auto deQueue(const tll::cc::Callback &cb, size_t size=1)
-    {
-        return cci_.deQueue(cb);
+        return cci_.deQueue(cb, buffer_.data(), std::forward<Args>(args)...);
     }
 
     inline auto capacity() const
