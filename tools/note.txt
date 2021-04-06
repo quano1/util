@@ -1,0 +1,6 @@
+
+TIP/TRICKS
+---
+ulimit -c
+ulimit -c unlimited
+sudo systemctl enable apport.service

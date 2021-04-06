@@ -109,9 +109,9 @@ struct CCFIFOBufferStressTest : public ::testing::Test
         LOGD("Should run with --gtest_filter=CCFIFOBufferStressTest.* --gtest_repeat=100000 --gtest_break_on_failure");
     }
 
-    static constexpr size_t kTotalWriteSize = 0x1000; /// 1 Mbs
+    static constexpr size_t kTotalWriteSize = 0x20 * 0x100000; /// 1 Mbs
     static constexpr size_t kCapacity = kTotalWriteSize / 4;
-    static constexpr size_t kMaxPkgSize = 0x100;
+    static constexpr size_t kMaxPkgSize = 0x1000;
     // static constexpr size_t kWrap = 16;
 
 };
@@ -119,10 +119,10 @@ struct CCFIFOBufferStressTest : public ::testing::Test
 /// MPMC read write fixed size
 TEST_F(CCFIFOBufferStressTest, MPMCRWFixedSize)
 {
-    tll::util::CallFuncInSeq<NUM_CPU, 0>( [&](auto index_seq)
+    tll::util::CallFuncInSeq<NUM_CPU, -1>( [&](auto index_seq)
     {
         static_assert(index_seq.value > 0);
-        if(index_seq.value == NUM_CPU) return;
+        // if(index_seq.value == NUM_CPU) return;
         auto constexpr kNumOfThreads = index_seq.value * 2;
         LOGD("Number of threads: %ld", kNumOfThreads);
         constexpr size_t kStoreSize = kTotalWriteSize + ((index_seq.value - 1) * kMaxPkgSize);
@@ -196,7 +196,7 @@ TEST_F(CCFIFOBufferStressTest, MPMCRWFixedSize)
         tll::cc::dumpStat<>(stat, tt_time);
         LOGD("Total time: %f (s)", tt_time);
 #endif
-        LOGD("%s", fifo.dump().data());
+        // LOGD("%s", fifo.dump().data());
         auto ttps = total_push_size.load(std::memory_order_relaxed);
         ASSERT_GE(ttps, (kTotalWriteSize));
         ASSERT_LE(ttps, kStoreSize);
@@ -210,6 +210,7 @@ TEST_F(CCFIFOBufferStressTest, MPMCRWFixedSize)
     });
 }
 
+
 /// MPSC write random size
 TEST_F(CCFIFOBufferStressTest, MPSCWRandSize)
 {
@@ -218,8 +219,8 @@ TEST_F(CCFIFOBufferStressTest, MPSCWRandSize)
         static_assert(index_seq.value > 0);
         // if(index_seq.value == 1 || index_seq.value >= NUM_CPU) return;
         // if(index_seq.value > NUM_CPU) return;
-        constexpr size_t kMul = kMaxPkgSize / NUM_CPU;
         constexpr auto kNumOfThreads = index_seq.value * 2;
+        constexpr size_t kMul = kMaxPkgSize / kNumOfThreads;
         constexpr size_t kStoreSize = kTotalWriteSize + ((kNumOfThreads - 1) * kMaxPkgSize);
         LOGD("Number of Prods: %ld", kNumOfThreads - 1);
         tll::lf2::CCFIFO<char, true> fifo{kCapacity};
@@ -239,11 +240,11 @@ TEST_F(CCFIFOBufferStressTest, MPSCWRandSize)
                 // size_t local_push=0;
                 for(;total_push_size.load(std::memory_order_relaxed) < (kTotalWriteSize);)
                 {
-                    size_t ws = fifo.push([kTid](char *el, size_t size) {
+                    size_t ws = fifo.push([&fifo, &total_push_size, kTid](char *el, size_t size) {
                         *el = '{';
                         *(el + size - 1) = '}';
                         memset(el + 1, (uint8_t)kTid, size - 2);
-                        // LOGD("\t>%ld", size);
+                        // LOGD("\t>%4ld/%4ld\t{%s}", size, total_push_size.load(std::memory_order_relaxed), fifo.dump().data());
                     }, (kTid * kMul) + 2);
 
                     if(ws)
@@ -270,8 +271,8 @@ TEST_F(CCFIFOBufferStressTest, MPSCWRandSize)
                 for(;prod_completed.load(std::memory_order_relaxed) < (kNumOfThreads - 1)
                     || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
                 {
-                    size_t ps = fifo.pop([&store_buff, &pop_size, kTid](const char *el, size_t size) {
-                        // LOGD("\t<%ld", size);
+                    size_t ps = fifo.pop([&store_buff, &pop_size, &fifo, kTid](const char *el, size_t size) {
+                        // LOGD("\t-<%4ld\t{%s}", size, fifo.dump().data());
                         auto dst = store_buff.data() + pop_size;
                         auto src = el;
                         memcpy(dst, src, size);
@@ -302,7 +303,7 @@ TEST_F(CCFIFOBufferStressTest, MPSCWRandSize)
 #endif
         auto ttps = total_push_size.load(std::memory_order_relaxed);
         // LOGD("%ld %ld", fifo.stat().push_size, fifo.stat().pop_size);
-        LOGD("%s", fifo.dump().data());
+        // LOGD("%s", fifo.dump().data());
         ASSERT_GE(ttps, (kTotalWriteSize));
         ASSERT_LE(ttps, kStoreSize);
         ASSERT_EQ(ttps, total_pop_size.load(std::memory_order_relaxed));

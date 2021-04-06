@@ -39,8 +39,8 @@ public:
 
     ~CCIndex()
     {
-        if(prod_out_id_) delete prod_out_id_;
-        if(cons_out_id_) delete cons_out_id_;
+        if(prod_out_id_list_) delete prod_out_id_list_;
+        if(cons_out_id_list_) delete cons_out_id_list_;
         if(prod_in_val_) delete prod_in_val_;
         if(cons_in_val_) delete cons_in_val_;
         if(prod_out_next_) delete prod_out_next_;
@@ -57,8 +57,8 @@ public:
         size_t ch = cons_head_.load(std::memory_order_relaxed);
         size_t ct = cons_tail_.load(std::memory_order_relaxed);
 
-        return util::stringFormat("ph:%ld/%ld pt:%ld/%ld ch:%ld/%ld ct:%ld/%ld wm:%ld/%ld ", 
-            wrap(ph), ph, wrap(pt), pt, wrap(ch), ch, wrap(ct), ct, wrap(wm), wm);
+        return util::stringFormat("ph:%ld/%ld pt:%ld/%ld ch:%ld/%ld ct:%ld/%ld wm:%ld/%ld sz:%ld", 
+            wrap(ph), ph, wrap(pt), pt, wrap(ch), ch, wrap(ct), ct, wrap(wm), wm, capacity_);
     }
 
     inline void reset()
@@ -69,12 +69,12 @@ public:
         cons_tail_.store(0,std::memory_order_relaxed);
         water_mark_.store(0,std::memory_order_relaxed);
 
-        prod_id_head_head_.store(capacity_, std::memory_order_relaxed);
-        cons_id_head_head_.store(capacity_, std::memory_order_relaxed);
-        prod_id_head_tail_.store(capacity_, std::memory_order_relaxed);
-        cons_id_head_tail_.store(capacity_, std::memory_order_relaxed);
-        prod_id_tail_.store(capacity_, std::memory_order_relaxed);
-        cons_id_tail_.store(capacity_, std::memory_order_relaxed);
+        prod_in_id_head_.store(capacity_, std::memory_order_relaxed);
+        cons_in_id_head_.store(capacity_, std::memory_order_relaxed);
+        prod_in_id_tail_.store(capacity_, std::memory_order_relaxed);
+        cons_in_id_tail_.store(capacity_, std::memory_order_relaxed);
+        prod_out_id_.store(capacity_, std::memory_order_relaxed);
+        cons_out_id_.store(capacity_, std::memory_order_relaxed);
 
         stat_push_size.store(0, std::memory_order_relaxed);
         stat_push_total.store(0, std::memory_order_relaxed);
@@ -93,8 +93,8 @@ public:
         time_push_complete.store(0, std::memory_order_relaxed);
         time_pop_complete.store(0, std::memory_order_relaxed);
 
-        if(prod_out_id_) delete prod_out_id_;
-        if(cons_out_id_) delete cons_out_id_;
+        if(prod_out_id_list_) delete prod_out_id_list_;
+        if(cons_out_id_list_) delete cons_out_id_list_;
         if(prod_in_val_) delete prod_in_val_;
         if(cons_in_val_) delete cons_in_val_;
         if(prod_out_next_) delete prod_out_next_;
@@ -102,8 +102,8 @@ public:
         if(prod_out_size_) delete prod_out_size_;
         if(cons_out_val_) delete cons_out_val_;
 
-        prod_out_id_ = new std::atomic<size_t> [num_threads_];
-        cons_out_id_ = new std::atomic<size_t> [num_threads_];
+        prod_out_id_list_ = new std::atomic<size_t> [num_threads_];
+        cons_out_id_list_ = new std::atomic<size_t> [num_threads_];
         prod_in_val_ = new std::atomic<size_t> [num_threads_];
         cons_in_val_ = new std::atomic<size_t> [num_threads_];
         prod_out_next_ = new std::atomic<size_t> [num_threads_];
@@ -112,8 +112,8 @@ public:
         cons_out_val_ = new std::atomic<size_t> [num_threads_];
         for(int i=0; i<num_threads_; i++)
         {
-            prod_out_id_[i].store(0, std::memory_order_relaxed);
-            cons_out_id_[i].store(0, std::memory_order_relaxed);
+            prod_out_id_list_[i].store(0, std::memory_order_relaxed);
+            cons_out_id_list_[i].store(0, std::memory_order_relaxed);
         }
     }
 
@@ -188,19 +188,19 @@ public:
         for(;cons_tail_.load(std::memory_order_relaxed) != cons;){}
         // {std::this_thread::yield();}
         cons_tail_.store(next + size, std::memory_order_relaxed);
-        profAdd(stat_pop_size, size);
+        // profAdd(stat_pop_size, size);
     }
 
     inline size_t tryPush(size_t &id, size_t &prod, size_t &size)
     {
         size_t next_prod;
-        size_t crr_id = prod_id_head_head_.load(std::memory_order_relaxed);
-// LOGD("%ld %ld/%ld", crr_id, prod_id_head_head_.load(), prod_id_head_tail_.load());
+        size_t crr_id = prod_in_id_head_.load(std::memory_order_relaxed);
+// LOGD("%ld %ld/%ld", crr_id, prod_in_id_head_.load(), prod_in_id_tail_.load());
         for(;;profAdd(stat_push_miss, 1))
         {
-            // LOGD("%ld %ld", crr_id, prod_id_head_tail_.load());
-            while(crr_id != prod_id_head_tail_.load(std::memory_order_relaxed)) {crr_id = prod_id_head_head_.load(std::memory_order_relaxed);};
-            // LOGD("%ld %ld", crr_id, prod_id_head_tail_.load());
+            // LOGD("%ld %ld", crr_id, prod_in_id_tail_.load());
+            while(crr_id != prod_in_id_tail_.load(std::memory_order_relaxed)) {crr_id = prod_in_id_head_.load(std::memory_order_relaxed);};
+            // LOGD("%ld %ld", crr_id, prod_in_id_tail_.load());
 
             prod = prod_head_.load(std::memory_order_relaxed);
             next_prod = prod;
@@ -239,7 +239,7 @@ public:
                     }
                 }
 
-                if(!prod_id_head_head_.compare_exchange_weak(crr_id, crr_id + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+                if(!prod_in_id_head_.compare_exchange_weak(crr_id, crr_id + 1, std::memory_order_relaxed, std::memory_order_relaxed))
                 {
                     continue;
                 }
@@ -247,12 +247,12 @@ public:
                 {
                     prod_head_.store(next_prod + size, std::memory_order_relaxed);
 
-                    // if(crr_id != prod_id_head_tail_.load()) {
-                    // LOGD("%ld %ld", crr_id, prod_id_head_tail_.load());
+                    // if(crr_id != prod_in_id_tail_.load()) {
+                    // LOGD("%ld %ld", crr_id, prod_in_id_tail_.load());
                         // abort();
                     // }
 
-                    prod_id_head_tail_.store(crr_id + 1, std::memory_order_relaxed);
+                    prod_in_id_tail_.store(crr_id + 1, std::memory_order_relaxed);
                     id = crr_id;
                     break;
                 }
@@ -283,20 +283,22 @@ public:
 
         // LOGD("%ld %ld %ld %ld", idx, prod, next, size);
         size_t t_pos = wrap(idx, num_threads_);
-        auto &tail = prod_id_tail_;
-        auto &out_index = prod_out_id_;
+        auto &id_tail = prod_out_id_;
+        auto &out_index = prod_out_id_list_;
 
-        if(idx >= (tail.load(std::memory_order_relaxed) + num_threads_)) return false;
+        if(idx >= (id_tail.load(std::memory_order_relaxed) + num_threads_)) return false;
         
+        prod_out_size_[wrap(idx, num_threads_)].store(size);
         prod_out_prod_[wrap(idx, num_threads_)].store(prod);
         prod_out_next_[wrap(idx, num_threads_)].store(next);
-        prod_out_size_[wrap(idx, num_threads_)].store(size);
         size_t const kIdx = idx;
+        size_t next_idx = out_index[wrap(idx, num_threads_)].load(std::memory_order_relaxed);
+        // LOGD("%ld/%ld %ld/%ld %s", prod, next, next_idx, idx, dump().data());
 
         for(;;)
         {
-            size_t next_idx = out_index[wrap(idx, num_threads_)].load(std::memory_order_relaxed);
-            size_t crr_tail = tail.load(std::memory_order_relaxed);
+            size_t crr_tail = id_tail.load(std::memory_order_relaxed);
+
             // LOGD(">(%ld/%ld:%ld/%ld) [%ld] {%ld}", kIdx, t_pos, idx, wrap(idx, num_threads_), crr_tail, next_idx);
             if(crr_tail > idx)
             {
@@ -304,26 +306,48 @@ public:
             }
             else if (crr_tail == idx)
             {
+                size = prod_out_size_[wrap(idx, num_threads_)].load(std::memory_order_relaxed);
+                prod = prod_out_prod_[wrap(idx, num_threads_)].load(std::memory_order_relaxed);
+                next = prod_out_next_[wrap(idx, num_threads_)].load(std::memory_order_relaxed);
+                if(next >= this->next(prod))
+                {
+                    water_mark_.store(prod, std::memory_order_relaxed);
+                    // LOGD("\t*%ld/%ld %ld/%ld\t%s", prod, next, next_idx, crr_tail, dump().data());
+                }
+                prod_tail_.store(next + size, std::memory_order_release);
+
                 size_t cnt = 1;
                 next_idx = out_index[wrap(idx + cnt, num_threads_)].load(std::memory_order_relaxed);
+                // LOGD("%ld/%ld/%ld %ld/%ld %s", prod, next, size, next_idx, crr_tail, dump().data());
                 for(; (cnt<num_threads_) && (next_idx>crr_tail); cnt++)
                 {
+                    size = prod_out_size_[wrap(next_idx, num_threads_)].load(std::memory_order_relaxed);
+                    prod = prod_out_prod_[wrap(next_idx, num_threads_)].load(std::memory_order_relaxed);
+                    next = prod_out_next_[wrap(next_idx, num_threads_)].load(std::memory_order_relaxed);
+                    // LOGD("-%ld/%ld/%ld %ld/%ld %s", prod, next, size, next_idx, crr_tail, dump().data());
+                    if(next >= this->next(prod))
+                    {
+                        water_mark_.store(prod, std::memory_order_relaxed);
+                        // LOGD("\t%ld/%ld\t%s", prod, next, dump().data());
+                    }
+                    prod_tail_.store(next + size, std::memory_order_release);
                     next_idx = out_index[wrap(idx + cnt + 1, num_threads_)].load(std::memory_order_relaxed);
                 }
 
                 idx += cnt;
                 // LOGD(" =(%ld/%ld:%ld/%ld) [%ld] {%ld}", kIdx, t_pos, idx, wrap(idx, num_threads_), crr_tail, next_idx);
-                prod = prod_out_prod_[wrap(idx - 1, num_threads_)].load(std::memory_order_relaxed);
-                next = prod_out_next_[wrap(idx - 1, num_threads_)].load(std::memory_order_relaxed);
-                size = prod_out_size_[wrap(idx - 1, num_threads_)].load(std::memory_order_relaxed);
-                // tail.fetch_add(cnt, std::memory_order_relaxed);
-                tail.store(idx, std::memory_order_relaxed);
+                // size = prod_out_size_[wrap(idx - 1, num_threads_)].load(std::memory_order_relaxed);
+                // prod = prod_out_prod_[wrap(idx - 1, num_threads_)].load(std::memory_order_relaxed);
+                // next = prod_out_next_[wrap(idx - 1, num_threads_)].load(std::memory_order_relaxed);
+                // id_tail.fetch_add(cnt, std::memory_order_relaxed);
+                id_tail.store(idx, std::memory_order_relaxed);
 
-                if(next >= this->next(prod))
-                {
-                    water_mark_.store(prod, std::memory_order_relaxed);
-                }
-                prod_tail_.store(next + size, std::memory_order_release);
+                // if(next >= this->next(prod))
+                // {
+                //     water_mark_.store(prod, std::memory_order_relaxed);
+                //     LOGD("%ld/%ld\t%s", prod, next, dump().data());
+                // }
+                // LOGD("%ld/%ld %s", prod, next, dump().data());
             }
 
             if(out_index[wrap(idx, num_threads_)].compare_exchange_strong(next_idx, kIdx, std::memory_order_relaxed, std::memory_order_relaxed)) break;
@@ -356,6 +380,7 @@ public:
             completePop(cons, next, size);
             // profAdd(time_pop_complete, timer.elapse().count());
             profTimerElapse(time_pop_complete);
+            profAdd(stat_pop_size, size);
         }
         // profAdd(time_pop_total, timer.absElapse().count());
         profTimerAbsElapse(time_pop_total);
@@ -394,7 +419,7 @@ public:
     {
         size_t t_pos = wrap(idx, num_threads_);
         auto &tail = (type == 0) ? prod_tail_ : cons_tail_;
-        auto &out_index = (type == 0) ? prod_out_id_ : cons_out_id_;
+        auto &out_index = (type == 0) ? prod_out_id_list_ : cons_out_id_list_;
 
         if(idx >= (tail.load(std::memory_order_relaxed) + num_threads_)) return false;
         
@@ -464,7 +489,7 @@ public:
             // profAdd(time_pop_cb, timer.elapse().count());
             profTimerElapse(time_pop_cb);
             profTimerStart();
-            // while(!completeQueue(idx, cons_tail_, cons_out_id_)) {std::this_thread::yield();}
+            // while(!completeQueue(idx, cons_tail_, cons_out_id_list_)) {std::this_thread::yield();}
             while(!completeQueue(idx, 1)) {std::this_thread::yield();}
             // profAdd(time_pop_complete, timer.elapse().count());
             profTimerElapse(time_pop_complete);
@@ -506,7 +531,7 @@ public:
             // profAdd(time_push_cb, timer.elapse().count());
             profTimerElapse(time_push_cb);
             profTimerStart();
-            // while(!completeQueue(idx, prod_tail_, prod_out_id_)) {std::this_thread::yield();}
+            // while(!completeQueue(idx, prod_tail_, prod_out_id_list_)) {std::this_thread::yield();}
             while(!completeQueue(idx, 0)) {std::this_thread::yield();}
             // profAdd(time_push_complete, timer.elapse().count());
             profTimerElapse(time_push_complete);
@@ -576,7 +601,7 @@ public:
         std::string ret;
         ret.resize(num_threads_);
         size_t ct = this->ct();
-        auto &idxs = type == 0 ? prod_out_id_ : cons_out_id_;
+        auto &idxs = type == 0 ? prod_out_id_list_ : cons_out_id_list_;
         for(int i=0; i<num_threads_; i++)
         {
             if(idxs[i].load(std::memory_order_relaxed) > ct)
@@ -622,8 +647,8 @@ private:
 
     std::atomic<size_t> prod_head_{0}, prod_tail_{0}, water_mark_{0}, cons_head_{0}, cons_tail_{0};
     // std::atomic<size_t> *prod_in_[num_threads], *cons_in_[num_threads];
-    std::atomic<size_t> prod_id_head_head_{0}, cons_id_head_head_{0}, prod_id_head_tail_{0}, cons_id_head_tail_{0}, prod_id_tail_{0}, cons_id_tail_{0};
-    std::atomic<size_t> *prod_out_id_{nullptr}, *cons_out_id_{nullptr}, *prod_in_val_{nullptr}, *cons_in_val_{nullptr}, *prod_out_next_{nullptr}, *prod_out_prod_{nullptr}, *prod_out_size_{nullptr}, *cons_out_val_{nullptr};
+    std::atomic<size_t> prod_in_id_head_{0}, cons_in_id_head_{0}, prod_in_id_tail_{0}, cons_in_id_tail_{0}, prod_out_id_{0}, cons_out_id_{0};
+    std::atomic<size_t> *prod_out_id_list_{nullptr}, *cons_out_id_list_{nullptr}, *prod_in_val_{nullptr}, *cons_in_val_{nullptr}, *prod_out_next_{nullptr}, *prod_out_prod_{nullptr}, *prod_out_size_{nullptr}, *cons_out_val_{nullptr};
     size_t capacity_, num_threads_;
     /// Statistic
     std::atomic<size_t> stat_push_size{0}, stat_pop_size{0};
