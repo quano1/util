@@ -111,4 +111,5 @@ void dumpStat(const tll::cc::Stat &st, double real_total_time)
 }
 
 #include "lf/ccfifo.h"
+#include "lf/ccfifo2.h"
 // #include "mt/ccbuffer.h"

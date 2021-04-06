@@ -106,12 +106,12 @@ struct CCFIFOBufferStressTest : public ::testing::Test
 {
     static void SetUpTestCase()
     {
-        LOGD("Should run with --gtest_filter=CCFIFOBufferStressTest.* --gtest_repeat=100000");
+        LOGD("Should run with --gtest_filter=CCFIFOBufferStressTest.* --gtest_repeat=100000 --gtest_break_on_failure");
     }
 
-    static constexpr size_t kTotalWriteSize = 0x20 * 0x100000; /// 20 Mbs
+    static constexpr size_t kTotalWriteSize = 0x1000; /// 1 Mbs
     static constexpr size_t kCapacity = kTotalWriteSize / 4;
-    static constexpr size_t kMaxPkgSize = 0x1000;
+    static constexpr size_t kMaxPkgSize = 0x100;
     // static constexpr size_t kWrap = 16;
 
 };
@@ -126,7 +126,7 @@ TEST_F(CCFIFOBufferStressTest, MPMCRWFixedSize)
         auto constexpr kNumOfThreads = index_seq.value * 2;
         LOGD("Number of threads: %ld", kNumOfThreads);
         constexpr size_t kStoreSize = kTotalWriteSize + ((index_seq.value - 1) * kMaxPkgSize);
-        tll::lf::CCFIFO<char, true> fifo{kCapacity};
+        tll::lf2::CCFIFO<char, true> fifo{kCapacity};
         std::vector<char> store_buff[index_seq.value];
 
         for(int i=0; i<index_seq.value; i++)
@@ -196,6 +196,7 @@ TEST_F(CCFIFOBufferStressTest, MPMCRWFixedSize)
         tll::cc::dumpStat<>(stat, tt_time);
         LOGD("Total time: %f (s)", tt_time);
 #endif
+        LOGD("%s", fifo.dump().data());
         auto ttps = total_push_size.load(std::memory_order_relaxed);
         ASSERT_GE(ttps, (kTotalWriteSize));
         ASSERT_LE(ttps, kStoreSize);
@@ -212,16 +213,16 @@ TEST_F(CCFIFOBufferStressTest, MPMCRWFixedSize)
 /// MPSC write random size
 TEST_F(CCFIFOBufferStressTest, MPSCWRandSize)
 {
-    tll::util::CallFuncInSeq<NUM_CPU, 0>( [&](auto index_seq)
+    tll::util::CallFuncInSeq<NUM_CPU, 2>( [&](auto index_seq)
     {
         static_assert(index_seq.value > 0);
         // if(index_seq.value == 1 || index_seq.value >= NUM_CPU) return;
-        if(index_seq.value >= NUM_CPU) return;
+        // if(index_seq.value > NUM_CPU) return;
         constexpr size_t kMul = kMaxPkgSize / NUM_CPU;
         constexpr auto kNumOfThreads = index_seq.value * 2;
         constexpr size_t kStoreSize = kTotalWriteSize + ((kNumOfThreads - 1) * kMaxPkgSize);
         LOGD("Number of Prods: %ld", kNumOfThreads - 1);
-        tll::lf::CCFIFO<char, true> fifo{kCapacity};
+        tll::lf2::CCFIFO<char, true> fifo{kCapacity};
         std::vector<char> store_buff;
         store_buff.resize(kStoreSize);
         memset(store_buff.data(), 0xFF, store_buff.size());
@@ -235,26 +236,31 @@ TEST_F(CCFIFOBufferStressTest, MPSCWRandSize)
             {
                 // LOGD("Producer: %d, cpu: %d", kTid, sched_getcpu());
                 // uint8_t i=0;
+                // size_t local_push=0;
                 for(;total_push_size.load(std::memory_order_relaxed) < (kTotalWriteSize);)
                 {
                     size_t ws = fifo.push([kTid](char *el, size_t size) {
                         *el = '{';
                         *(el + size - 1) = '}';
                         memset(el + 1, (uint8_t)kTid, size - 2);
-                        std::atomic_thread_fence(std::memory_order_release);
+                        // LOGD("\t>%ld", size);
                     }, (kTid * kMul) + 2);
+
                     if(ws)
                     {
                         total_push_size.fetch_add(ws, std::memory_order_relaxed);
+                        // local_push+=ws;
+                        // LOGD("pop\t%ld", ws);
+                        std::this_thread::yield();
                         // i = (i+1) % (kNumOfThreads-1);
                     }
                     else
                     {
                         /// overrun
-                        std::this_thread::yield();
+                        // LOGD("\tOVERRUN");
                     }
                 }
-
+                // LOGD("%ld", local_push);
                 prod_completed.fetch_add(1, std::memory_order_relaxed);
             }
             else /// Cons
@@ -265,10 +271,9 @@ TEST_F(CCFIFOBufferStressTest, MPSCWRandSize)
                     || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
                 {
                     size_t ps = fifo.pop([&store_buff, &pop_size, kTid](const char *el, size_t size) {
-                        // LOGD("%ld %ld %ld", id, size, id + size);
+                        // LOGD("\t<%ld", size);
                         auto dst = store_buff.data() + pop_size;
                         auto src = el;
-                        std::atomic_thread_fence(std::memory_order_acquire);
                         memcpy(dst, src, size);
                     }, -1);
 
@@ -276,15 +281,18 @@ TEST_F(CCFIFOBufferStressTest, MPSCWRandSize)
                     {
                         pop_size += ps;
                         total_pop_size.fetch_add(ps, std::memory_order_relaxed);
+                        // LOGD("pop\t%ld", ps);
+                        std::this_thread::yield();
                     }
                     else
                     {
                         /// underrun
-                        std::this_thread::yield();
+                        // LOGD("\tUNDERRUN");
                     }
                 }
             }
             // LOGD("%d Done", kTid);
+            // LOGD("%ld %ld", fifo.stat().push_size, fifo.stat().pop_size);
         }
 #ifdef DUMP
         double tt_time = counter.elapse().count();
@@ -293,6 +301,8 @@ TEST_F(CCFIFOBufferStressTest, MPSCWRandSize)
         LOGD("Total time: %f (s)", tt_time);
 #endif
         auto ttps = total_push_size.load(std::memory_order_relaxed);
+        // LOGD("%ld %ld", fifo.stat().push_size, fifo.stat().pop_size);
+        LOGD("%s", fifo.dump().data());
         ASSERT_GE(ttps, (kTotalWriteSize));
         ASSERT_LE(ttps, kStoreSize);
         ASSERT_EQ(ttps, total_pop_size.load(std::memory_order_relaxed));

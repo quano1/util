@@ -40,9 +40,9 @@
 
 #define ASSERTM(exp, msg) assert(((void)msg, exp))
 
-#define LOGPD(format, ...) PRINTF("(D)(%.9f)(%s)(%s:%s:%d)(" format ")\n", tll::util::timestamp(), tll::util::str_tid().data(), tll::util::fileName(__FILE__).data(), __PRETTY_FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGD(format, ...) PRINTF("%.9f\t%s\t%s:%s:%d\t" format "\n", tll::util::timestamp(), tll::util::str_tid().data(), tll::util::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOGE(format, ...) PRINTF("(E)(%.9f)(%s)(%s:%s:%d)(" format ")(%s)\n", tll::util::timestamp(), tll::util::str_tid().data(), tll::util::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__, strerror(errno))
+#define LOGPD(format, ...) PRINTF("(D)(%.9f)(%s)(%s:%s:%d)(" format ")\n", tll::util::timestamp(), tll::util::str_tidcpu().data(), tll::util::fileName(__FILE__).data(), __PRETTY_FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGD(format, ...) PRINTF("%.9f\t%s\t%s:%s:%d\t" format "\n", tll::util::timestamp(), tll::util::str_tidcpu().data(), tll::util::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOGE(format, ...) PRINTF("(E)(%.9f)(%s)(%s:%s:%d)(" format ")(%s)\n", tll::util::timestamp(), tll::util::str_tidcpu().data(), tll::util::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__, strerror(errno))
 
 #define TRACE(ID) tll::log::Tracer<> tracer_##ID##__(#ID)
 #define TRACEF() tll::log::Tracer<> tracer__(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + tll::util::to_string(tll::util::tid()) + ")")
@@ -51,7 +51,8 @@ namespace tll{ namespace util{
 // #define THIS_THREAD_ID_ std::this_thread::get_id()
 // using this_tid std::this_thread::get_id();
 template <class T> class Guard;
-
+template <typename T, typename ... Args>
+std::basic_string<T> stringFormat(T const * const format, Args const & ... args);
 
 template <typename T=size_t>
 constexpr T nextPowerOf2(T val)
@@ -163,6 +164,16 @@ inline std::string to_string(T val)
 }
 
 // static int __tid__=0;
+
+inline std::string str_tidcpu()
+{
+    static std::atomic<int> __tidcpu__{0};
+    // static const thread_local auto ret = tll::util::to_string(__tidcpu__.fetch_add(1, std::memory_order_relaxed));
+    // static const thread_local auto ret = tll::util::stringFormat("%s/%d", tll::util::to_string(tll::util::tid()).data(), sched_getcpu());
+    static const thread_local auto ret = tll::util::stringFormat("%s/%d", tll::util::to_string(__tidcpu__.fetch_add(1, std::memory_order_relaxed)).data(), sched_getcpu());
+    return ret;
+}
+
 
 inline std::string str_tid()
 {
