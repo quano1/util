@@ -12,7 +12,7 @@
 
 #define ENABLE_PROFILING 0
 #define LOOP_COUNT 0x800
-#define EXTENDING 7
+#define EXTENDING 1
 // #define DUMPER
 // #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 
@@ -108,8 +108,8 @@ static void _benchmark(const std::string &name, const auto &doPush, const auto &
                 if(doPush())
                 {
                     total_push_count.fetch_add(1, std::memory_order_relaxed);
-                    std::this_thread::yield();
                 }
+                std::this_thread::yield();
             }
             w_threads.fetch_add(1, std::memory_order_relaxed);
         }
@@ -121,8 +121,8 @@ static void _benchmark(const std::string &name, const auto &doPush, const auto &
                 if(doPop())
                 {
                     total_pop_count.fetch_add(1, std::memory_order_relaxed);
-                    std::this_thread::yield();
                 }
+                std::this_thread::yield();
             }
         }
     }
@@ -175,9 +175,9 @@ int benchmark()
     ofs_tp_push << ";moodycamel::ConcurrentQueue\n";
     ofs_tp_pop << ";moodycamel::ConcurrentQueue\n";
     ofs_time << ";moodycamel::ConcurrentQueue\n";
-    ofs_tp_push << ";CCFIFO\n";
-    ofs_tp_pop << ";CCFIFO\n";
-    ofs_time << ";CCFIFO\n";
+    ofs_tp_push << ";tll::lf::ccfifo\n";
+    ofs_tp_pop << ";tll::lf::ccfifo\n";
+    ofs_time << ";tll::lf::ccfifo\n";
 
     tll::util::CallFuncInSeq<NUM_CPU, EXTENDING>( [&](auto index_seq)
     {
@@ -191,7 +191,7 @@ int benchmark()
         ofs_time << index_seq.value << " ";
         // constexpr size_t kN2 = 0x800000;
         constexpr size_t kTN = (tll::util::isPowerOf2(kCount) ? kCount : tll::util::nextPowerOf2(kCount));
-        volatile char val;
+        // volatile char val;
         // LOGD("%lx", kTN);
 
         // {
@@ -208,13 +208,13 @@ int benchmark()
 
         // if(index_seq.value <= NUM_CPU)
         // {
-        //     tll::lf::CCFIFO<char, kTN> fifo{kCount * 2};
+        //     tll::lf::ccfifo<char, kTN> fifo{kCount * 2};
         //     auto doPush = [&fifo]() -> bool { return fifo.push([&fifo](size_t i, size_t s){ NOP_LOOP(LOOP_COUNT); *(fifo.elemAt(i)) = 1; },1); };
         //     auto doPop = [&fifo]() -> bool { return fifo.pop([&fifo](size_t i, size_t s){ NOP_LOOP(LOOP_COUNT); char val; val = *fifo.elemAt(i); },1); };
         //     _benchmark<index_seq.value>(doPush, doPop, kCount, time, ops);
         //     ofs_tp_push << (ops[0] * 0.000001) / time[0] << " " << (ops[1] * 0.000001) / time[1] << " ";
         //     ofs_time << time[2] << " ";
-        //     LOGD("CCFIFO time\tpush:%.3f, pop: %.3f, pp: %.3f (s)", time[0], time[1], time[2]);
+        //     LOGD("ccfifo time\tpush:%.3f, pop: %.3f, pp: %.3f (s)", time[0], time[1], time[2]);
         // }
         // else
         // {
@@ -225,7 +225,7 @@ int benchmark()
         {
             boost::lockfree::queue<char> fifo{kCount * 2};
             auto doPush = [&fifo]() -> bool { DUMMY_LOOP(); return fifo.push((char)1); };
-            auto doPop = [&fifo, &val]() -> bool { DUMMY_LOOP(); return fifo.pop(val); };
+            auto doPop = [&fifo]() -> bool { char val; DUMMY_LOOP(); return fifo.pop(val); };
             
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             _benchmark<index_seq.value>("boost", doPush, doPop, kCount, time, ops, ofss);
@@ -234,16 +234,16 @@ int benchmark()
         {
             moodycamel::ConcurrentQueue<char> fifo{kCount * 2};
             auto doPush = [&fifo]() -> bool { DUMMY_LOOP(); fifo.enqueue((char)1); return true; };
-            auto doPop = [&fifo, &val]() -> bool { DUMMY_LOOP(); return fifo.try_dequeue(val); };
+            auto doPop = [&fifo]() -> bool { char val; DUMMY_LOOP(); return fifo.try_dequeue(val); };
 
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             _benchmark<index_seq.value>("moody", doPush, doPop, kCount, time, ops, ofss);
         }
 
         {
-            tll::lf::CCFIFO<char> fifo{kCount * 2, index_seq.value * 0x4000};
-            auto doPush = [&fifo]() -> bool { return fifo.enQueue([](char *el){ DUMMY_LOOP(); *el = 1; }); };
-            auto doPop = [&fifo, &val]() -> bool { return fifo.deQueue([&val](const char *el){ DUMMY_LOOP(); val = *el; }); };
+            tll::lf2::ccfifo<char, tll::lf2::Mode::kLL, tll::lf2::Mode::kLL> fifo{kCount * 2, index_seq.value * 0x4000};
+            auto doPush = [&fifo]() -> bool { DUMMY_LOOP(); return fifo.push((char)1); };
+            auto doPop = [&fifo]() -> bool { char val; DUMMY_LOOP(); return fifo.pop(val); };
             
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             _benchmark<index_seq.value>("ccfifo", doPush, doPop, kCount, time, ops, ofss);

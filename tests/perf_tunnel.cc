@@ -142,13 +142,12 @@ static void _perfTunnel(size_t test_val, size_t count,
 {
     size_t ops[3];
     double time[3];
-    volatile char val;
 
     // size_t tn = (tll::util::isPowerOf2(count) ? count : tll::util::nextPowerOf2(count));
     size_t threads_indicies_size = (tll::util::isPowerOf2(test_val*num_of_threads) ? test_val*num_of_threads : tll::util::nextPowerOf2(test_val*num_of_threads));
-    tll::lf::CCFIFO<char> fifo{count * 2, threads_indicies_size};
-    auto doPush = [&fifo]() -> bool { return fifo.enQueue([](char *el){ DUMMY_LOOP(); *el = 1; }); };
-    auto doPop = [&fifo, &val]() -> bool { return fifo.deQueue([&val](const char *el){ DUMMY_LOOP(); val = *el; }); };
+    tll::lf2::ccfifo<char> fifo{count * 2, threads_indicies_size};
+    auto doPush = [&fifo]() -> bool { DUMMY_LOOP(); return fifo.push((char)1); };
+    auto doPop = [&fifo]() -> bool { char val; DUMMY_LOOP(); return fifo.pop(val); };
     
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     doFifing<num_of_threads>(doPush, doPop, count, time, ops);
