@@ -141,67 +141,152 @@ public:
         reset();
     }
 
-    // template <Mode mode>
-    size_t tryPop(size_t &cons_index_head, size_t &size)
+    template <Mode mode>
+    size_t tryPop(size_t &entry_id, size_t &cons_index_head, size_t &size)
     {
-        // if(mode == Mode::kLowLoad)
+        size_t cons_next_index;
+        size_t entry_id_head = consumer_.entry_id_head().load(std::memory_order_relaxed);
+        cons_index_head = consumer_.index_head().load(std::memory_order_relaxed);
+        size_t next_size = size;
+        for(;;profAdd(stat_push_miss, 1))
         {
-            cons_index_head = consumer_.index_head().load(std::memory_order_relaxed);
-            size_t cons_next_index;
-            size_t next_size = size;
-            for(;;profAdd(stat_pop_miss, 1))
+            if(mode == mode::high_load)
             {
-                cons_next_index = cons_index_head;
-                size_t prod_index = producer_.index_tail().load(std::memory_order_relaxed);
-                size_t wmark = water_mark_.load(std::memory_order_relaxed);
-                if(cons_next_index < prod_index)
-                {
-                    if(cons_next_index == wmark)
-                    {
-                        cons_next_index = next(cons_next_index);
-                        if(prod_index <= cons_next_index)
-                        {
-                            // LOGE("Underrun!");dump();
-                            next_size = 0;
-                            profAdd(stat_pop_error, 1);
-                            break;
-                        }
-                        if(size > (prod_index - cons_next_index))
-                            next_size = prod_index - cons_next_index;
-                    }
-                    else if(cons_next_index < wmark)
-                    {
-                        if(size > (wmark - cons_next_index))
-                            next_size = wmark - cons_next_index;
-                    }
-                    else /// cons > wmark
-                    {
-                        if(size > (prod_index - cons_next_index))
-                        {
-                            next_size = prod_index - cons_next_index;
-                        }
-                    }
+                while(entry_id_head != consumer_.entry_id_tail().load(std::memory_order_relaxed))
+                    entry_id_head = consumer_.entry_id_head().load(std::memory_order_relaxed);
 
-                    if(consumer_.index_head().compare_exchange_weak(cons_index_head, cons_next_index + next_size, std::memory_order_acquire, std::memory_order_relaxed)) break;
+                cons_index_head = consumer_.index_head().load(std::memory_order_relaxed);
+            }
+
+            cons_next_index = cons_index_head;
+            size_t prod_index = producer_.index_tail().load(std::memory_order_relaxed);
+            size_t wmark = water_mark_.load(std::memory_order_relaxed);
+            if(cons_next_index < prod_index)
+            {
+                if(cons_next_index == wmark)
+                {
+                    cons_next_index = next(cons_next_index);
+                    if(prod_index <= cons_next_index)
+                    {
+                        // LOGE("Underrun!");dump();
+                        next_size = 0;
+                        profAdd(stat_pop_error, 1);
+                        break;
+                    }
+                    if(size > (prod_index - cons_next_index))
+                        next_size = prod_index - cons_next_index;
+                }
+                else if(cons_next_index < wmark)
+                {
+                    if(size > (wmark - cons_next_index))
+                        next_size = wmark - cons_next_index;
+                }
+                else /// cons > wmark
+                {
+                    if(size > (prod_index - cons_next_index))
+                    {
+                        next_size = prod_index - cons_next_index;
+                    }
+                }
+
+                if(mode == mode::high_load)
+                {
+                    if(!consumer_.entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+                    {
+                        continue;
+                    }
+                    else
+                    {
+                        consumer_.index_head().store(cons_next_index + next_size, std::memory_order_relaxed);
+                        consumer_.entry_id_tail().store(entry_id_head + 1, std::memory_order_relaxed);
+                        entry_id = entry_id_head;
+                        break;
+                    }
                 }
                 else
                 {
-                    // LOGE("Underrun!");dump();
-                    next_size = 0;
-                    profAdd(stat_pop_error, 1);
-                    break;
+                    if(!consumer_.index_head().compare_exchange_weak(cons_index_head, cons_next_index + next_size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                    else break;
                 }
             }
-            size = next_size;
-            profAdd(stat_pop_total, 1);
-            return cons_next_index;
+            else
+            {
+                // LOGE("Underrun!");dump();
+                next_size = 0;
+                profAdd(stat_pop_error, 1);
+                break;
+            }
         }
+        size = next_size;
+        profAdd(stat_pop_total, 1);
+        return cons_next_index;
     }
 
-    inline void completePop(size_t index_head, size_t next_index, size_t size)
+    template <Mode mode>
+    bool completePop(size_t exit_id, size_t curr_index, size_t next_index, size_t size)
     {
-        for(;consumer_.index_tail().load(std::memory_order_relaxed) != index_head;){}
-        consumer_.index_tail().store(next_index + size, std::memory_order_relaxed);
+        if(mode == mode::high_load)
+        {
+            if(exit_id >= (consumer_.exit_id().load(std::memory_order_relaxed) + num_threads_)) return false;
+
+            size_t t_pos = wrap(exit_id, num_threads_);
+            consumer_.size_list()[wrap(exit_id, num_threads_)].store(size);
+            // consumer_.curr_index_list()[wrap(exit_id, num_threads_)].store(curr_index);
+            consumer_.next_index_list()[wrap(exit_id, num_threads_)].store(next_index);
+            size_t const kIdx = exit_id;
+            size_t next_exit_id = consumer_.exit_id_list()[wrap(exit_id, num_threads_)].load(std::memory_order_relaxed);
+            // LOGD("%ld/%ld %ld/%ld %s", curr_index, next_index, next_exit_id, exit_id, dump().data());
+
+            for(;;)
+            {
+                // size_t next_exit_id;
+                size_t curr_exit_id = consumer_.exit_id().load(std::memory_order_relaxed);
+
+                // LOGD(">(%ld/%ld)\t{%ld/%ld}", kIdx, exit_id, curr_exit_id, next_exit_id);
+                if(exit_id < curr_exit_id)
+                {
+                    break;
+                }
+                else if (exit_id == curr_exit_id)
+                {
+                    next_exit_id = exit_id;
+                    while((exit_id - curr_exit_id < num_threads_) && (next_exit_id >= curr_exit_id))
+                    {
+                        size = consumer_.size_list()[wrap(next_exit_id, num_threads_)].load(std::memory_order_relaxed);
+                        // curr_index = consumer_.curr_index_list()[wrap(next_exit_id, num_threads_)].load(std::memory_order_relaxed);
+                        next_index = consumer_.next_index_list()[wrap(next_exit_id, num_threads_)].load(std::memory_order_relaxed);
+
+                        consumer_.index_tail().store(next_index + size, std::memory_order_relaxed);
+                        exit_id++;
+                        next_exit_id = consumer_.exit_id_list()[wrap(exit_id, num_threads_)].load(std::memory_order_relaxed);
+                        // LOGD(" -(%ld)\t%ld/%ld\t%ld/%ld/%ld\t%s", kIdx, 
+                        //      next_exit_id, exit_id,
+                        //      curr_index, next_index, size, 
+                        //      dump().data());
+
+                    }
+                    
+                    consumer_.exit_id().store(exit_id, std::memory_order_relaxed);
+                    // consumer_.index_tail().store(next_index + size, std::memory_order_relaxed);
+                }
+
+                // LOGD(" (%ld)\t%ld/%ld\t%s", 
+                //          kIdx, 
+                //          next_exit_id, exit_id, 
+                //          dump().data());
+                if(consumer_.exit_id_list()[wrap(exit_id, num_threads_)].compare_exchange_strong(next_exit_id, kIdx, std::memory_order_relaxed, std::memory_order_relaxed)) break;
+
+                // LOGD(" M(%ld/%ld) {%ld}", kIdx, exit_id, consumer_.exit_id().load(std::memory_order_relaxed));
+            }
+        }
+        else
+        {
+            for(;consumer_.index_tail().load(std::memory_order_relaxed) != curr_index;){}
+            consumer_.index_tail().store(next_index + size, std::memory_order_relaxed);
+        }
+        // LOGD(" <(%ld/%ld) {%ld}", kIdx, exit_id, consumer_.exit_id().load(std::memory_order_relaxed));
+
+        return true;
     }
 
     template <Mode mode>
@@ -213,7 +298,7 @@ public:
 
         for(;;profAdd(stat_push_miss, 1))
         {
-            if(mode == Mode::kHL)
+            if(mode == mode::high_load)
             {
                 while(entry_id_head != producer_.entry_id_tail().load(std::memory_order_relaxed))
                     entry_id_head = producer_.entry_id_head().load(std::memory_order_relaxed);
@@ -239,7 +324,6 @@ public:
                         {
                             // LOGE("OVERRUN");dump();
                             size = 0;
-                            profAdd(stat_push_error, 1);
                             break;
                         }
                     }
@@ -251,12 +335,11 @@ public:
                     {
                         // LOGE("OVERRUN");dump();
                         size = 0;
-                        profAdd(stat_push_error, 1);
                         break;
                     }
                 }
 
-                if(mode == Mode::kHL)
+                if(mode == mode::high_load)
                 {
                     if(!producer_.entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
                     {
@@ -280,18 +363,16 @@ public:
             {
                 // LOGE("OVERRUN");dump();
                 size = 0;
-                profAdd(stat_push_error, 1);
                 break;
             }
         }
-        profAdd(stat_push_total, 1);
         return prod_next_index;
     }
 
     template <Mode mode>
     bool completePush(size_t exit_id, size_t curr_index, size_t next_index, size_t size)
     {
-        if(mode == Mode::kHL)
+        if(mode == mode::high_load)
         {
             if(exit_id >= (producer_.exit_id().load(std::memory_order_relaxed) + num_threads_)) return false;
 
@@ -366,12 +447,12 @@ public:
         return true;
     }
 
-    template <typename F, typename ...Args>
+    template <Mode mode, typename F, typename ...Args>
     size_t pop(F &&cb, size_t size, Args &&...args)
     {
-        size_t cons;
+        size_t id, index;
         profTimerReset();
-        size_t next = tryPop(cons, size);
+        size_t next = tryPop<mode>(id, index, size);
         profTimerElapse(time_pop_try);
         profTimerStart();
         if(size)
@@ -380,9 +461,14 @@ public:
             cb(&buffer_[wrap(next)], size, std::forward<Args>(args)...);
             profTimerElapse(time_pop_cb);
             profTimerStart();
-            completePop(cons, next, size);
+            while(!completePop<mode>(id, index, next, size)){};
             profTimerElapse(time_pop_complete);
+            profAdd(stat_pop_total, 1);
             profAdd(stat_pop_size, size);
+        }
+        else
+        {
+            profAdd(stat_pop_error, 1);
         }
         profTimerAbsElapse(time_pop_total);
         return size;
@@ -391,9 +477,9 @@ public:
     template <Mode mode, typename F, typename ...Args>
     size_t push(const F &cb, size_t size, Args &&...args)
     {
-        size_t id, prod;
+        size_t id, index;
         profTimerReset();
-        size_t next = tryPush<mode>(id, prod, size);
+        size_t next = tryPush<mode>(id, index, size);
         profTimerElapse(time_push_try);
         profTimerStart();
         if(size)
@@ -402,9 +488,14 @@ public:
             std::atomic_thread_fence(std::memory_order_release);
             profTimerElapse(time_push_cb);
             profTimerStart();
-            while(!completePush<mode>(id, prod, next, size)){};
+            while(!completePush<mode>(id, index, next, size)){};
             profTimerElapse(time_push_complete);
+            profAdd(stat_push_total, 1);
             profAdd(stat_push_size, size);
+        }
+        else
+        {
+            profAdd(stat_push_error, 1);
         }
         profTimerAbsElapse(time_push_total);
         return size;
@@ -416,10 +507,10 @@ public:
         return push<mode>([&val](T *el, size_t){ *el = std::forward<U>(val); }, 1);
     }
 
-    // template<Mode mode>
+    template<Mode mode>
     size_t pop(T &val)
     {
-        return pop([&val](T *el, size_t){ val = std::move(*el); }, 1);
+        return pop<mode>([&val](T *el, size_t){ val = std::move(*el); }, 1);
     }
 
 /// utility functions

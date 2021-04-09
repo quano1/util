@@ -26,9 +26,10 @@ struct ccfifoBufferBasicTest : public ::testing::Test
         /// simple push/pop
         for(size_t i=0; i < fifo.capacity()*loop; i++)
         {
+            /// https://stackoverflow.com/questions/610245/where-and-why-do-i-have-to-put-the-template-and-typename-keywords
             ret = fifo.template push<mode>( (elem_t)i );
             EXPECT_EQ(ret, 1);
-            fifo.pop(val);
+            fifo.template pop<mode>(val);
             EXPECT_EQ(val, (elem_t)i);
         }
         fifo.reset();
@@ -40,11 +41,11 @@ struct ccfifoBufferBasicTest : public ::testing::Test
         ret = fifo.template push<mode>((elem_t)val);
         EXPECT_EQ(ret, 0);
         /// pop all
-        ret = fifo.pop(do_nothing, -1);
+        ret = fifo.template pop<mode>(do_nothing, -1);
         EXPECT_EQ(ret, fifo.capacity());
         /// underrun
         EXPECT_TRUE(fifo.empty());
-        EXPECT_EQ(fifo.pop(val), 0);
+        EXPECT_EQ(fifo.template pop<mode>(val), 0);
         /// push/pop odd size
         fifo.reset();
         constexpr size_t kPushSize = 3;
@@ -53,7 +54,7 @@ struct ccfifoBufferBasicTest : public ::testing::Test
             ret = fifo.template push<mode>(pushCb, kPushSize, (elem_t)i);
             EXPECT_EQ(ret, kPushSize);
 
-            ret = fifo.pop([i](const elem_t *el, size_t sz){
+            ret = fifo.template pop<mode>([i](const elem_t *el, size_t sz){
                 EXPECT_EQ(*(el), (elem_t)i);
                 EXPECT_EQ(memcmp(el, el + 1, (sz - 1) * sizeof(elem_t)), 0);
             }, -1);
@@ -73,7 +74,7 @@ struct ccfifoBufferBasicTest : public ::testing::Test
         elem_t val;
 
         fifo.push<mode>((elem_t)0);
-        fifo.pop(val);
+        fifo.pop<mode>(val);
         /// Now the fifo is empty.
         /// But should not be able to push capacity size
         EXPECT_EQ(fifo.push<mode>(do_nothing, capa), 0);
@@ -82,21 +83,21 @@ struct ccfifoBufferBasicTest : public ::testing::Test
         /// reset everything
         fifo.reset();
         fifo.push<mode>(do_nothing, capa);
-        fifo.pop(do_nothing, capa/2);
+        fifo.pop<mode>(do_nothing, capa/2);
         /// wrapped perfectly
         fifo.push<mode>(do_nothing, capa/2);
         /// should having the capacity elems
         EXPECT_EQ(fifo.size(), capa);
         /// Should only be able to pop capa/2 due to wrapped (contiguously)
-        EXPECT_EQ(fifo.pop(do_nothing, -1), capa/2);
-        EXPECT_EQ(fifo.pop(do_nothing, -1), capa/2);
+        EXPECT_EQ(fifo.pop<mode>(do_nothing, -1), capa/2);
+        EXPECT_EQ(fifo.pop<mode>(do_nothing, -1), capa/2);
     }
 };
 
 TEST_F(ccfifoBufferBasicTest, PrimitiveType)
 {
     using namespace tll::lf2;
-    constexpr size_t kLoop = 0x100;
+    constexpr size_t kLoop = 0x10;
     RWInSequencePrimitive<int8_t, mode::low_load>(kLoop);
     RWInSequencePrimitive<int16_t, mode::low_load>(kLoop);
     RWInSequencePrimitive<int32_t, mode::low_load>(kLoop);
@@ -136,6 +137,7 @@ struct ccfifoBufferStressTest : public ::testing::Test
 /// MPMC read write fixed size
 TEST_F(ccfifoBufferStressTest, MPMCRWFixedSize)
 {
+    using namespace tll::lf2;
     tll::util::CallFuncInSeq<NUM_CPU, -1>( [&](auto index_seq)
     {
         static_assert(index_seq.value > 0);
@@ -143,7 +145,7 @@ TEST_F(ccfifoBufferStressTest, MPMCRWFixedSize)
         auto constexpr kNumOfThreads = index_seq.value * 2;
         LOGD("Number of threads: %ld", kNumOfThreads);
         constexpr size_t kStoreSize = kTotalWriteSize + ((index_seq.value - 1) * kMaxPkgSize);
-        tll::lf2::ccfifo<char, true> fifo{kCapacity};
+        ccfifo<char, true> fifo{kCapacity};
         std::vector<char> store_buff[index_seq.value];
 
         for(int i=0; i<index_seq.value; i++)
@@ -163,7 +165,7 @@ TEST_F(ccfifoBufferStressTest, MPMCRWFixedSize)
                 char i=0;
                 for(;total_push_size.load(std::memory_order_relaxed) < (kTotalWriteSize);)
                 {
-                    size_t ret_size = fifo.push<tll::lf2::Mode::kLL>([i](char *el, size_t size) {
+                    size_t ret_size = fifo.push<mode::low_load>([i](char *el, size_t size) {
                         memset(el, i, size);
                     }, kMaxPkgSize);
                     if(ret_size)
@@ -172,11 +174,11 @@ TEST_F(ccfifoBufferStressTest, MPMCRWFixedSize)
                         total_push_size.fetch_add(ret_size, std::memory_order_relaxed);
                         (++i);
                     }
-                    // else
-                    // {
+                    else
+                    {
                         /// overrun
-                        std::this_thread::yield();
-                    // }
+                    }
+                    std::this_thread::yield();
                 }
 
                 prod_completed.fetch_add(1, std::memory_order_relaxed);
@@ -188,7 +190,7 @@ TEST_F(ccfifoBufferStressTest, MPMCRWFixedSize)
                 for(;prod_completed.load(std::memory_order_relaxed) < index_seq.value /*- (thread_num + 1) / 2*/
                     || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
                 {
-                    size_t ret_size = fifo.pop([&store_buff, &pop_size, &fifo, kTid](const char *el, size_t size) {
+                    size_t ret_size = fifo.pop<mode::low_load>([&store_buff, &pop_size, &fifo, kTid](const char *el, size_t size) {
                         // LOGD("%ld\t%s", size, fifo.dump().data());
                         auto dst = store_buff[kTid/2].data() + pop_size;
                         auto src = el;
@@ -202,11 +204,11 @@ TEST_F(ccfifoBufferStressTest, MPMCRWFixedSize)
                         pop_size += ret_size;
                         total_pop_size.fetch_add(ret_size, std::memory_order_relaxed);
                     }
-                    // else
-                    // {
+                    else
+                    {
                         /// underrun
-                        std::this_thread::yield();
-                    // }
+                    }
+                    std::this_thread::yield();
                 }
             }
             // LOGD("%d Done", kTid);
@@ -239,6 +241,7 @@ TEST_F(ccfifoBufferStressTest, MPMCRWFixedSize)
 /// MPSC write random size
 TEST_F(ccfifoBufferStressTest, MPSCWRandSize)
 {
+    using namespace tll::lf2;
     tll::util::CallFuncInSeq<NUM_CPU, 2>( [&](auto index_seq)
     {
         static_assert(index_seq.value > 0);
@@ -295,7 +298,7 @@ TEST_F(ccfifoBufferStressTest, MPSCWRandSize)
                 for(;prod_completed.load(std::memory_order_relaxed) < (kNumOfThreads - 1)
                     || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
                 {
-                    size_t ps = fifo.pop([&store_buff, &pop_size, &fifo, kTid](const char *el, size_t size) {
+                    size_t ps = fifo.pop<mode::low_load>([&store_buff, &pop_size, &fifo, kTid](const char *el, size_t size) {
                         // LOGD("\t-<%4ld\t{%s}", size, fifo.dump().data());
                         auto dst = store_buff.data() + pop_size;
                         auto src = el;
