@@ -6,12 +6,12 @@
 #include "../libs/counter.h"
 #include "../libs/contiguouscircular.h"
 
-struct CCFIFOBufferBasicTest : public ::testing::Test
+struct ccfifoBufferBasicTest : public ::testing::Test
 {
-    template <typename elem_t>
+    template <typename elem_t, tll::lf2::Mode mode>
     void RWInSequencePrimitive(size_t loop)
     {
-        tll::lf::CCFIFO<elem_t> fifo;
+        tll::lf2::ccfifo<elem_t> fifo;
         elem_t val = -1;
         size_t ret = -1;
         tll::cc::Callback<elem_t> do_nothing = [](const elem_t*, size_t){};
@@ -26,17 +26,19 @@ struct CCFIFOBufferBasicTest : public ::testing::Test
         /// simple push/pop
         for(size_t i=0; i < fifo.capacity()*loop; i++)
         {
-            EXPECT_EQ(fifo.push((elem_t)i), 1);
+            ret = fifo.template push<mode>( (elem_t)i );
+            EXPECT_EQ(ret, 1);
             fifo.pop(val);
             EXPECT_EQ(val, (elem_t)i);
         }
         fifo.reset();
         /// fill
         for(size_t i=0; i < fifo.capacity(); i++) 
-            fifo.push((elem_t)i);
+            fifo.template push<mode>((elem_t)i);
         /// overrun
         EXPECT_FALSE(fifo.empty());
-        EXPECT_EQ(fifo.push(val), 0);
+        ret = fifo.template push<mode>((elem_t)val);
+        EXPECT_EQ(ret, 0);
         /// pop all
         ret = fifo.pop(do_nothing, -1);
         EXPECT_EQ(ret, fifo.capacity());
@@ -48,7 +50,7 @@ struct CCFIFOBufferBasicTest : public ::testing::Test
         constexpr size_t kPushSize = 3;
         for(size_t i=0; i < fifo.capacity()*loop; i++)
         {
-            ret = fifo.push(pushCb, kPushSize, (elem_t)i);
+            ret = fifo.template push<mode>(pushCb, kPushSize, (elem_t)i);
             EXPECT_EQ(ret, kPushSize);
 
             ret = fifo.pop([i](const elem_t *el, size_t sz){
@@ -58,55 +60,70 @@ struct CCFIFOBufferBasicTest : public ::testing::Test
             EXPECT_EQ(ret, kPushSize);
         }
     }
+
+    template <tll::lf2::Mode mode>
+    void RWContiguously()
+    {
+        using namespace tll::lf2;
+        typedef int8_t elem_t;
+        ccfifo<elem_t, true> fifo{8};
+        tll::cc::Callback<elem_t> do_nothing = [](const elem_t*, size_t){};
+        size_t capa = fifo.capacity();
+        size_t ret = -1;
+        elem_t val;
+
+        fifo.push<mode>((elem_t)0);
+        fifo.pop(val);
+        /// Now the fifo is empty.
+        /// But should not be able to push capacity size
+        EXPECT_EQ(fifo.push<mode>(do_nothing, capa), 0);
+        /// Can only pushing the reset of the buffer.
+        EXPECT_EQ(fifo.push<mode>(do_nothing, capa - 1), capa - 1);
+        /// reset everything
+        fifo.reset();
+        fifo.push<mode>(do_nothing, capa);
+        fifo.pop(do_nothing, capa/2);
+        /// wrapped perfectly
+        fifo.push<mode>(do_nothing, capa/2);
+        /// should having the capacity elems
+        EXPECT_EQ(fifo.size(), capa);
+        /// Should only be able to pop capa/2 due to wrapped (contiguously)
+        EXPECT_EQ(fifo.pop(do_nothing, -1), capa/2);
+        EXPECT_EQ(fifo.pop(do_nothing, -1), capa/2);
+    }
 };
 
-TEST_F(CCFIFOBufferBasicTest, PrimitiveType)
+TEST_F(ccfifoBufferBasicTest, PrimitiveType)
 {
+    using namespace tll::lf2;
     constexpr size_t kLoop = 0x100;
-    RWInSequencePrimitive<int8_t>(kLoop);
-    RWInSequencePrimitive<int16_t>(kLoop);
-    RWInSequencePrimitive<int32_t>(kLoop);
-    RWInSequencePrimitive<int64_t>(kLoop);
+    RWInSequencePrimitive<int8_t, mode::low_load>(kLoop);
+    RWInSequencePrimitive<int16_t, mode::low_load>(kLoop);
+    RWInSequencePrimitive<int32_t, mode::low_load>(kLoop);
+    RWInSequencePrimitive<int64_t, mode::low_load>(kLoop);
+
+    RWInSequencePrimitive<int8_t, mode::high_load>(kLoop);
+    RWInSequencePrimitive<int16_t, mode::high_load>(kLoop);
+    RWInSequencePrimitive<int32_t, mode::high_load>(kLoop);
+    RWInSequencePrimitive<int64_t, mode::high_load>(kLoop);
 }
 
-TEST_F(CCFIFOBufferBasicTest, Contiguously)
+TEST_F(ccfifoBufferBasicTest, Contiguously)
 {
-    typedef int8_t elem_t;
-    tll::lf::CCFIFO<elem_t, true> fifo{8};
-    tll::cc::Callback<elem_t> do_nothing = [](const elem_t*, size_t){};
-    size_t capa = fifo.capacity();
-    size_t ret = -1;
-    elem_t val;
-
-    fifo.push((elem_t)0);
-    fifo.pop(val);
-    /// Now the fifo is empty.
-    /// But should not be able to push capacity size
-    EXPECT_EQ(fifo.push(do_nothing, capa), 0);
-    /// Can only pushing the reset of the buffer.
-    EXPECT_EQ(fifo.push(do_nothing, capa - 1), capa - 1);
-    /// reset everything
-    fifo.reset();
-    fifo.push(do_nothing, capa);
-    fifo.pop(do_nothing, capa/2);
-    /// wrapped perfectly
-    fifo.push(do_nothing, capa/2);
-    /// should having the capacity elems
-    EXPECT_EQ(fifo.size(), capa);
-    /// Should only be able to pop capa/2 due to wrapped (contiguously)
-    EXPECT_EQ(fifo.pop(do_nothing, -1), capa/2);
-    EXPECT_EQ(fifo.pop(do_nothing, -1), capa/2);
+    using namespace tll::lf2;
+    RWContiguously<mode::low_load>();
+    RWContiguously<mode::high_load>();
 }
 
 
 #if (HAVE_OPENMP)
 
-/// Should run with --gtest_filter=CCFIFOBufferStressTest.* --gtest_repeat=10000
-struct CCFIFOBufferStressTest : public ::testing::Test
+/// Should run with --gtest_filter=ccfifoBufferStressTest.* --gtest_repeat=10000
+struct ccfifoBufferStressTest : public ::testing::Test
 {
     static void SetUpTestCase()
     {
-        LOGD("Should run with --gtest_filter=CCFIFOBufferStressTest.* --gtest_repeat=100000 --gtest_break_on_failure");
+        LOGD("Should run with --gtest_filter=ccfifoBufferStressTest.* --gtest_repeat=100000 --gtest_break_on_failure");
     }
 
     static constexpr size_t kTotalWriteSize = 4 * 0x100000; /// 1 Mbs
@@ -117,7 +134,7 @@ struct CCFIFOBufferStressTest : public ::testing::Test
 };
 
 /// MPMC read write fixed size
-TEST_F(CCFIFOBufferStressTest, MPMCRWFixedSize)
+TEST_F(ccfifoBufferStressTest, MPMCRWFixedSize)
 {
     tll::util::CallFuncInSeq<NUM_CPU, -1>( [&](auto index_seq)
     {
@@ -126,7 +143,7 @@ TEST_F(CCFIFOBufferStressTest, MPMCRWFixedSize)
         auto constexpr kNumOfThreads = index_seq.value * 2;
         LOGD("Number of threads: %ld", kNumOfThreads);
         constexpr size_t kStoreSize = kTotalWriteSize + ((index_seq.value - 1) * kMaxPkgSize);
-        tll::lf2::CCFIFO<char, true> fifo{kCapacity};
+        tll::lf2::ccfifo<char, true> fifo{kCapacity};
         std::vector<char> store_buff[index_seq.value];
 
         for(int i=0; i<index_seq.value; i++)
@@ -146,7 +163,7 @@ TEST_F(CCFIFOBufferStressTest, MPMCRWFixedSize)
                 char i=0;
                 for(;total_push_size.load(std::memory_order_relaxed) < (kTotalWriteSize);)
                 {
-                    size_t ret_size = fifo.push([i](char *el, size_t size) {
+                    size_t ret_size = fifo.push<tll::lf2::Mode::kLL>([i](char *el, size_t size) {
                         memset(el, i, size);
                     }, kMaxPkgSize);
                     if(ret_size)
@@ -220,7 +237,7 @@ TEST_F(CCFIFOBufferStressTest, MPMCRWFixedSize)
 
 
 /// MPSC write random size
-TEST_F(CCFIFOBufferStressTest, MPSCWRandSize)
+TEST_F(ccfifoBufferStressTest, MPSCWRandSize)
 {
     tll::util::CallFuncInSeq<NUM_CPU, 2>( [&](auto index_seq)
     {
@@ -230,7 +247,7 @@ TEST_F(CCFIFOBufferStressTest, MPSCWRandSize)
         constexpr size_t kMul = kMaxPkgSize / kNumOfThreads;
         constexpr size_t kStoreSize = kTotalWriteSize + ((kNumOfThreads - 1) * kMaxPkgSize);
         LOGD("Number of Prods: %ld", kNumOfThreads - 1);
-        tll::lf2::CCFIFO<char, true> fifo{kCapacity};
+        tll::lf2::ccfifo<char, true> fifo{kCapacity};
         std::vector<char> store_buff;
         store_buff.resize(kStoreSize);
         memset(store_buff.data(), 0xFF, store_buff.size());
@@ -247,7 +264,7 @@ TEST_F(CCFIFOBufferStressTest, MPSCWRandSize)
                 // size_t local_push=0;
                 for(;total_push_size.load(std::memory_order_relaxed) < (kTotalWriteSize);)
                 {
-                    size_t ws = fifo.push([&fifo, &total_push_size, kTid](char *el, size_t size) {
+                    size_t ws = fifo.push<tll::lf2::Mode::kHL>([&fifo, &total_push_size, kTid](char *el, size_t size) {
                         *el = '{';
                         *(el + size - 1) = '}';
                         memset(el + 1, (uint8_t)kTid, size - 2);
