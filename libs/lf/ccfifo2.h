@@ -95,7 +95,7 @@ namespace mode
 
 /// Contiguous Circular Index
 // template <size_t num_threads=0x400>
-template <typename T, bool profiling=false>
+template <typename T, Mode prod_mode=Mode::kHL, Mode cons_mode=Mode::kLL, bool profiling=false>
 struct ccfifo
 {
 public:
@@ -265,7 +265,7 @@ public:
                         //      dump().data());
 
                     }
-                    
+
                     consumer_.exit_id().store(exit_id, std::memory_order_relaxed);
                     // consumer_.index_tail().store(next_index + size, std::memory_order_relaxed);
                 }
@@ -290,7 +290,7 @@ public:
     }
 
     template <Mode mode>
-    inline size_t tryPush(size_t &entry_id, size_t &prod_index_head, size_t &size)
+    size_t tryPush(size_t &entry_id, size_t &prod_index_head, size_t &size)
     {
         size_t prod_next_index;
         size_t entry_id_head = producer_.entry_id_head().load(std::memory_order_relaxed);
@@ -405,7 +405,6 @@ public:
 
                         if(next_index >= this->next(curr_index))
                         {
-                            producer_.index_tail().store(curr_index, std::memory_order_relaxed);
                             water_mark_.store(curr_index, std::memory_order_relaxed);
                             // LOGD("%ld/%ld\t\t%s", curr_index, next_index, dump().data());
                         }
@@ -447,12 +446,12 @@ public:
         return true;
     }
 
-    template <Mode mode, typename F, typename ...Args>
+    template <typename F, typename ...Args>
     size_t pop(F &&cb, size_t size, Args &&...args)
     {
         size_t id, index;
         profTimerReset();
-        size_t next = tryPop<mode>(id, index, size);
+        size_t next = tryPop<cons_mode>(id, index, size);
         profTimerElapse(time_pop_try);
         profTimerStart();
         if(size)
@@ -461,7 +460,7 @@ public:
             cb(&buffer_[wrap(next)], size, std::forward<Args>(args)...);
             profTimerElapse(time_pop_cb);
             profTimerStart();
-            while(!completePop<mode>(id, index, next, size)){};
+            while(!completePop<cons_mode>(id, index, next, size)){};
             profTimerElapse(time_pop_complete);
             profAdd(stat_pop_total, 1);
             profAdd(stat_pop_size, size);
@@ -474,12 +473,12 @@ public:
         return size;
     }
 
-    template <Mode mode, typename F, typename ...Args>
+    template <typename F, typename ...Args>
     size_t push(const F &cb, size_t size, Args &&...args)
     {
         size_t id, index;
         profTimerReset();
-        size_t next = tryPush<mode>(id, index, size);
+        size_t next = tryPush<prod_mode>(id, index, size);
         profTimerElapse(time_push_try);
         profTimerStart();
         if(size)
@@ -488,7 +487,7 @@ public:
             std::atomic_thread_fence(std::memory_order_release);
             profTimerElapse(time_push_cb);
             profTimerStart();
-            while(!completePush<mode>(id, index, next, size)){};
+            while(!completePush<prod_mode>(id, index, next, size)){};
             profTimerElapse(time_push_complete);
             profAdd(stat_push_total, 1);
             profAdd(stat_push_size, size);
@@ -501,16 +500,15 @@ public:
         return size;
     }
 
-    template<Mode mode, typename U>
+    template<typename U>
     size_t push(U &&val)
     {
-        return push<mode>([&val](T *el, size_t){ *el = std::forward<U>(val); }, 1);
+        return push([&val](T *el, size_t){ *el = std::forward<U>(val); }, 1);
     }
 
-    template<Mode mode>
     size_t pop(T &val)
     {
-        return pop<mode>([&val](T *el, size_t){ val = std::move(*el); }, 1);
+        return pop([&val](T *el, size_t){ val = std::move(*el); }, 1);
     }
 
 /// utility functions
@@ -594,28 +592,28 @@ public:
 
 private:
 
-    inline ccfifo<T,profiling> &profTimerReset()
+    inline ccfifo<T, prod_mode, cons_mode, profiling> &profTimerReset()
     {
         if(profiling)
             counter.reset();
         return *this;
     }
 
-    inline ccfifo<T,profiling> &profTimerStart()
+    inline ccfifo<T, prod_mode, cons_mode, profiling> &profTimerStart()
     {
         if(profiling)
             counter.start();
         return *this;
     }
 
-    inline ccfifo<T,profiling> &profTimerElapse(auto &atomic)
+    inline ccfifo<T, prod_mode, cons_mode, profiling> &profTimerElapse(auto &atomic)
     {
         if(profiling) 
             atomic.fetch_add(counter.elapse().count(), std::memory_order_relaxed);
         return *this;
     }
 
-    inline ccfifo<T,profiling> &profTimerAbsElapse(auto &atomic)
+    inline ccfifo<T, prod_mode, cons_mode, profiling> &profTimerAbsElapse(auto &atomic)
     {
         if(profiling) 
             atomic.fetch_add(counter.absElapse().count(), std::memory_order_relaxed);
@@ -623,7 +621,7 @@ private:
     }
 
     template <typename U>
-    inline ccfifo<T,profiling> &profAdd(auto &atomic, const U &val)
+    inline ccfifo<T, prod_mode, cons_mode, profiling> &profAdd(auto &atomic, const U &val)
     {
         if(profiling)
             atomic.fetch_add(val, std::memory_order_relaxed);
