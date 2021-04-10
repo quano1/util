@@ -27,13 +27,14 @@ static char dst[LOOP_COUNT], src[LOOP_COUNT];
 #include "../libs/contiguouscircular.h"
 
 template <int num_of_threads>
-static void doFifing(const auto &doPush, const auto &doPop, size_t write_count, double *time, size_t *ops)
+static void doFifing(auto &fifo, const auto &doPush, const auto &doPop, size_t write_count, double *time, size_t *ops)
 {
     // constexpr int kThreadNum = num_of_threads / 2;
     static_assert(num_of_threads > 0);
     std::atomic<size_t> total_push_count{0}, total_pop_count{0};
     tll::time::Counter<std::chrono::duration<double, std::ratio<1, 1000>>> counter; /// us
     std::atomic<int> w_threads{0};
+    double tt_time;
 
     counter.start();
     #pragma omp parallel num_threads ( num_of_threads ) shared(doPush)
@@ -57,8 +58,12 @@ static void doFifing(const auto &doPush, const auto &doPop, size_t write_count, 
 
         // LOGD("Done");
     }
-    counter.elapsed();
-    time[0] = counter.lastElapsed().count();
+    tt_time = counter.elapsed().count();
+    {
+        tll::cc::Stat stat = fifo.stat();
+        tll::cc::dumpStat<1>(stat, tt_time);
+    }
+    time[0] = tt_time;
 
     counter.start();
     #pragma omp parallel num_threads ( num_of_threads ) shared(doPop)
@@ -79,8 +84,12 @@ static void doFifing(const auto &doPush, const auto &doPop, size_t write_count, 
         }
         // LOGD("Done");
     }
-    counter.elapsed();
-    time[1] = counter.lastElapsed().count();
+    tt_time = counter.elapsed().count();
+    {
+        tll::cc::Stat stat = fifo.stat();
+        tll::cc::dumpStat<2>(stat, tt_time);
+    }
+    time[1] = tt_time;
 
     if(total_push_count.load(std::memory_order_relaxed) != total_pop_count.load(std::memory_order_relaxed))
     {
@@ -93,6 +102,7 @@ static void doFifing(const auto &doPush, const auto &doPop, size_t write_count, 
 
     total_push_count.store(0, std::memory_order_relaxed);
     total_pop_count.store(0, std::memory_order_relaxed);
+    fifo.reset();
     counter.start();
     #pragma omp parallel num_threads ( num_of_threads * 2 ) shared(doPush, doPop)
     {
@@ -122,8 +132,12 @@ static void doFifing(const auto &doPush, const auto &doPop, size_t write_count, 
             }
         }
     }
-    counter.elapsed();
-    time[2] = counter.lastElapsed().count();
+    tt_time = counter.elapsed().count();
+    {
+        tll::cc::Stat stat = fifo.stat();
+        tll::cc::dumpStat<>(stat, tt_time);
+    }
+    time[2] = tt_time;
     ops[2] = total_push_count.load(std::memory_order_relaxed);
 
     if(total_push_count.load(std::memory_order_relaxed) != total_pop_count.load(std::memory_order_relaxed))
@@ -131,9 +145,6 @@ static void doFifing(const auto &doPush, const auto &doPop, size_t write_count, 
         LOGD(" - w:%ld r:%ld\n", total_push_count.load(std::memory_order_relaxed), total_pop_count.load(std::memory_order_relaxed));
         abort();
     }
-
-    tll::cc::Stat stat = fifo.stat();
-    tll::cc::dumpStat<>(stat, tt_time);
 }
 
 template <int num_of_threads>
@@ -150,9 +161,11 @@ static void __perfTunnel(auto &fifo, size_t test_val, size_t count,
     // size_t tn = (tll::util::isPowerOf2(count) ? count : tll::util::nextPowerOf2(count));
     size_t threads_indicies_size = (tll::util::isPowerOf2(test_val*num_of_threads) ? test_val*num_of_threads : tll::util::nextPowerOf2(test_val*num_of_threads));
     fifo.reserve(count * 2, threads_indicies_size);
-    
+
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    doFifing<num_of_threads>(doPush, doPop, count, time, ops);
+
+    doFifing<num_of_threads>(fifo, doPush, doPop, count, time, ops);
+
     /// average time to complete the test (divide by the number of threads)
     double avg_time[3] = {time[0]/num_of_threads, time[1]/num_of_threads, time[2]/num_of_threads};
     /// number of operations per time
@@ -162,7 +175,6 @@ static void __perfTunnel(auto &fifo, size_t test_val, size_t count,
     avg_time_lst.push_back(avg_time[2]);
 
     LOGD("val:0x%lx\t[0]:%.3f/%.3f\t[1]:%.3f/%.3f\t[2]:%.3f/%.3f", test_val, throughput[0], avg_time[0], throughput[1], avg_time[1], throughput[2], avg_time[2]);
-    
 }
 
 
@@ -209,7 +221,7 @@ static void _perfTunnel(
 
     for(auto val : test_list)
     {
-        std::string str = tll::util::stringFormat("\"buffer (0x%lx)\"\t", val);
+        std::string str = tll::util::stringFormat("\"queue (0x%lx)\"\t", val);
         ofs_tp_push << str;
         ofs_tp_pop << str;
         ofs_avg_time << str;
@@ -217,7 +229,7 @@ static void _perfTunnel(
 
     for(auto val : test_list)
     {
-        std::string str = tll::util::stringFormat("\"queue (0x%lx)\"\t", val);
+        std::string str = tll::util::stringFormat("\"buffer (0x%lx)\"\t", val);
         ofs_tp_push << str;
         ofs_tp_pop << str;
         ofs_avg_time << str;
@@ -248,13 +260,14 @@ static void _perfTunnel(
 
         for(auto val : test_list)
         {
-            __perfTunnel<index_seq.value>(fifo, val, kCount, tp_push_lst, tp_pop_lst, avg_time_lst, doPush, doPop);
+            __perfTunnel<index_seq.value>(fifo, val, kCount, tp_push_lst, tp_pop_lst, avg_time_lst, doEnQ, doDeQ);
             ofs_tp_push << tp_push_lst.back() << " ";
             ofs_tp_pop << tp_pop_lst.back() << " ";
             ofs_avg_time << avg_time_lst.back() << " ";
 
             fifo.reset();
-            __perfTunnel<index_seq.value>(fifo, val, kCount, tp_push_lst, tp_pop_lst, avg_time_lst, doEnQ, doDeQ);
+
+            __perfTunnel<index_seq.value>(fifo, val, kCount, tp_push_lst, tp_pop_lst, avg_time_lst, doPush, doPop);
             ofs_tp_push << tp_push_lst.back() << " ";
             ofs_tp_pop << tp_pop_lst.back() << " ";
             ofs_avg_time << avg_time_lst.back() << " ";

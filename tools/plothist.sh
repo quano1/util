@@ -24,8 +24,8 @@ cols=${texts[0]}
 cols=$((cols+1));
 num_cpus=${texts[1]}
 title=${texts[2]}
-yasix=${texts[3]}
-xasix=${texts[4]}
+xasix=${texts[3]}
+yasix=${texts[4]}
 
 [[ -z ${num_cpus} ]] && { echo "cpus == 0"; exit 1; };
 
