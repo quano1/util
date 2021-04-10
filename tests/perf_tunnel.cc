@@ -131,6 +131,9 @@ static void doFifing(const auto &doPush, const auto &doPop, size_t write_count, 
         LOGD(" - w:%ld r:%ld\n", total_push_count.load(std::memory_order_relaxed), total_pop_count.load(std::memory_order_relaxed));
         abort();
     }
+
+    tll::cc::Stat stat = fifo.stat();
+    tll::cc::dumpStat<>(stat, tt_time);
 }
 
 template <int num_of_threads>
@@ -173,23 +176,40 @@ static void _perfTunnel(
     size_t ops[3];
     double time[3];
 
-    ofs_tp_push << tll::util::stringFormat(";%d\n",NUM_CPU);
-    ofs_tp_pop << tll::util::stringFormat(";%d\n",NUM_CPU);
-    ofs_avg_time << tll::util::stringFormat(";%d\n",NUM_CPU);
-    ofs_tp_push << tll::util::stringFormat(";push contiguously (max cpu: %d)\\nClose to 1 is better\n",NUM_CPU);
-    ofs_tp_pop << tll::util::stringFormat(";pop contiguously (max cpu: %d)\\nClose to 1 is better\n",NUM_CPU);
-    ofs_avg_time << tll::util::stringFormat(";push and pop simultaneously (max cpu: %d)\\nClose to 1 is better\n",NUM_CPU);
+    // std::string columns = "\"\"\tboost::lockfree::queue\tmoodycamel::ConcurrentQueue\ttll::lf::ccfifo";
 
-    ofs_tp_push << ";Number of threads\n";
-    ofs_tp_pop << ";Number of threads\n";
-    ofs_avg_time << ";Number of threads\n";
-    ofs_tp_push << ";Throughput (millions operations/second)\n";
-    ofs_tp_pop << ";Throughput (millions operations/second)\n";
-    ofs_avg_time << ";Rate of Average time\n";
+    ofs_tp_push << "#6\n" << tll::util::stringFormat("#%d\n",NUM_CPU) 
+        << tll::util::stringFormat("#push contiguously (max cpu: %d)\\nHigher is better\n",NUM_CPU)
+        << "#Number of threads\n"
+        << "#Operations (million) per second\n\"\"\t";
+
+    ofs_tp_pop << "#6\n" << tll::util::stringFormat("#%d\n",NUM_CPU) 
+        << tll::util::stringFormat("#pop contiguously (max cpu: %d)\\nHigher is better\n",NUM_CPU)
+        << "#Number of threads\n"
+        << "#Operations (million) per second\n\"\"\t";
+
+    ofs_avg_time << "#6\n" << tll::util::stringFormat("#%d\n",NUM_CPU) 
+        << tll::util::stringFormat("#push and pop simultaneously (max cpu: %d)\\nLower is better\n",NUM_CPU)
+        << "#Number of threads\n"
+        << "#Average time for completing the test (ms)\n\"\"\t";
+
+    // ofs_tp_push << tll::util::stringFormat(";%d\n",NUM_CPU);
+    // ofs_tp_pop << tll::util::stringFormat(";%d\n",NUM_CPU);
+    // ofs_avg_time << tll::util::stringFormat(";%d\n",NUM_CPU);
+    // ofs_tp_push << tll::util::stringFormat(";push contiguously (max cpu: %d)\\nClose to 1 is better\n",NUM_CPU);
+    // ofs_tp_pop << tll::util::stringFormat(";pop contiguously (max cpu: %d)\\nClose to 1 is better\n",NUM_CPU);
+    // ofs_avg_time << tll::util::stringFormat(";push and pop simultaneously (max cpu: %d)\\nClose to 1 is better\n",NUM_CPU);
+
+    // ofs_tp_push << ";Number of threads\n";
+    // ofs_tp_pop << ";Number of threads\n";
+    // ofs_avg_time << ";Number of threads\n";
+    // ofs_tp_push << ";Throughput (millions operations/second)\n";
+    // ofs_tp_pop << ";Throughput (millions operations/second)\n";
+    // ofs_avg_time << ";Rate of Average time\n";
 
     for(auto val : test_list)
     {
-        std::string str = tll::util::stringFormat(";buffer (0x%lx)\n", val);
+        std::string str = tll::util::stringFormat("\"buffer (0x%lx)\"\t", val);
         ofs_tp_push << str;
         ofs_tp_pop << str;
         ofs_avg_time << str;
@@ -197,12 +217,16 @@ static void _perfTunnel(
 
     for(auto val : test_list)
     {
-        std::string str = tll::util::stringFormat(";queue (0x%lx)\n", val);
+        std::string str = tll::util::stringFormat("\"queue (0x%lx)\"\t", val);
         ofs_tp_push << str;
         ofs_tp_pop << str;
         ofs_avg_time << str;
     }
-    
+
+    ofs_tp_push << "\n";
+    ofs_tp_pop << "\n";
+    ofs_avg_time << "\n";
+
     tll::util::CallFuncInSeq<NUM_CPU, EXTENDING>( [&](auto index_seq)
     {
         // if(index_seq.value < NUM_CPU) return;
@@ -214,7 +238,7 @@ static void _perfTunnel(
         // for (size_t i=0,tis=0x10000; i<8; i++,tis*=2)
         std::vector<double> tp_push_lst, tp_pop_lst, avg_time_lst;
 
-        tll::lf2::ccfifo<char, tll::lf2::Mode::kHL, tll::lf2::Mode::kHL> fifo;
+        tll::lf2::ccfifo<char, tll::lf2::Mode::kHL, tll::lf2::Mode::kHL, true> fifo;
 
         auto doPush = [&fifo]() -> bool { DUMMY_LOOP(); return fifo.push( (char)(1) ); };
         auto doPop = [&fifo]() -> bool { char val; DUMMY_LOOP(); return fifo.pop(val); };

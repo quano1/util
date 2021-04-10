@@ -12,7 +12,7 @@
 
 #define ENABLE_PROFILING 0
 #define LOOP_COUNT 0x800
-#define EXTENDING 1
+#define EXTENDING 7
 // #define DUMPER
 // #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 
@@ -155,29 +155,28 @@ int benchmark()
     ofs_tp_push.open("bm_tp_push.dat");
     ofs_tp_pop.open("bm_tp_pop.dat");
     ofs_time.open("bm_time.dat");
+    std::string columns = "\"\"\tboost::lockfree::queue\tmoodycamel::ConcurrentQueue\ttll::lf::ccfifo";
 
-    ofs_tp_push << tll::util::stringFormat(";%d\n",NUM_CPU);
-    ofs_tp_pop << tll::util::stringFormat(";%d\n",NUM_CPU);
-    ofs_time << tll::util::stringFormat(";%d\n",NUM_CPU);
-    ofs_tp_push << tll::util::stringFormat(";push contiguously (max cpu: %d)\\nHigher is better\n",NUM_CPU);
-    ofs_tp_pop << tll::util::stringFormat(";pop contiguously (max cpu: %d)\\nHigher is better\n",NUM_CPU);
-    ofs_time << tll::util::stringFormat(";push and pop simultaneously (max cpu: %d)\\nLower is better\n",NUM_CPU);
-    ofs_tp_push << ";Number of threads\n";
-    ofs_tp_pop << ";Number of threads\n";
-    ofs_time << ";Number of threads\n";
-    ofs_tp_push << ";Operations (million) per second\n";
-    ofs_tp_pop << ";Operations (million) per second\n";
-    ofs_time << ";Average time for completing the test (ms)\n";
+    ofs_tp_push << "#3\n" << tll::util::stringFormat("#%d\n",NUM_CPU) 
+        << tll::util::stringFormat("#push contiguously (max cpu: %d)\\nHigher is better\n",NUM_CPU)
+        << "#Number of threads\n"
+        << "#Operations (million) per second\n"
+        << columns
+        << "\n";
 
-    ofs_tp_push << ";boost::lockfree::queue\n";
-    ofs_tp_pop << ";boost::lockfree::queue\n";
-    ofs_time << ";boost::lockfree::queue\n";
-    ofs_tp_push << ";moodycamel::ConcurrentQueue\n";
-    ofs_tp_pop << ";moodycamel::ConcurrentQueue\n";
-    ofs_time << ";moodycamel::ConcurrentQueue\n";
-    ofs_tp_push << ";tll::lf::ccfifo\n";
-    ofs_tp_pop << ";tll::lf::ccfifo\n";
-    ofs_time << ";tll::lf::ccfifo\n";
+    ofs_tp_pop << "#3\n" << tll::util::stringFormat("#%d\n",NUM_CPU) 
+        << tll::util::stringFormat("#pop contiguously (max cpu: %d)\\nHigher is better\n",NUM_CPU)
+        << "#Number of threads\n"
+        << "#Operations (million) per second\n"
+        << columns
+        << "\n";
+
+    ofs_time << "#3\n" << tll::util::stringFormat("#%d\n",NUM_CPU) 
+        << tll::util::stringFormat("#push and pop simultaneously (max cpu: %d)\\nLower is better\n",NUM_CPU)
+        << "#Number of threads\n"
+        << "#Average time for completing the test (ms)\n"
+        << columns
+        << "\n";
 
     tll::util::CallFuncInSeq<NUM_CPU, EXTENDING>( [&](auto index_seq)
     {
@@ -241,9 +240,9 @@ int benchmark()
         }
 
         {
-            tll::lf2::ccfifo<char, tll::lf2::Mode::kLL, tll::lf2::Mode::kLL> fifo{kCount * 2, index_seq.value * 0x4000};
-            auto doPush = [&fifo]() -> bool { DUMMY_LOOP(); return fifo.push((char)1); };
-            auto doPop = [&fifo]() -> bool { char val; DUMMY_LOOP(); return fifo.pop(val); };
+            tll::lf2::ccfifo<char, tll::lf2::Mode::kHL, tll::lf2::Mode::kHL> fifo{kCount * 2, index_seq.value * 0x4000};
+            auto doPush = [&fifo]() -> bool { DUMMY_LOOP(); return fifo.enQueue((char)1); };
+            auto doPop = [&fifo]() -> bool { char val; DUMMY_LOOP(); return fifo.deQueue(val); };
             
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             _benchmark<index_seq.value>("ccfifo", doPush, doPop, kCount, time, ops, ofss);
