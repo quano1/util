@@ -11,6 +11,9 @@ git submodule init
 ![push/pop](./res/pp.png)
 
 
+## Plot
+plot.sh <file> 1
+
 TODO
 ---
 slogger

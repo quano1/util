@@ -28,14 +28,14 @@ struct Marker
     inline auto &exit_id() {return exit_id_;}
     inline auto &exit_id_list() {return exit_id_list_;}
     inline auto &next_index_list() {return next_index_list_;}
-    inline auto &curr_index_list() {return curr_index_list_;}
+    // inline auto &curr_index_list() {return curr_index_list_;}
     inline auto &size_list() {return size_list_;}
 
     ~Marker()
     {
         if(exit_id_list_) delete exit_id_list_;
         if(next_index_list_) delete next_index_list_;
-        if(curr_index_list_) delete curr_index_list_;
+        // if(curr_index_list_) delete curr_index_list_;
         if(size_list_) delete size_list_;
     }
 
@@ -46,11 +46,11 @@ struct Marker
             this->list_size = list_size;
             if(exit_id_list_) delete exit_id_list_;
             if(next_index_list_) delete next_index_list_;
-            if(curr_index_list_) delete curr_index_list_;
+            // if(curr_index_list_) delete curr_index_list_;
             if(size_list_) delete size_list_;
             exit_id_list_ = new std::atomic<size_t> [list_size];
             next_index_list_ = new std::atomic<size_t> [list_size];
-            curr_index_list_ = new std::atomic<size_t> [list_size];
+            // curr_index_list_ = new std::atomic<size_t> [list_size];
             size_list_ = new std::atomic<size_t> [list_size];
         }
 
@@ -74,7 +74,7 @@ struct Marker
 
     std::atomic<size_t> *exit_id_list_{nullptr};
     std::atomic<size_t> *next_index_list_{nullptr};
-    std::atomic<size_t> *curr_index_list_{nullptr};
+    // std::atomic<size_t> *curr_index_list_{nullptr};
     std::atomic<size_t> *size_list_{nullptr};
 
     size_t list_size{0};
@@ -170,7 +170,7 @@ public:
                     {
                         // LOGE("Underrun!");dump();
                         next_size = 0;
-                        profAdd(stat_pop_error, 1);
+                        // profAdd(stat_pop_error, 1);
                         break;
                     }
                     if(size > (prod_index - cons_next_index))
@@ -213,7 +213,7 @@ public:
             {
                 // LOGE("Underrun!");dump();
                 next_size = 0;
-                profAdd(stat_pop_error, 1);
+                // profAdd(stat_pop_error, 1);
                 break;
             }
         }
@@ -378,7 +378,7 @@ public:
 
             size_t t_pos = wrap(exit_id, num_threads_);
             producer_.size_list()[wrap(exit_id, num_threads_)].store(size);
-            producer_.curr_index_list()[wrap(exit_id, num_threads_)].store(curr_index);
+            // producer_.curr_index_list()[wrap(exit_id, num_threads_)].store(curr_index);
             producer_.next_index_list()[wrap(exit_id, num_threads_)].store(next_index);
             size_t const kIdx = exit_id;
             size_t next_exit_id = producer_.exit_id_list()[wrap(exit_id, num_threads_)].load(std::memory_order_relaxed);
@@ -400,7 +400,7 @@ public:
                     while((exit_id - curr_exit_id < num_threads_) && (next_exit_id >= curr_exit_id))
                     {
                         size = producer_.size_list()[wrap(next_exit_id, num_threads_)].load(std::memory_order_relaxed);
-                        curr_index = producer_.curr_index_list()[wrap(next_exit_id, num_threads_)].load(std::memory_order_relaxed);
+                        curr_index = producer_.index_tail().load(std::memory_order_relaxed);
                         next_index = producer_.next_index_list()[wrap(next_exit_id, num_threads_)].load(std::memory_order_relaxed);
 
                         if(next_index >= this->next(curr_index))
@@ -447,7 +447,7 @@ public:
     }
 
     template <typename F, typename ...Args>
-    size_t pop(F &&cb, size_t size, Args &&...args)
+    size_t pop(F &&callback, size_t size, Args &&...args)
     {
         size_t id, index;
         profTimerReset();
@@ -457,7 +457,7 @@ public:
         if(size)
         {
             std::atomic_thread_fence(std::memory_order_acquire);
-            cb(&buffer_[wrap(next)], size, std::forward<Args>(args)...);
+            callback(elemAt(next), size, std::forward<Args>(args)...);
             profTimerElapse(time_pop_cb);
             profTimerStart();
             while(!completePop<cons_mode>(id, index, next, size)){};
@@ -474,7 +474,7 @@ public:
     }
 
     template <typename F, typename ...Args>
-    size_t push(const F &cb, size_t size, Args &&...args)
+    size_t push(const F &callback, size_t size, Args &&...args)
     {
         size_t id, index;
         profTimerReset();
@@ -483,7 +483,7 @@ public:
         profTimerStart();
         if(size)
         {
-            cb(&buffer_[wrap(next)], size, std::forward<Args>(args)...);
+            callback(elemAt(next), size, std::forward<Args>(args)...);
             std::atomic_thread_fence(std::memory_order_release);
             profTimerElapse(time_push_cb);
             profTimerStart();
@@ -510,6 +510,150 @@ public:
     {
         return pop([&val](T *el, size_t){ val = std::move(*el); }, 1);
     }
+
+    inline bool completeQueue(size_t idx, int type)
+    {
+        size_t t_pos = wrap(idx, num_threads_);
+        auto &tail = (type == 0) ? producer_.index_tail() : consumer_.index_tail();
+        auto &out_index = (type == 0) ? producer_.exit_id_list() : consumer_.exit_id_list();
+
+        if(idx >= (tail.load(std::memory_order_relaxed) + num_threads_)) return false;
+        
+        size_t const kIdx = idx;
+
+        for(;;)
+        {
+            size_t next_idx = out_index[wrap(idx, num_threads_)].load(std::memory_order_relaxed);
+            size_t crr_tail = tail.load(std::memory_order_relaxed);
+            // LOGD(">(%ld:%ld:%ld:%ld) [%ld] {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads_), crr_tail, next_idx, this->to_string(out_index).data());
+            if(crr_tail > idx)
+            {
+                // LOGD("E-(%ld:%ld:%ld:%ld) [%ld] {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads_), crr_tail, next_idx, this->to_string(out_index).data());
+                break;
+            }
+            else if (crr_tail == idx)
+            {
+                size_t cnt = 1;
+                next_idx = out_index[wrap(idx + cnt, num_threads_)].load(std::memory_order_relaxed);
+                for(; (cnt<num_threads_) && (next_idx>crr_tail); cnt++)
+                {
+                    next_idx = out_index[wrap(idx + cnt + 1, num_threads_)].load(std::memory_order_relaxed);
+                }
+
+                idx += cnt;
+                // LOGD("=-(%ld:%ld:%ld:%ld) [%ld] +%ld {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads_), crr_tail, cnt, next_idx, this->to_string(out_index).data());
+                // tail.store(crr_tail + cnt);
+                tail.fetch_add(cnt, std::memory_order_relaxed);
+            }
+
+            if(out_index[wrap(idx, num_threads_)].compare_exchange_weak(next_idx, kIdx, std::memory_order_relaxed, std::memory_order_relaxed)) break;
+
+            // LOGD("M-(%ld:%ld:%ld:%ld) [%ld] {%ld %s}", kIdx, idx, t_pos, wrap(idx, num_threads_), crr_tail, next_idx, this->to_string(out_index).data());
+        }
+
+        return true;
+    }
+
+    template <typename F, typename ...Args>
+    bool deQueue(const F &callback, Args &&...args)
+    {
+        profTimerReset();
+        bool ret = false;
+        size_t idx = consumer_.index_head().load(std::memory_order_relaxed);
+        for(;;)
+        {
+            if (idx == producer_.index_tail().load(std::memory_order_relaxed))
+            {
+                profAdd(stat_pop_error, 1);
+                break;
+            }
+
+            if(consumer_.index_head().compare_exchange_weak(idx, idx + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+            {
+                ret = true;
+                break;
+            }
+            profAdd(stat_pop_miss, 1);
+        }
+        // profAdd(time_pop_try, timer.elapse().count());
+        profTimerElapse(time_pop_try);
+        profTimerStart();
+        if(ret)
+        {
+            callback(elemAt(idx), std::forward<Args>(args)...);
+            // profAdd(time_pop_cb, timer.elapse().count());
+            profTimerElapse(time_pop_cb);
+            profTimerStart();
+            // while(!completeQueue(idx, cons_tail_, cons_out_)) {std::this_thread::yield();}
+            while(!completeQueue(idx, 1)) {std::this_thread::yield();}
+            // profAdd(time_pop_complete, timer.elapse().count());
+            profTimerElapse(time_pop_complete);
+            profAdd(stat_pop_size, 1);
+        }
+        // profAdd(time_pop_total, timer.absElapse().count());
+        profTimerAbsElapse(time_pop_total);
+        profAdd(stat_pop_total, 1);
+        return ret;
+    }
+
+    template <typename F, typename ...Args>
+    bool enQueue(const F &callback, Args &&...args)
+    {
+        profTimerReset();
+        bool ret = false;
+        size_t idx = producer_.index_head().load(std::memory_order_relaxed);
+        for(;;)
+        {
+            if (idx == (consumer_.index_tail().load(std::memory_order_relaxed) + capacity_))
+            {
+                profAdd(stat_push_error, 1);
+                break;
+            }
+
+            if(producer_.index_head().compare_exchange_weak(idx, idx + 1, std::memory_order_acquire, std::memory_order_relaxed))
+            {
+                ret = true;
+                break;
+            }
+            profAdd(stat_push_miss, 1);
+        }
+        // profAdd(time_push_try, timer.elapse().count());
+        profTimerElapse(time_push_try);
+        profTimerStart();
+        if(ret)
+        {
+            callback(elemAt(idx), std::forward<Args>(args)...);
+            // profAdd(time_push_cb, timer.elapse().count());
+            profTimerElapse(time_push_cb);
+            profTimerStart();
+            // while(!completeQueue(idx, prod_tail_, prod_out_)) {std::this_thread::yield();}
+            while(!completeQueue(idx, 0)) {std::this_thread::yield();}
+            // profAdd(time_push_complete, timer.elapse().count());
+            profTimerElapse(time_push_complete);
+            profAdd(stat_push_size, 1);
+        }
+        // profAdd(time_push_total, timer.absElapse().count());
+        profTimerAbsElapse(time_push_total);
+        profAdd(stat_push_total, 1);
+        return ret;
+    }
+
+    // template<typename U>
+    bool enQueue(const T &val)
+    {
+        return enQueue([&val](T *el){ *el = val;});
+    }
+
+    bool enQueue(T &&val)
+    {
+        return enQueue([&val](T *el){ *el = std::move(val);});
+    }
+
+    bool deQueue(T &val)
+    {
+        return deQueue([&val](T *el){ val = std::move(*el);});
+    }
+
 
 /// utility functions
     inline size_t capacity() const

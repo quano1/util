@@ -19,7 +19,6 @@ struct ccfifoBufferBasicTest : public ::testing::Test
         {
             for(int i=0; i<sz; i++) *(el+i) = val;
         };
-
         /// reserve not power of 2
         fifo.reserve(7);
         ASSERT_EQ(fifo.capacity(), 8);
@@ -94,7 +93,7 @@ struct ccfifoBufferBasicTest : public ::testing::Test
     }
 };
 
-TEST_F(ccfifoBufferBasicTest, PrimitiveType)
+TEST_F(ccfifoBufferBasicTest, PrimitiveTypeLL)
 {
     using namespace tll::lf2;
     constexpr size_t kLoop = 0x10;
@@ -102,17 +101,34 @@ TEST_F(ccfifoBufferBasicTest, PrimitiveType)
     RWInSequencePrimitive<int16_t, mode::low_load, mode::low_load>(kLoop);
     RWInSequencePrimitive<int32_t, mode::low_load, mode::low_load>(kLoop);
     RWInSequencePrimitive<int64_t, mode::low_load, mode::low_load>(kLoop);
+}
+
+TEST_F(ccfifoBufferBasicTest, PrimitiveTypeHH)
+{
+    using namespace tll::lf2;
+    constexpr size_t kLoop = 0x10;
 
     RWInSequencePrimitive<int8_t, mode::high_load, mode::high_load>(kLoop);
     RWInSequencePrimitive<int16_t, mode::high_load, mode::high_load>(kLoop);
     RWInSequencePrimitive<int32_t, mode::high_load, mode::high_load>(kLoop);
     RWInSequencePrimitive<int64_t, mode::high_load, mode::high_load>(kLoop);
+}
+
+TEST_F(ccfifoBufferBasicTest, PrimitiveTypeLH)
+{
+    using namespace tll::lf2;
+    constexpr size_t kLoop = 0x10;
 
     RWInSequencePrimitive<int8_t, mode::low_load, mode::high_load>(kLoop);
     RWInSequencePrimitive<int16_t, mode::low_load, mode::high_load>(kLoop);
     RWInSequencePrimitive<int32_t, mode::low_load, mode::high_load>(kLoop);
     RWInSequencePrimitive<int64_t, mode::low_load, mode::high_load>(kLoop);
+}
 
+TEST_F(ccfifoBufferBasicTest, PrimitiveTypeHL)
+{
+    using namespace tll::lf2;
+    constexpr size_t kLoop = 0x10;
     RWInSequencePrimitive<int8_t, mode::high_load, mode::low_load>(kLoop);
     RWInSequencePrimitive<int16_t, mode::high_load, mode::low_load>(kLoop);
     RWInSequencePrimitive<int32_t, mode::high_load, mode::low_load>(kLoop);
@@ -122,6 +138,7 @@ TEST_F(ccfifoBufferBasicTest, PrimitiveType)
 TEST_F(ccfifoBufferBasicTest, Contiguously)
 {
     using namespace tll::lf2;
+
     RWContiguously<mode::low_load, mode::low_load>();
     RWContiguously<mode::high_load, mode::high_load>();
     RWContiguously<mode::high_load, mode::low_load>();
@@ -227,11 +244,11 @@ TEST_F(ccfifoBufferStressTest, MPMCRWFixedSize)
             // LOGD("%s", fifo.dump().data());
         }
         double tt_time = counter.elapse().count();
-#ifdef DUMP
+// #ifdef DUMP
         tll::cc::Stat stat = fifo.stat();
         tll::cc::dumpStat<>(stat, tt_time);
         LOGD("Total time: %f (s)", tt_time);
-#endif
+// #endif
         LOGD("%s", fifo.dump().data());
         auto ttps = total_push_size.load(std::memory_order_relaxed);
         ASSERT_GE(ttps, (kTotalWriteSize));
@@ -334,12 +351,12 @@ TEST_F(ccfifoBufferStressTest, MPSCWRandSize)
             // LOGD("%d Done", kTid);
             // LOGD("%ld %ld", fifo.stat().push_size, fifo.stat().pop_size);
         }
-#ifdef DUMP
+// #ifdef DUMP
         double tt_time = counter.elapse().count();
         tll::cc::Stat stat = fifo.stat();
         tll::cc::dumpStat<>(stat, tt_time);
         LOGD("Total time: %f (s)", tt_time);
-#endif
+// #endif
         LOGD("%s", fifo.dump().data());
         auto ttps = total_push_size.load(std::memory_order_relaxed);
         // LOGD("%ld %ld", fifo.stat().push_size, fifo.stat().pop_size);
