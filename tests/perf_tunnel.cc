@@ -16,7 +16,7 @@
 
 #define ENABLE_PROFILING 0
 #define LOOP_COUNT 0x800
-#define EXTENDING 7
+#define EXTENDING 2
 // #define DUMPER
 // #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 static char dst[LOOP_COUNT], src[LOOP_COUNT];
@@ -60,7 +60,7 @@ static void doFifing(auto &fifo, const auto &doPush, const auto &doPop, size_t w
     }
     tt_time = counter.elapsed().count();
     {
-        tll::cc::Stat stat = fifo.stat();
+        tll::cc::Statistic stat = fifo.statistic();
         tll::cc::dumpStat<1>(stat, tt_time);
     }
     time[0] = tt_time;
@@ -86,7 +86,7 @@ static void doFifing(auto &fifo, const auto &doPush, const auto &doPop, size_t w
     }
     tt_time = counter.elapsed().count();
     {
-        tll::cc::Stat stat = fifo.stat();
+        tll::cc::Statistic stat = fifo.statistic();
         tll::cc::dumpStat<2>(stat, tt_time);
     }
     time[1] = tt_time;
@@ -134,7 +134,7 @@ static void doFifing(auto &fifo, const auto &doPush, const auto &doPop, size_t w
     }
     tt_time = counter.elapsed().count();
     {
-        tll::cc::Stat stat = fifo.stat();
+        tll::cc::Statistic stat = fifo.statistic();
         tll::cc::dumpStat<>(stat, tt_time);
     }
     time[2] = tt_time;

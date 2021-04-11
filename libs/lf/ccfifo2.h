@@ -26,10 +26,10 @@ struct Marker
     inline auto &entry_id_head() {return entry_id_head_;}
     inline auto &entry_id_tail() {return entry_id_tail_;}
     inline auto &exit_id() {return exit_id_;}
-    inline auto &exit_id_list() {return exit_id_list_;}
-    inline auto &next_index_list() {return next_index_list_;}
-    // inline auto &curr_index_list() {return curr_index_list_;}
-    inline auto &size_list() {return size_list_;}
+    inline auto &exit_id_list(size_t i) {return exit_id_list_[i];}
+    inline auto &next_index_list(size_t i) {return next_index_list_[i];}
+    // inline auto &curr_index_list(size_t i) {return curr_index_list_[i];}
+    inline auto &size_list(size_t i) {return size_list_[i];}
 
     ~Marker()
     {
@@ -223,60 +223,60 @@ public:
     }
 
     template <Mode mode>
-    bool completePop(size_t exit_id, size_t curr_index, size_t next_index, size_t size)
+    bool completePop(size_t entry_id, size_t curr_index, size_t next_index, size_t size)
     {
         if(mode == mode::high_load)
         {
-            if(exit_id >= (consumer_.exit_id().load(std::memory_order_relaxed) + num_threads_)) return false;
+            if(entry_id >= (consumer_.exit_id().load(std::memory_order_relaxed) + num_threads_)) return false;
 
-            size_t t_pos = wrap(exit_id, num_threads_);
-            consumer_.size_list()[wrap(exit_id, num_threads_)].store(size);
-            // consumer_.curr_index_list()[wrap(exit_id, num_threads_)].store(curr_index);
-            consumer_.next_index_list()[wrap(exit_id, num_threads_)].store(next_index);
-            size_t const kIdx = exit_id;
-            size_t next_exit_id = consumer_.exit_id_list()[wrap(exit_id, num_threads_)].load(std::memory_order_relaxed);
-            // LOGD("%ld/%ld %ld/%ld %s", curr_index, next_index, next_exit_id, exit_id, dump().data());
+            size_t t_pos = wrap(entry_id, num_threads_);
+            consumer_.size_list(wrap(entry_id, num_threads_)).store(size);
+            // consumer_.curr_index_list(wrap(entry_id, num_threads_)).store(curr_index);
+            consumer_.next_index_list(wrap(entry_id, num_threads_)).store(next_index);
+            size_t const kIdx = entry_id;
+            size_t next_exit_id = consumer_.exit_id_list(wrap(entry_id, num_threads_)).load(std::memory_order_relaxed);
+            // LOGD("%ld/%ld %ld/%ld %s", curr_index, next_index, next_exit_id, entry_id, dump().data());
 
-            for(;;)
+            for(;;stat_pop_exit_miss.fetch_add(1, std::memory_order_relaxed))
             {
                 // size_t next_exit_id;
                 size_t curr_exit_id = consumer_.exit_id().load(std::memory_order_relaxed);
 
-                // LOGD(">(%ld/%ld)\t{%ld/%ld}", kIdx, exit_id, curr_exit_id, next_exit_id);
-                if(exit_id < curr_exit_id)
+                // LOGD(">(%ld/%ld)\t{%ld/%ld}", kIdx, entry_id, curr_exit_id, next_exit_id);
+                if(entry_id < curr_exit_id)
                 {
                     break;
                 }
-                else if (exit_id == curr_exit_id)
+                else if (entry_id == curr_exit_id)
                 {
-                    next_exit_id = exit_id;
-                    while((exit_id - curr_exit_id < num_threads_) && (next_exit_id >= curr_exit_id))
+                    next_exit_id = entry_id;
+                    while((entry_id - curr_exit_id < num_threads_) && (next_exit_id >= curr_exit_id))
                     {
-                        size = consumer_.size_list()[wrap(next_exit_id, num_threads_)].load(std::memory_order_relaxed);
-                        // curr_index = consumer_.curr_index_list()[wrap(next_exit_id, num_threads_)].load(std::memory_order_relaxed);
-                        next_index = consumer_.next_index_list()[wrap(next_exit_id, num_threads_)].load(std::memory_order_relaxed);
+                        size = consumer_.size_list(wrap(next_exit_id, num_threads_)).load(std::memory_order_relaxed);
+                        // curr_index = consumer_.curr_index_list(wrap(next_exit_id, num_threads_)).load(std::memory_order_relaxed);
+                        next_index = consumer_.next_index_list(wrap(next_exit_id, num_threads_)).load(std::memory_order_relaxed);
 
                         consumer_.index_tail().store(next_index + size, std::memory_order_relaxed);
-                        exit_id++;
-                        next_exit_id = consumer_.exit_id_list()[wrap(exit_id, num_threads_)].load(std::memory_order_relaxed);
+                        entry_id++;
+                        next_exit_id = consumer_.exit_id_list(wrap(entry_id, num_threads_)).load(std::memory_order_relaxed);
                         // LOGD(" -(%ld)\t%ld/%ld\t%ld/%ld/%ld\t%s", kIdx, 
-                        //      next_exit_id, exit_id,
+                        //      next_exit_id, entry_id,
                         //      curr_index, next_index, size, 
                         //      dump().data());
 
                     }
 
-                    consumer_.exit_id().store(exit_id, std::memory_order_relaxed);
+                    consumer_.exit_id().store(entry_id, std::memory_order_relaxed);
                     // consumer_.index_tail().store(next_index + size, std::memory_order_relaxed);
                 }
 
                 // LOGD(" (%ld)\t%ld/%ld\t%s", 
                 //          kIdx, 
-                //          next_exit_id, exit_id, 
+                //          next_exit_id, entry_id, 
                 //          dump().data());
-                if(consumer_.exit_id_list()[wrap(exit_id, num_threads_)].compare_exchange_strong(next_exit_id, kIdx, std::memory_order_relaxed, std::memory_order_relaxed)) break;
+                if(consumer_.exit_id_list(wrap(entry_id, num_threads_)).compare_exchange_strong(next_exit_id, kIdx, std::memory_order_relaxed, std::memory_order_relaxed)) break;
 
-                // LOGD(" M(%ld/%ld) {%ld}", kIdx, exit_id, consumer_.exit_id().load(std::memory_order_relaxed));
+                // LOGD(" M(%ld/%ld) {%ld}", kIdx, entry_id, consumer_.exit_id().load(std::memory_order_relaxed));
             }
         }
         else
@@ -284,7 +284,7 @@ public:
             for(;consumer_.index_tail().load(std::memory_order_relaxed) != curr_index;){}
             consumer_.index_tail().store(next_index + size, std::memory_order_relaxed);
         }
-        // LOGD(" <(%ld/%ld) {%ld}", kIdx, exit_id, consumer_.exit_id().load(std::memory_order_relaxed));
+        // LOGD(" <(%ld/%ld) {%ld}", kIdx, entry_id, consumer_.exit_id().load(std::memory_order_relaxed));
 
         return true;
     }
@@ -370,65 +370,66 @@ public:
     }
 
     template <Mode mode>
-    bool completePush(size_t exit_id, size_t curr_index, size_t next_index, size_t size)
+    bool completePush(size_t entry_id, size_t curr_index, size_t next_index, size_t size)
     {
         if(mode == mode::high_load)
         {
-            if(exit_id >= (producer_.exit_id().load(std::memory_order_relaxed) + num_threads_)) return false;
+            if(entry_id >= (producer_.exit_id().load(std::memory_order_relaxed) + num_threads_)) return false;
 
-            size_t t_pos = wrap(exit_id, num_threads_);
-            producer_.size_list()[wrap(exit_id, num_threads_)].store(size);
-            // producer_.curr_index_list()[wrap(exit_id, num_threads_)].store(curr_index);
-            producer_.next_index_list()[wrap(exit_id, num_threads_)].store(next_index);
-            size_t const kIdx = exit_id;
-            size_t next_exit_id = producer_.exit_id_list()[wrap(exit_id, num_threads_)].load(std::memory_order_relaxed);
-            // LOGD("%ld/%ld %ld/%ld %s", curr_index, next_index, next_exit_id, exit_id, dump().data());
+            size_t t_pos = wrap(entry_id, num_threads_);
+            producer_.size_list(wrap(entry_id, num_threads_)).store(size);
+            // producer_.curr_index_list(wrap(exit_id, num_threads_)).store(curr_index);
+            producer_.next_index_list(wrap(entry_id, num_threads_)).store(next_index);
+            size_t const kIdx = entry_id;
+            size_t next_exit_id = producer_.exit_id_list(wrap(entry_id, num_threads_)).load(std::memory_order_relaxed);
+            // LOGD("%ld/%ld %ld/%ld %s", curr_index, next_index, next_exit_id, entry_id, dump().data());
 
-            for(;;)
+            for(;;stat_push_exit_miss.fetch_add(1, std::memory_order_relaxed))
             {
                 // size_t next_exit_id;
                 size_t curr_exit_id = producer_.exit_id().load(std::memory_order_relaxed);
 
-                // LOGD(">(%ld/%ld)\t{%ld/%ld}", kIdx, exit_id, curr_exit_id, next_exit_id);
-                if(exit_id < curr_exit_id)
+                // LOGD(">(%ld/%ld)\t{%ld/%ld}", kIdx, entry_id, curr_exit_id, next_exit_id);
+                if(entry_id < curr_exit_id)
                 {
                     break;
                 }
-                else if (exit_id == curr_exit_id)
+                else if (entry_id == curr_exit_id)
                 {
-                    next_exit_id = exit_id;
-                    while((exit_id - curr_exit_id < num_threads_) && (next_exit_id >= curr_exit_id))
+                    next_exit_id = entry_id;
+                    while((entry_id - curr_exit_id < num_threads_) && (next_exit_id >= curr_exit_id))
                     {
-                        size = producer_.size_list()[wrap(next_exit_id, num_threads_)].load(std::memory_order_relaxed);
+                        size = producer_.size_list(wrap(next_exit_id, num_threads_)).load(std::memory_order_relaxed);
                         curr_index = producer_.index_tail().load(std::memory_order_relaxed);
-                        next_index = producer_.next_index_list()[wrap(next_exit_id, num_threads_)].load(std::memory_order_relaxed);
+                        next_index = producer_.next_index_list(wrap(next_exit_id, num_threads_)).load(std::memory_order_relaxed);
 
                         if(next_index >= this->next(curr_index))
                         {
+                            // producer_.index_tail().store(curr_index, std::memory_order_relaxed);
                             water_mark_.store(curr_index, std::memory_order_relaxed);
                             // LOGD("%ld/%ld\t\t%s", curr_index, next_index, dump().data());
                         }
                         producer_.index_tail().store(next_index + size, std::memory_order_relaxed);
-                        exit_id++;
-                        next_exit_id = producer_.exit_id_list()[wrap(exit_id, num_threads_)].load(std::memory_order_relaxed);
+                        entry_id++;
+                        next_exit_id = producer_.exit_id_list(wrap(entry_id, num_threads_)).load(std::memory_order_relaxed);
                         // LOGD(" -(%ld)\t%ld/%ld\t%ld/%ld/%ld\t%s", kIdx, 
                         //      next_exit_id, exit_id,
                         //      curr_index, next_index, size, 
                         //      dump().data());
 
                     }
-                    
-                    producer_.exit_id().store(exit_id, std::memory_order_relaxed);
+
+                    producer_.exit_id().store(entry_id, std::memory_order_relaxed);
                     // producer_.index_tail().store(next_index + size, std::memory_order_relaxed);
                 }
 
                 // LOGD(" (%ld)\t%ld/%ld\t%s", 
                 //          kIdx, 
-                //          next_exit_id, exit_id, 
+                //          next_exit_id, entry_id, 
                 //          dump().data());
-                if(producer_.exit_id_list()[wrap(exit_id, num_threads_)].compare_exchange_strong(next_exit_id, kIdx, std::memory_order_relaxed, std::memory_order_relaxed)) break;
+                if(producer_.exit_id_list(wrap(entry_id, num_threads_)).compare_exchange_strong(next_exit_id, entry_id, std::memory_order_relaxed, std::memory_order_relaxed)) break;
 
-                // LOGD(" M(%ld/%ld) {%ld}", kIdx, exit_id, producer_.exit_id().load(std::memory_order_relaxed));
+                // LOGD(" M(%ld/%ld) {%ld}", kIdx, entry_id, producer_.exit_id().load(std::memory_order_relaxed));
             }
         }
         else
@@ -439,7 +440,6 @@ public:
                 water_mark_.store(curr_index, std::memory_order_relaxed);
             }
             producer_.index_tail().store(next_index + size, std::memory_order_release);
-            profAdd(stat_push_size, size);
         }
         // LOGD(" <(%ld/%ld) {%ld}", kIdx, exit_id, producer_.exit_id().load(std::memory_order_relaxed));
 
@@ -515,7 +515,7 @@ public:
     {
         size_t t_pos = wrap(idx, num_threads_);
         auto &tail = (type == 0) ? producer_.index_tail() : consumer_.index_tail();
-        auto &out_index = (type == 0) ? producer_.exit_id_list() : consumer_.exit_id_list();
+        auto &out_index = (type == 0) ? producer_.exit_id_list_ : consumer_.exit_id_list_;
 
         if(idx >= (tail.load(std::memory_order_relaxed) + num_threads_)) return false;
         
@@ -682,9 +682,9 @@ public:
         return wrap(index, capacity());
     }
 
-    inline tll::cc::Stat stat() const
+    inline tll::cc::Statistic statistic() const
     {
-        return tll::cc::Stat{
+        return tll::cc::Statistic {
             .time_push_total = time_push_total.load(std::memory_order_relaxed), .time_pop_total = time_pop_total.load(std::memory_order_relaxed),
             .time_push_cb = time_push_cb.load(std::memory_order_relaxed), .time_pop_cb = time_pop_cb.load(std::memory_order_relaxed),
             .time_push_try = time_push_try.load(std::memory_order_relaxed), .time_pop_try = time_pop_try.load(std::memory_order_relaxed),
@@ -693,6 +693,7 @@ public:
             .push_total = stat_push_total.load(std::memory_order_relaxed), .pop_total = stat_pop_total.load(std::memory_order_relaxed),
             .push_error = stat_push_error.load(std::memory_order_relaxed), .pop_error = stat_pop_error.load(std::memory_order_relaxed),
             .push_miss = stat_push_miss.load(std::memory_order_relaxed), .pop_miss = stat_pop_miss.load(std::memory_order_relaxed),
+            .push_exit_miss = stat_push_exit_miss.load(std::memory_order_relaxed), .pop_exit_miss = stat_pop_exit_miss.load(std::memory_order_relaxed),
         };
     }
 
@@ -789,6 +790,7 @@ private:
     std::atomic<size_t> stat_push_total{0};
     std::atomic<size_t> stat_push_error{0};
     std::atomic<size_t> stat_push_miss{0};
+    std::atomic<size_t> stat_push_exit_miss{0};
     std::atomic<size_t> time_push_total{0};
     std::atomic<size_t> time_push_cb{0};
     std::atomic<size_t> time_push_try{0};
@@ -798,6 +800,7 @@ private:
     std::atomic<size_t> stat_pop_total{0};
     std::atomic<size_t> stat_pop_error{0};
     std::atomic<size_t> stat_pop_miss{0};
+    std::atomic<size_t> stat_pop_exit_miss{0};
     std::atomic<size_t> time_pop_total{0};
     std::atomic<size_t> time_pop_cb{0};
     std::atomic<size_t> time_pop_try{0};

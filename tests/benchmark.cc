@@ -216,7 +216,7 @@ int benchmark()
     ofs_tp_pop.open("bm_tp_pop.dat");
     ofs_time.open("bm_time.dat");
     ofs_mpsc.open("bm_mpsc.dat");
-    std::string columns = "\"\"\tboost::lockfree::queue\tmoodycamel::ConcurrentQueue\ttll::lf::ccfifo\ttll::lf::ccfifo2";
+    std::string columns = "\"\"\t\"boost::lockfree::queue\"\t\"moodycamel::ConcurrentQueue\"\t\"tll::lf::ccfifo\"\t\"tll::lf::ccfifo2\"";
 
     ofs_tp_push << "#4\n" << tll::util::stringFormat("#%d\n",NUM_CPU) 
         << tll::util::stringFormat("#Multi producer (max cpu: %d)\\nHigher is better\n",NUM_CPU)
@@ -239,11 +239,11 @@ int benchmark()
         << columns
         << "\n";
 
-    ofs_mpsc << "#2\n" << tll::util::stringFormat("#%d\n",NUM_CPU) 
+    ofs_mpsc << "#3\n" << tll::util::stringFormat("#%d\n",NUM_CPU) 
         << tll::util::stringFormat("#MPSC (max cpu: %d)\\nLower is better\n",NUM_CPU)
         << "#Number of threads\n"
         << "#Average time for completing the test (ms)\n"
-        << "\"\"\tboost::lockfree::queue\ttll::lf::ccfifo"
+        << "\"\"\t\"boost::lockfree::queue\"\t\"moodycamel::ConcurrentQueue\"\t\"tll::lf::ccfifo\""
         << "\n";
 
     tll::util::CallFuncInSeq<NUM_CPU, EXTENDING>( [&](auto index_seq)
@@ -330,26 +330,46 @@ int benchmark()
             boost::lockfree::queue<char> fifo{kCount * 2};
             std::vector<char> store_buff;
             store_buff.resize(kCount * 2);
-            std::atomic<size_t> cons_size{0};
-            auto doPush = [&fifo]() -> bool { DUMMY_LOOP(); return fifo.push((char)1); };
-            auto doPopAll = [&fifo, &cons_size, &store_buff]() -> size_t { return fifo.consume_all([&cons_size, &store_buff](char e){ store_buff[cons_size.load(std::memory_order_relaxed)] = e; cons_size.fetch_add(1, std::memory_order_relaxed); }); };
+            memset(store_buff.data(), 0, store_buff.size());
+            // std::atomic<size_t> cons_size{0};
+            size_t cons_size = 0;
+            auto doPush = [&fifo]() -> bool { DUMMY_LOOP(); return fifo.push((char)0x55); };
+            auto doPopAll = [&fifo, &cons_size, &store_buff]() -> size_t { return fifo.consume_all([&cons_size, &store_buff](char e){ store_buff[cons_size] = e; cons_size++; }); };
             
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             mpsc<index_seq.value>("boost", doPush, doPopAll, kCount, time, ops, ofs_mpsc);
-            LOGD("cons_size: %ld", cons_size.load());
+            LOGD("cons_size: %ld (%d/%d)", cons_size, store_buff[0] == 0x55, memcmp(store_buff.data(), store_buff.data() + 1, store_buff.size() - 1) == 0);
         }
+
+        {
+            moodycamel::ConcurrentQueue<char> fifo{kCount * 2};
+            std::vector<char> store_buff;
+            store_buff.resize(kCount * 2);
+            memset(store_buff.data(), 0, store_buff.size());
+            // std::atomic<size_t> cons_size{0};
+            size_t cons_size = 0;
+            auto doPush = [&fifo]() -> bool { DUMMY_LOOP(); return fifo.enqueue((char)0x55); };
+            auto doPopAll = [&fifo, &cons_size, &store_buff]() -> size_t { size_t s = fifo.try_dequeue_bulk(store_buff.data() + cons_size, -1); cons_size += s; return s; };
+            
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            mpsc<index_seq.value>("moody", doPush, doPopAll, kCount, time, ops, ofs_mpsc);
+            LOGD("cons_size: %ld (%d/%d)", cons_size, store_buff[0] == 0x55, memcmp(store_buff.data(), store_buff.data() + 1, store_buff.size() - 1) == 0);
+        }
+
 
         {
             tll::lf2::ccfifo<char, tll::lf2::Mode::kHL, tll::lf2::Mode::kLL> fifo{kCount * 2, index_seq.value * 0x2000};
             std::vector<char> store_buff;
             store_buff.resize(kCount * 2);
-            std::atomic<size_t> cons_size{0};
-            auto doPush = [&fifo]() -> bool { DUMMY_LOOP(); return fifo.push((char)1); };
-            auto doPopAll = [&fifo, &cons_size, &store_buff]() -> size_t { return fifo.pop([&cons_size, &store_buff](char *e, size_t s){ memcpy(store_buff.data() + cons_size.load(std::memory_order_relaxed), e, s); cons_size.fetch_add(s, std::memory_order_relaxed); }, -1); };
+            memset(store_buff.data(), 0, store_buff.size());
+            // std::atomic<size_t> cons_size{0};
+            size_t cons_size = 0;
+            auto doPush = [&fifo]() -> bool { DUMMY_LOOP(); return fifo.push((char)0x55); };
+            auto doPopAll = [&fifo, &cons_size, &store_buff]() -> size_t { return fifo.pop([&cons_size, &store_buff](char *e, size_t s){ memcpy(store_buff.data() + cons_size, e, s); cons_size+=s; }, -1); };
             
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             mpsc<index_seq.value>("ccfifo2", doPush, doPopAll, kCount, time, ops, ofs_mpsc);
-            LOGD("cons_size: %ld", cons_size.load());
+            LOGD("cons_size: %ld (%d/%d)", cons_size, store_buff[0] == 0x55, memcmp(store_buff.data(), store_buff.data() + 1, store_buff.size() - 1) == 0);
         }
 
         ofs_tp_push << "\n";

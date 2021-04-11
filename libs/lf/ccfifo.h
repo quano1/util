@@ -424,9 +424,9 @@ public:
         return (index + tmp) & (~tmp);
     }
 
-    inline tll::cc::Stat stat() const
+    inline tll::cc::Statistic statistic() const
     {
-        return tll::cc::Stat{
+        return tll::cc::Statistic{
             .time_push_total = time_push_total.load(std::memory_order_relaxed), .time_pop_total = time_pop_total.load(std::memory_order_relaxed),
             .time_push_cb = time_push_cb.load(std::memory_order_relaxed), .time_pop_cb = time_pop_cb.load(std::memory_order_relaxed),
             .time_push_try = time_push_try.load(std::memory_order_relaxed), .time_pop_try = time_pop_try.load(std::memory_order_relaxed),

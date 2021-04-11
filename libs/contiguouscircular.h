@@ -17,7 +17,7 @@ typedef std::chrono::duration<size_t, std::ratio<1, 1000000000>> StatDuration;
 
 namespace tll::cc {
 
-struct Stat
+struct Statistic
 {
     size_t time_push_total=0, time_pop_total=0;
     size_t time_push_cb=0, time_pop_cb=0;
@@ -27,6 +27,7 @@ struct Stat
     size_t push_total=0, pop_total=0;
     size_t push_error=0, pop_error=0;
     size_t push_miss=0, pop_miss=0;
+    size_t push_exit_miss=0, pop_exit_miss=0;
 };
 
 // typedef std::function<void(size_t index, size_t size)> Callback;
@@ -35,10 +36,10 @@ template <typename T>
 using Callback = std::function<void(const T *o, size_t s)>;
 
 template <uint8_t type = 3>
-void dumpStat(const tll::cc::Stat &st, double real_total_time)
+void dumpStat(const tll::cc::Statistic &st, double real_total_time)
 {
     using namespace std::chrono;
-    if(type) printf("        count(K) | err(%%)|miss(%%)| try(%%)|comp(%%)| cb(%%) | all(%%)| ops/ms\n");
+    if(type) printf("        count(K) | err(%%)|   miss(%%)   | try(%%)|comp(%%)| cb(%%) | all(%%)| Mbs\n");
 
     if(type & 1)
     {
@@ -55,6 +56,7 @@ void dumpStat(const tll::cc::Stat &st, double real_total_time)
         double push_total = st.push_total * 1.f / 1000;
         double push_error_rate = (st.push_error*100.f)/st.push_total;
         double push_miss_rate = (st.push_miss*100.f)/st.push_total;
+        double push_exit_miss_rate = (st.push_exit_miss*100.f)/st.push_total;
 
         // double push_size = st.push_size*1.f / 0x100000;
         // size_t push_success = st.push_total - st.push_error;
@@ -65,13 +67,14 @@ void dumpStat(const tll::cc::Stat &st, double real_total_time)
         // double avg_time_push_one = time_push_one / thread_num;
         // double avg_push_speed = push_size*thread_num/time_push_total;
 
-        double opss = st.push_total * 0.001f / real_total_time;
+        // double opss = st.push_total * .001f / real_total_time;
+        double speed = st.push_total * 1.f / 0x100000 / real_total_time;
 
-        printf(" push: %9.3f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %.f\n",
-               push_total, push_error_rate, push_miss_rate
+        printf(" push: %9.3f | %5.2f | %5.2f/%5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %.3f\n",
+               push_total, push_error_rate, push_miss_rate, push_exit_miss_rate
                , time_push_try_rate, time_push_complete_rate, time_push_callback_rate, time_push_real_rate
                // avg_time_push_one, avg_push_speed
-               , opss
+               , speed
                );
     }
 
@@ -90,6 +93,7 @@ void dumpStat(const tll::cc::Stat &st, double real_total_time)
         double pop_total = st.pop_total * 1.f / 1000;
         double pop_error_rate = (st.pop_error*100.f)/st.pop_total;
         double pop_miss_rate = (st.pop_miss*100.f)/st.pop_total;
+        double pop_exit_miss_rate = (st.pop_exit_miss*100.f)/st.push_total;
 
         // double pop_size = st.pop_size*1.f / 0x100000;
         // size_t pop_success = st.pop_total - st.pop_error;
@@ -99,12 +103,15 @@ void dumpStat(const tll::cc::Stat &st, double real_total_time)
         // double time_pop_one = st.time_pop_total*1.f / st.pop_total;
         // double avg_time_pop_one = time_pop_one / thread_num;
         // double avg_pop_speed = pop_size*thread_num/time_pop_total;
-        double opss = st.pop_total * 0.001f / real_total_time;
-        printf(" pop : %9.3f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %.f\n",
-               pop_total, pop_error_rate, pop_miss_rate
+        // double opss = st.pop_total * .001f / real_total_time;
+        
+        double speed = st.push_total * 1.f / 0x100000 / real_total_time;
+
+        printf(" pop : %9.3f | %5.2f | %5.2f/%5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %.3f\n",
+               pop_total, pop_error_rate, pop_miss_rate, pop_exit_miss_rate
                , time_pop_try_rate, time_pop_complete_rate, time_pop_callback_rate, time_pop_real_rate
                // avg_time_pop_one
-               , opss
+               , speed
                );
     }
 }
