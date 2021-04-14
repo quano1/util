@@ -243,8 +243,8 @@ struct ccfifoBufferStressTest : public ::testing::Test
             }
             double tt_time = counter.elapse().count();
     // #ifdef DUMP
-            tll::cc::Statistic stat = fifo.statistic();
-            tll::cc::dumpStat<>(stat, tt_time);
+            auto stats = fifo.statistics();
+            tll::cc::dumpStat<>(stats, tt_time);
             LOGD("Total time: %f (s)", tt_time);
     // #endif
             LOGD("%s", fifo.dump().data());
@@ -379,8 +379,8 @@ TEST_F(ccfifoBufferStressTest, MPSCWRandSize)
         }
 // #ifdef DUMP
         double tt_time = counter.elapse().count();
-        tll::cc::Statistic stat = fifo.statistic();
-        tll::cc::dumpStat<>(stat, tt_time);
+        auto stats = fifo.statistics();
+        tll::cc::dumpStat<>(stats, tt_time);
         LOGD("Total time: %f (s)", tt_time);
 // #endif
         LOGD("%s", fifo.dump().data());

@@ -12,7 +12,7 @@
 
 #define ENABLE_PROFILING 0
 #define LOOP_COUNT 0x800
-#define EXTENDING 7
+#define EXTENDING 1
 // #define DUMPER
 // #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 

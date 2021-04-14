@@ -16,7 +16,7 @@
 
 #define ENABLE_PROFILING 0
 #define LOOP_COUNT 0x800
-#define EXTENDING 2
+#define EXTENDING -1
 // #define DUMPER
 // #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 static char dst[LOOP_COUNT], src[LOOP_COUNT];
@@ -60,8 +60,8 @@ static void doFifing(auto &fifo, const auto &doPush, const auto &doPop, size_t w
     }
     tt_time = counter.elapsed().count();
     {
-        tll::cc::Statistic stat = fifo.statistic();
-        tll::cc::dumpStat<1>(stat, tt_time);
+        auto stats = fifo.statistics();
+        tll::cc::dumpStat<1>(stats, tt_time);
     }
     time[0] = tt_time;
 
@@ -86,8 +86,8 @@ static void doFifing(auto &fifo, const auto &doPush, const auto &doPop, size_t w
     }
     tt_time = counter.elapsed().count();
     {
-        tll::cc::Statistic stat = fifo.statistic();
-        tll::cc::dumpStat<2>(stat, tt_time);
+        auto stats = fifo.statistics();
+        tll::cc::dumpStat<2>(stats, tt_time);
     }
     time[1] = tt_time;
 
@@ -134,8 +134,8 @@ static void doFifing(auto &fifo, const auto &doPush, const auto &doPop, size_t w
     }
     tt_time = counter.elapsed().count();
     {
-        tll::cc::Statistic stat = fifo.statistic();
-        tll::cc::dumpStat<>(stat, tt_time);
+        auto stats = fifo.statistics();
+        tll::cc::dumpStat<>(stats, tt_time);
     }
     time[2] = tt_time;
     ops[2] = total_push_count.load(std::memory_order_relaxed);
@@ -250,24 +250,34 @@ static void _perfTunnel(
         // for (size_t i=0,tis=0x10000; i<8; i++,tis*=2)
         std::vector<double> tp_push_lst, tp_pop_lst, avg_time_lst;
 
-        tll::lf2::ccfifo<char, tll::lf2::Mode::kHL, tll::lf2::Mode::kHL, true> fifo;
+        tll::lf2::ccfifo<char, tll::lf2::Mode::kHL, tll::lf2::Mode::kHL, true> fifoHH;
+        tll::lf2::ccfifo<char, tll::lf2::Mode::kHL, tll::lf2::Mode::kHL, true> fifoLL;
 
-        auto doPush = [&fifo]() -> bool { DUMMY_LOOP(); return fifo.push( (char)(1) ); };
-        auto doPop = [&fifo]() -> bool { char val; DUMMY_LOOP(); return fifo.pop(val); };
+        auto doPushHH = [&fifoHH]() -> bool { DUMMY_LOOP(); return fifoHH.push( (char)(1) ); };
+        auto doPopHH = [&fifoHH]() -> bool { char val; DUMMY_LOOP(); return fifoHH.pop(val); };
 
-        auto doEnQ = [&fifo]() -> bool { DUMMY_LOOP(); return fifo.enQueue( (char)(1) ); };
-        auto doDeQ = [&fifo]() -> bool { char val; DUMMY_LOOP(); return fifo.deQueue(val); };
+        auto doPushLL = [&fifoLL]() -> bool { DUMMY_LOOP(); return fifoLL.push( (char)(1) ); };
+        auto doPopLL = [&fifoLL]() -> bool { char val; DUMMY_LOOP(); return fifoLL.pop(val); };
+
+        auto doEnQ = [&fifoHH]() -> bool { DUMMY_LOOP(); return fifoHH.enQueue( (char)(1) ); };
+        auto doDeQ = [&fifoHH]() -> bool { char val; DUMMY_LOOP(); return fifoHH.deQueue(val); };
 
         for(auto val : test_list)
         {
-            __perfTunnel<index_seq.value>(fifo, val, kCount, tp_push_lst, tp_pop_lst, avg_time_lst, doEnQ, doDeQ);
+            __perfTunnel<index_seq.value>(fifoHH, val, kCount, tp_push_lst, tp_pop_lst, avg_time_lst, doEnQ, doDeQ);
             ofs_tp_push << tp_push_lst.back() << " ";
             ofs_tp_pop << tp_pop_lst.back() << " ";
             ofs_avg_time << avg_time_lst.back() << " ";
 
-            fifo.reset();
+            fifoHH.reset();
 
-            __perfTunnel<index_seq.value>(fifo, val, kCount, tp_push_lst, tp_pop_lst, avg_time_lst, doPush, doPop);
+            __perfTunnel<index_seq.value>(fifoHH, val, kCount, tp_push_lst, tp_pop_lst, avg_time_lst, doPushHH, doPopHH);
+            ofs_tp_push << tp_push_lst.back() << " ";
+            ofs_tp_pop << tp_pop_lst.back() << " ";
+            ofs_avg_time << avg_time_lst.back() << " ";
+
+
+            __perfTunnel<index_seq.value>(fifoLL, val, kCount, tp_push_lst, tp_pop_lst, avg_time_lst, doPushLL, doPopLL);
             ofs_tp_push << tp_push_lst.back() << " ";
             ofs_tp_pop << tp_pop_lst.back() << " ";
             ofs_avg_time << avg_time_lst.back() << " ";

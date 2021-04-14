@@ -13,10 +13,28 @@
 
 namespace tll::lf2 {
 
+namespace st {
 static thread_local tll::time::Counter<StatDuration, StatClock> counter;
+}
 
+struct Statistic {
+    size_t total_size{0},
+        try_count{0},
+        error_count{0},
+        try_miss_count{0},
+        comp_miss_count{0},
+        time_total{0},
+        time_cb{0}, time_max_cb{0}, time_min_cb{0},
+        time_try{0}, time_max_try{0}, time_min_try{0},
+        time_comp{0}, time_max_comp{0}, time_min_comp{0};
+};
+
+typedef std::pair<Statistic, Statistic> Statistics;
+
+// template <bool E=false>
 struct Marker
 {
+
     Marker() = default;
     inline auto &index_head() {return index_head_;}
     inline auto const &index_head() const {return index_head_;}
@@ -65,6 +83,28 @@ struct Marker
             exit_id_list_[i].store(0, std::memory_order_relaxed);
         }
     }
+
+    Statistic statistic() const
+    {
+        return {
+            .total_size = total_size.load(std::memory_order_relaxed),
+            .try_count = try_count.load(std::memory_order_relaxed),
+            .error_count = error_count.load(std::memory_order_relaxed),
+            .try_miss_count = try_miss_count.load(std::memory_order_relaxed),
+            .comp_miss_count = comp_miss_count.load(std::memory_order_relaxed),
+            .time_total = time_total.load(std::memory_order_relaxed),
+            .time_cb = time_cb.load(std::memory_order_relaxed),
+            .time_max_cb = time_max_cb.load(std::memory_order_relaxed),
+            .time_min_cb = time_min_cb.load(std::memory_order_relaxed),
+            .time_try = time_try.load(std::memory_order_relaxed),
+            .time_max_try = time_max_try.load(std::memory_order_relaxed),
+            .time_min_try = time_min_try.load(std::memory_order_relaxed),
+            .time_comp = time_comp.load(std::memory_order_relaxed),
+            .time_max_comp = time_max_comp.load(std::memory_order_relaxed),
+            .time_min_comp = time_min_comp.load(std::memory_order_relaxed),
+        };
+    }
+
     std::atomic<size_t> index_head_{0};
     std::atomic<size_t> index_tail_{0};
 
@@ -74,10 +114,19 @@ struct Marker
 
     std::atomic<size_t> *exit_id_list_{nullptr};
     std::atomic<size_t> *next_index_list_{nullptr};
-    // std::atomic<size_t> *curr_index_list_{nullptr};
     std::atomic<size_t> *size_list_{nullptr};
-
     size_t list_size{0};
+
+    std::atomic<size_t> total_size{0};
+    std::atomic<size_t> try_count{0};
+    std::atomic<size_t> error_count{0};
+    std::atomic<size_t> try_miss_count{0};
+    std::atomic<size_t> comp_miss_count{0};
+
+    std::atomic<size_t> time_total{0};
+    std::atomic<size_t> time_cb{0}, time_max_cb{0}, time_min_cb{-1U};
+    std::atomic<size_t> time_try{0}, time_max_try{0}, time_min_try{-1U};
+    std::atomic<size_t> time_comp{0}, time_max_comp{0}, time_min_comp{-1U};
 };
 
 enum class Mode
@@ -148,7 +197,7 @@ public:
         size_t entry_id_head = consumer_.entry_id_head().load(std::memory_order_relaxed);
         cons_index_head = consumer_.index_head().load(std::memory_order_relaxed);
         size_t next_size = size;
-        for(;;profAdd(stat_push_miss, 1))
+        for(;;profAdd(consumer_.try_miss_count, 1))
         {
             if(mode == mode::high_load)
             {
@@ -218,7 +267,7 @@ public:
             }
         }
         size = next_size;
-        profAdd(stat_pop_total, 1);
+        // profAdd(stat_pop_total, 1);
         return cons_next_index;
     }
 
@@ -237,7 +286,7 @@ public:
             size_t next_exit_id = consumer_.exit_id_list(wrap(entry_id, num_threads_)).load(std::memory_order_relaxed);
             // LOGD("%ld/%ld %ld/%ld %s", curr_index, next_index, next_exit_id, entry_id, dump().data());
 
-            for(;;stat_pop_exit_miss.fetch_add(1, std::memory_order_relaxed))
+            for(;;consumer_.comp_miss_count.fetch_add(1, std::memory_order_relaxed))
             {
                 // size_t next_exit_id;
                 size_t curr_exit_id = consumer_.exit_id().load(std::memory_order_relaxed);
@@ -296,7 +345,7 @@ public:
         size_t entry_id_head = producer_.entry_id_head().load(std::memory_order_relaxed);
         prod_index_head = producer_.index_head().load(std::memory_order_relaxed);
 
-        for(;;profAdd(stat_push_miss, 1))
+        for(;;profAdd(producer_.try_miss_count, 1))
         {
             if(mode == mode::high_load)
             {
@@ -384,7 +433,7 @@ public:
             size_t next_exit_id = producer_.exit_id_list(wrap(entry_id, num_threads_)).load(std::memory_order_relaxed);
             // LOGD("%ld/%ld %ld/%ld %s", curr_index, next_index, next_exit_id, entry_id, dump().data());
 
-            for(;;stat_push_exit_miss.fetch_add(1, std::memory_order_relaxed))
+            for(;;producer_.comp_miss_count.fetch_add(1, std::memory_order_relaxed))
             {
                 // size_t next_exit_id;
                 size_t curr_exit_id = producer_.exit_id().load(std::memory_order_relaxed);
@@ -419,8 +468,8 @@ public:
 
                     }
 
-                    producer_.exit_id().store(entry_id, std::memory_order_relaxed);
                     // producer_.index_tail().store(next_index + size, std::memory_order_relaxed);
+                    producer_.exit_id().store(entry_id, std::memory_order_relaxed);
                 }
 
                 // LOGD(" (%ld)\t%ld/%ld\t%s", 
@@ -450,26 +499,28 @@ public:
     size_t pop(F &&callback, size_t size, Args &&...args)
     {
         size_t id, index;
+        size_t time_cb{0}, time_try{0}, time_comp{0};
         profTimerReset();
         size_t next = tryPop<cons_mode>(id, index, size);
-        profTimerElapse(time_pop_try);
+        time_try = profTimerElapse(consumer_.time_try);
         profTimerStart();
         if(size)
         {
             std::atomic_thread_fence(std::memory_order_acquire);
             callback(elemAt(next), size, std::forward<Args>(args)...);
-            profTimerElapse(time_pop_cb);
+            time_cb = profTimerElapse(consumer_.time_cb);
             profTimerStart();
             while(!completePop<cons_mode>(id, index, next, size)){};
-            profTimerElapse(time_pop_complete);
-            profAdd(stat_pop_total, 1);
-            profAdd(stat_pop_size, size);
+            time_comp = profTimerElapse(consumer_.time_comp);
+            profAdd(consumer_.total_size, size);
         }
         else
         {
-            profAdd(stat_pop_error, 1);
+            profAdd(consumer_.error_count, 1);
         }
-        profTimerAbsElapse(time_pop_total);
+        profTimerAbsElapse(consumer_.time_total);
+        profAdd(consumer_.try_count, 1);
+        updateMinMax(consumer_, time_cb, time_try, time_comp);
         return size;
     }
 
@@ -477,26 +528,28 @@ public:
     size_t push(const F &callback, size_t size, Args &&...args)
     {
         size_t id, index;
+        size_t time_cb{0}, time_try{0}, time_comp{0};
         profTimerReset();
         size_t next = tryPush<prod_mode>(id, index, size);
-        profTimerElapse(time_push_try);
+        time_try = profTimerElapse(producer_.time_try);
         profTimerStart();
         if(size)
         {
             callback(elemAt(next), size, std::forward<Args>(args)...);
             std::atomic_thread_fence(std::memory_order_release);
-            profTimerElapse(time_push_cb);
+            time_cb = profTimerElapse(producer_.time_cb);
             profTimerStart();
             while(!completePush<prod_mode>(id, index, next, size)){};
-            profTimerElapse(time_push_complete);
-            profAdd(stat_push_total, 1);
-            profAdd(stat_push_size, size);
+            time_comp = profTimerElapse(producer_.time_comp);
+            profAdd(producer_.total_size, size);
         }
         else
         {
-            profAdd(stat_push_error, 1);
+            profAdd(producer_.error_count, 1);
         }
-        profTimerAbsElapse(time_push_total);
+        profTimerAbsElapse(producer_.time_total);
+        profAdd(producer_.try_count, 1);
+        updateMinMax(producer_, time_cb, time_try, time_comp);
         return size;
     }
 
@@ -564,7 +617,7 @@ public:
         {
             if (idx == producer_.index_tail().load(std::memory_order_relaxed))
             {
-                profAdd(stat_pop_error, 1);
+                profAdd(consumer_.error_count, 1);
                 break;
             }
 
@@ -573,26 +626,26 @@ public:
                 ret = true;
                 break;
             }
-            profAdd(stat_pop_miss, 1);
+            profAdd(consumer_.try_miss_count, 1);
         }
         // profAdd(time_pop_try, timer.elapse().count());
-        profTimerElapse(time_pop_try);
+        profTimerElapse(consumer_.time_try);
         profTimerStart();
         if(ret)
         {
             callback(elemAt(idx), std::forward<Args>(args)...);
             // profAdd(time_pop_cb, timer.elapse().count());
-            profTimerElapse(time_pop_cb);
+            profTimerElapse(consumer_.time_cb);
             profTimerStart();
             // while(!completeQueue(idx, cons_tail_, cons_out_)) {std::this_thread::yield();}
             while(!completeQueue(idx, 1)) {std::this_thread::yield();}
             // profAdd(time_pop_complete, timer.elapse().count());
-            profTimerElapse(time_pop_complete);
-            profAdd(stat_pop_size, 1);
+            profTimerElapse(consumer_.time_comp);
+            profAdd(consumer_.total_size, 1);
         }
         // profAdd(time_pop_total, timer.absElapse().count());
-        profTimerAbsElapse(time_pop_total);
-        profAdd(stat_pop_total, 1);
+        profTimerAbsElapse(consumer_.time_total);
+        profAdd(consumer_.try_count, 1);
         return ret;
     }
 
@@ -606,7 +659,7 @@ public:
         {
             if (idx == (consumer_.index_tail().load(std::memory_order_relaxed) + capacity_))
             {
-                profAdd(stat_push_error, 1);
+                profAdd(producer_.error_count, 1);
                 break;
             }
 
@@ -615,26 +668,26 @@ public:
                 ret = true;
                 break;
             }
-            profAdd(stat_push_miss, 1);
+            profAdd(producer_.try_miss_count, 1);
         }
         // profAdd(time_push_try, timer.elapse().count());
-        profTimerElapse(time_push_try);
+        profTimerElapse(producer_.time_try);
         profTimerStart();
         if(ret)
         {
             callback(elemAt(idx), std::forward<Args>(args)...);
             // profAdd(time_push_cb, timer.elapse().count());
-            profTimerElapse(time_push_cb);
+            profTimerElapse(producer_.time_cb);
             profTimerStart();
             // while(!completeQueue(idx, prod_tail_, prod_out_)) {std::this_thread::yield();}
             while(!completeQueue(idx, 0)) {std::this_thread::yield();}
             // profAdd(time_push_complete, timer.elapse().count());
-            profTimerElapse(time_push_complete);
-            profAdd(stat_push_size, 1);
+            profTimerElapse(producer_.time_comp);
+            profAdd(producer_.total_size, 1);
         }
         // profAdd(time_push_total, timer.absElapse().count());
-        profTimerAbsElapse(time_push_total);
-        profAdd(stat_push_total, 1);
+        profTimerAbsElapse(producer_.time_total);
+        profAdd(producer_.try_count, 1);
         return ret;
     }
 
@@ -682,18 +735,10 @@ public:
         return wrap(index, capacity());
     }
 
-    inline tll::cc::Statistic statistic() const
+    inline Statistics statistics() const
     {
-        return tll::cc::Statistic {
-            .time_push_total = time_push_total.load(std::memory_order_relaxed), .time_pop_total = time_pop_total.load(std::memory_order_relaxed),
-            .time_push_cb = time_push_cb.load(std::memory_order_relaxed), .time_pop_cb = time_pop_cb.load(std::memory_order_relaxed),
-            .time_push_try = time_push_try.load(std::memory_order_relaxed), .time_pop_try = time_pop_try.load(std::memory_order_relaxed),
-            .time_push_complete = time_push_complete.load(std::memory_order_relaxed), .time_pop_complete = time_pop_complete.load(std::memory_order_relaxed),
-            .push_size = stat_push_size.load(std::memory_order_relaxed), .pop_size = stat_pop_size.load(std::memory_order_relaxed),
-            .push_total = stat_push_total.load(std::memory_order_relaxed), .pop_total = stat_pop_total.load(std::memory_order_relaxed),
-            .push_error = stat_push_error.load(std::memory_order_relaxed), .pop_error = stat_pop_error.load(std::memory_order_relaxed),
-            .push_miss = stat_push_miss.load(std::memory_order_relaxed), .pop_miss = stat_pop_miss.load(std::memory_order_relaxed),
-            .push_exit_miss = stat_push_exit_miss.load(std::memory_order_relaxed), .pop_exit_miss = stat_pop_exit_miss.load(std::memory_order_relaxed),
+        return Statistics {
+            producer_.statistic(), consumer_.statistic()
         };
     }
 
@@ -737,40 +782,70 @@ public:
 
 private:
 
-    inline ccfifo<T, prod_mode, cons_mode, profiling> &profTimerReset()
+    void profTimerReset()
     {
         if(profiling)
-            counter.reset();
-        return *this;
+            st::counter.reset();
     }
 
-    inline ccfifo<T, prod_mode, cons_mode, profiling> &profTimerStart()
+    void profTimerStart()
     {
         if(profiling)
-            counter.start();
-        return *this;
+            st::counter.start();
     }
 
-    inline ccfifo<T, prod_mode, cons_mode, profiling> &profTimerElapse(auto &atomic)
+    size_t profTimerElapse(std::atomic<size_t> &atomic)
     {
         if(profiling) 
-            atomic.fetch_add(counter.elapse().count(), std::memory_order_relaxed);
-        return *this;
+        {
+            size_t diff = st::counter.elapse().count();
+            atomic.fetch_add(diff, std::memory_order_relaxed);
+            return diff;
+        }
+        return 0;
     }
 
-    inline ccfifo<T, prod_mode, cons_mode, profiling> &profTimerAbsElapse(auto &atomic)
+    size_t profTimerAbsElapse(std::atomic<size_t> &atomic)
     {
-        if(profiling) 
-            atomic.fetch_add(counter.absElapse().count(), std::memory_order_relaxed);
-        return *this;
+        if(profiling)
+        {
+            size_t diff = st::counter.elapse().count();
+            atomic.fetch_add(diff, std::memory_order_relaxed);
+            return diff;
+        }
+        return 0;
     }
 
     template <typename U>
-    inline ccfifo<T, prod_mode, cons_mode, profiling> &profAdd(auto &atomic, const U &val)
+    size_t profAdd(std::atomic<size_t> &atomic, const U &val)
     {
         if(profiling)
-            atomic.fetch_add(val, std::memory_order_relaxed);
-        return *this;
+            return atomic.fetch_add(val, std::memory_order_relaxed);
+        return 0;
+    }
+
+    inline void updateMinMax(Marker &mk, size_t time_cb, size_t time_try, size_t time_comp)
+    {
+        if(profiling)
+        {
+            size_t time_min_cb = mk.time_min_cb.load(std::memory_order_relaxed);
+            while(time_min_cb > time_cb) mk.time_min_cb.compare_exchange_weak(time_min_cb, time_cb, std::memory_order_relaxed, std::memory_order_relaxed);
+
+            size_t time_max_cb = mk.time_max_cb.load(std::memory_order_relaxed);
+            while(time_max_cb < time_cb) mk.time_max_cb.compare_exchange_weak(time_max_cb, time_cb, std::memory_order_relaxed, std::memory_order_relaxed);
+
+            size_t time_min_try = mk.time_min_try.load(std::memory_order_relaxed);
+            while(time_min_try > time_try) mk.time_min_try.compare_exchange_weak(time_min_try, time_try, std::memory_order_relaxed, std::memory_order_relaxed);
+
+            size_t time_max_try = mk.time_max_try.load(std::memory_order_relaxed);
+            while(time_max_try < time_try) mk.time_max_try.compare_exchange_weak(time_max_try, time_try, std::memory_order_relaxed, std::memory_order_relaxed);
+
+            size_t time_min_comp = mk.time_min_comp.load(std::memory_order_relaxed);
+            while(time_min_comp > time_comp) mk.time_min_comp.compare_exchange_weak(time_min_comp, time_comp, std::memory_order_relaxed, std::memory_order_relaxed);
+
+            size_t time_max_comp = mk.time_max_comp.load(std::memory_order_relaxed);
+            while(time_max_comp < time_comp) mk.time_max_comp.compare_exchange_weak(time_max_comp, time_comp, std::memory_order_relaxed, std::memory_order_relaxed);
+        }
     }
 
     inline size_t next(size_t index) const
@@ -785,26 +860,26 @@ private:
     std::atomic<size_t> water_mark_{0};
     size_t capacity_{0}, num_threads_{0};
 
-    /// Statistic
-    std::atomic<size_t> stat_push_size{0};
-    std::atomic<size_t> stat_push_total{0};
-    std::atomic<size_t> stat_push_error{0};
-    std::atomic<size_t> stat_push_miss{0};
-    std::atomic<size_t> stat_push_exit_miss{0};
-    std::atomic<size_t> time_push_total{0};
-    std::atomic<size_t> time_push_cb{0};
-    std::atomic<size_t> time_push_try{0};
-    std::atomic<size_t> time_push_complete{0};
+    // /// Statistic
+    // std::atomic<size_t> stat_push_size{0};
+    // std::atomic<size_t> stat_push_total{0};
+    // std::atomic<size_t> stat_push_error{0};
+    // std::atomic<size_t> stat_push_miss{0};
+    // std::atomic<size_t> stat_push_exit_miss{0};
+    // std::atomic<size_t> time_push_total{0};
+    // std::atomic<size_t> time_push_cb{0};
+    // std::atomic<size_t> time_push_try{0};
+    // std::atomic<size_t> time_push_complete{0};
 
-    std::atomic<size_t> stat_pop_size{0};
-    std::atomic<size_t> stat_pop_total{0};
-    std::atomic<size_t> stat_pop_error{0};
-    std::atomic<size_t> stat_pop_miss{0};
-    std::atomic<size_t> stat_pop_exit_miss{0};
-    std::atomic<size_t> time_pop_total{0};
-    std::atomic<size_t> time_pop_cb{0};
-    std::atomic<size_t> time_pop_try{0};
-    std::atomic<size_t> time_pop_complete{0};
+    // std::atomic<size_t> stat_pop_size{0};
+    // std::atomic<size_t> stat_pop_total{0};
+    // std::atomic<size_t> stat_pop_error{0};
+    // std::atomic<size_t> stat_pop_miss{0};
+    // std::atomic<size_t> stat_pop_exit_miss{0};
+    // std::atomic<size_t> time_pop_total{0};
+    // std::atomic<size_t> time_pop_cb{0};
+    // std::atomic<size_t> time_pop_try{0};
+    // std::atomic<size_t> time_pop_complete{0};
 
     std::vector<T> buffer_;
 };
