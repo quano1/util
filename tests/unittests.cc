@@ -448,7 +448,7 @@ TEST_F(ccfifoQueueStressTest, MPMC)
         auto constexpr kNumOfThreads = index_seq.value * 2;
         LOGD("Number of threads: %ld", kNumOfThreads);
         constexpr size_t kStoreSize = kTotalWriteSize + ((index_seq.value - 1) * kPkgSize);
-        ccfifo<std::vector<char>, mode::dense, mode::dense, false> fifo{kCapacity};
+        ccfifo<std::vector<char>, mode::dense, mode::dense, false> fifo{kCapacity / kPkgSize};
         std::vector<char> store_buff[index_seq.value];
 
         for(int i=0; i<index_seq.value; i++)
