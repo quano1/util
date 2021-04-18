@@ -131,20 +131,20 @@ struct Marker
 
 enum class Mode
 {
-    kLL,
-    kHL,
+    kSparse,
+    kDense,
     kMax
 };
 
 namespace mode
 {
-    constexpr Mode low_load = Mode::kLL;
-    constexpr Mode high_load = Mode::kHL;
+    constexpr Mode sparse = Mode::kSparse;
+    constexpr Mode dense = Mode::kDense;
 }
 
 /// Contiguous Circular Index
 // template <size_t num_threads=0x400>
-template <typename T, Mode prod_mode=Mode::kHL, Mode cons_mode=Mode::kLL, bool profiling=false>
+template <typename T, Mode prod_mode=Mode::kDense, Mode cons_mode=Mode::kSparse, bool profiling=false>
 struct ccfifo
 {
 public:
@@ -199,7 +199,7 @@ public:
         size_t next_size = size;
         for(;;profAdd(consumer_.try_miss_count, 1))
         {
-            if(mode == mode::high_load)
+            if(mode == mode::dense)
             {
                 while(entry_id_head != consumer_.entry_id_tail().load(std::memory_order_relaxed))
                     entry_id_head = consumer_.entry_id_head().load(std::memory_order_relaxed);
@@ -238,7 +238,7 @@ public:
                     }
                 }
 
-                if(mode == mode::high_load)
+                if(mode == mode::dense)
                 {
                     if(!consumer_.entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
                     {
@@ -274,7 +274,7 @@ public:
     template <Mode mode>
     bool completePop(size_t entry_id, size_t curr_index, size_t next_index, size_t size)
     {
-        if(mode == mode::high_load)
+        if(mode == mode::dense)
         {
             if(entry_id >= (consumer_.exit_id().load(std::memory_order_relaxed) + num_threads_)) return false;
 
@@ -347,7 +347,7 @@ public:
 
         for(;;profAdd(producer_.try_miss_count, 1))
         {
-            if(mode == mode::high_load)
+            if(mode == mode::dense)
             {
                 while(entry_id_head != producer_.entry_id_tail().load(std::memory_order_relaxed))
                     entry_id_head = producer_.entry_id_head().load(std::memory_order_relaxed);
@@ -388,7 +388,7 @@ public:
                     }
                 }
 
-                if(mode == mode::high_load)
+                if(mode == mode::dense)
                 {
                     if(!producer_.entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
                     {
@@ -421,7 +421,7 @@ public:
     template <Mode mode>
     bool completePush(size_t entry_id, size_t curr_index, size_t next_index, size_t size)
     {
-        if(mode == mode::high_load)
+        if(mode == mode::dense)
         {
             if(entry_id >= (producer_.exit_id().load(std::memory_order_relaxed) + num_threads_)) return false;
 

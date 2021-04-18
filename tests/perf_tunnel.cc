@@ -16,7 +16,7 @@
 
 #define ENABLE_PROFILING 0
 #define LOOP_COUNT 0x800
-#define EXTENDING -1
+#define EXTENDING -1u
 // #define DUMPER
 // #define NOP_LOOP(loop) for(int i__=0; i__<loop; i__++) __asm__("nop")
 static char dst[LOOP_COUNT], src[LOOP_COUNT];
@@ -26,8 +26,8 @@ static char dst[LOOP_COUNT], src[LOOP_COUNT];
 #include "../libs/counter.h"
 #include "../libs/contiguouscircular.h"
 
-template <int num_of_threads>
-static void doFifing(auto &fifo, const auto &doPush, const auto &doPop, size_t write_count, double *time, size_t *ops)
+template <int num_of_threads, typename Fifo, typename FPush, typename Fpop>
+static void doFifing(Fifo &fifo, const FPush &doPush, const Fpop &doPop, size_t write_count, double *time, size_t *ops)
 {
     // constexpr int kThreadNum = num_of_threads / 2;
     static_assert(num_of_threads > 0);
@@ -147,13 +147,13 @@ static void doFifing(auto &fifo, const auto &doPush, const auto &doPop, size_t w
     }
 }
 
-template <int num_of_threads>
-static void __perfTunnel(auto &fifo, size_t test_val, size_t count,
+template <int num_of_threads, typename Fifo, typename FPush, typename Fpop>
+static void __perfTunnel(Fifo &fifo, size_t test_val, size_t count,
                         std::vector<double> &tp_push_lst,
                         std::vector<double> &tp_pop_lst,
                         std::vector<double> &avg_time_lst,
-                        const auto &doPush,
-                        const auto &doPop)
+                        const FPush &doPush,
+                        const Fpop &doPop)
                         // std::ofstream &ofs_tp_push, std::ofstream &ofs_tp_pop, std::ofstream &ofs_time)
 {
     size_t ops[3];
@@ -190,17 +190,17 @@ static void _perfTunnel(
 
     // std::string columns = "\"\"\tboost::lockfree::queue\tmoodycamel::ConcurrentQueue\ttll::lf::ccfifo";
 
-    ofs_tp_push << "#6\n" << tll::util::stringFormat("#%d\n",NUM_CPU) 
+    ofs_tp_push << "#9\n" << tll::util::stringFormat("#%d\n",NUM_CPU) 
         << tll::util::stringFormat("#push contiguously (max cpu: %d)\\nHigher is better\n",NUM_CPU)
         << "#Number of threads\n"
         << "#Operations (million) per second\n\"\"\t";
 
-    ofs_tp_pop << "#6\n" << tll::util::stringFormat("#%d\n",NUM_CPU) 
+    ofs_tp_pop << "#9\n" << tll::util::stringFormat("#%d\n",NUM_CPU) 
         << tll::util::stringFormat("#pop contiguously (max cpu: %d)\\nHigher is better\n",NUM_CPU)
         << "#Number of threads\n"
         << "#Operations (million) per second\n\"\"\t";
 
-    ofs_avg_time << "#6\n" << tll::util::stringFormat("#%d\n",NUM_CPU) 
+    ofs_avg_time << "#9\n" << tll::util::stringFormat("#%d\n",NUM_CPU) 
         << tll::util::stringFormat("#push and pop simultaneously (max cpu: %d)\\nLower is better\n",NUM_CPU)
         << "#Number of threads\n"
         << "#Average time for completing the test (ms)\n\"\"\t";
@@ -229,7 +229,15 @@ static void _perfTunnel(
 
     for(auto val : test_list)
     {
-        std::string str = tll::util::stringFormat("\"buffer (0x%lx)\"\t", val);
+        std::string str = tll::util::stringFormat("\"bufferDD (0x%lx)\"\t", val);
+        ofs_tp_push << str;
+        ofs_tp_pop << str;
+        ofs_avg_time << str;
+    }
+
+    for(auto val : test_list)
+    {
+        std::string str = tll::util::stringFormat("\"bufferSS (0x%lx)\"\t", val);
         ofs_tp_push << str;
         ofs_tp_pop << str;
         ofs_avg_time << str;
@@ -250,34 +258,34 @@ static void _perfTunnel(
         // for (size_t i=0,tis=0x10000; i<8; i++,tis*=2)
         std::vector<double> tp_push_lst, tp_pop_lst, avg_time_lst;
 
-        tll::lf2::ccfifo<char, tll::lf2::Mode::kHL, tll::lf2::Mode::kHL, true> fifoHH;
-        tll::lf2::ccfifo<char, tll::lf2::Mode::kHL, tll::lf2::Mode::kHL, true> fifoLL;
+        tll::lf2::ccfifo<char, tll::lf2::mode::dense, tll::lf2::mode::dense, true> fifoDD;
+        tll::lf2::ccfifo<char, tll::lf2::mode::sparse, tll::lf2::mode::sparse, true> fifoSS;
 
-        auto doPushHH = [&fifoHH]() -> bool { DUMMY_LOOP(); return fifoHH.push( (char)(1) ); };
-        auto doPopHH = [&fifoHH]() -> bool { char val; DUMMY_LOOP(); return fifoHH.pop(val); };
+        auto doPushHH = [&fifoDD]() -> bool { DUMMY_LOOP(); return fifoDD.push( (char)(1) ); };
+        auto doPopHH = [&fifoDD]() -> bool { char val; DUMMY_LOOP(); return fifoDD.pop(val); };
 
-        auto doPushLL = [&fifoLL]() -> bool { DUMMY_LOOP(); return fifoLL.push( (char)(1) ); };
-        auto doPopLL = [&fifoLL]() -> bool { char val; DUMMY_LOOP(); return fifoLL.pop(val); };
+        auto doPushLL = [&fifoSS]() -> bool { DUMMY_LOOP(); return fifoSS.push( (char)(1) ); };
+        auto doPopLL = [&fifoSS]() -> bool { char val; DUMMY_LOOP(); return fifoSS.pop(val); };
 
-        auto doEnQ = [&fifoHH]() -> bool { DUMMY_LOOP(); return fifoHH.enQueue( (char)(1) ); };
-        auto doDeQ = [&fifoHH]() -> bool { char val; DUMMY_LOOP(); return fifoHH.deQueue(val); };
+        auto doEnQ = [&fifoDD]() -> bool { DUMMY_LOOP(); return fifoDD.enQueue( (char)(1) ); };
+        auto doDeQ = [&fifoDD]() -> bool { char val; DUMMY_LOOP(); return fifoDD.deQueue(val); };
 
         for(auto val : test_list)
         {
-            __perfTunnel<index_seq.value>(fifoHH, val, kCount, tp_push_lst, tp_pop_lst, avg_time_lst, doEnQ, doDeQ);
+            __perfTunnel<index_seq.value>(fifoDD, val, kCount, tp_push_lst, tp_pop_lst, avg_time_lst, doEnQ, doDeQ);
             ofs_tp_push << tp_push_lst.back() << " ";
             ofs_tp_pop << tp_pop_lst.back() << " ";
             ofs_avg_time << avg_time_lst.back() << " ";
 
-            fifoHH.reset();
+            fifoDD.reset();
 
-            __perfTunnel<index_seq.value>(fifoHH, val, kCount, tp_push_lst, tp_pop_lst, avg_time_lst, doPushHH, doPopHH);
+            __perfTunnel<index_seq.value>(fifoDD, val, kCount, tp_push_lst, tp_pop_lst, avg_time_lst, doPushHH, doPopHH);
             ofs_tp_push << tp_push_lst.back() << " ";
             ofs_tp_pop << tp_pop_lst.back() << " ";
             ofs_avg_time << avg_time_lst.back() << " ";
 
 
-            __perfTunnel<index_seq.value>(fifoLL, val, kCount, tp_push_lst, tp_pop_lst, avg_time_lst, doPushLL, doPopLL);
+            __perfTunnel<index_seq.value>(fifoSS, val, kCount, tp_push_lst, tp_pop_lst, avg_time_lst, doPushLL, doPopLL);
             ofs_tp_push << tp_push_lst.back() << " ";
             ofs_tp_pop << tp_pop_lst.back() << " ";
             ofs_avg_time << avg_time_lst.back() << " ";

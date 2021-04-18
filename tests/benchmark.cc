@@ -309,7 +309,7 @@ int benchmark()
         }
 
         {
-            tll::lf2::ccfifo<char, tll::lf2::Mode::kHL, tll::lf2::Mode::kHL> fifo{kCount * 2, index_seq.value * 0x1000};
+            tll::lf2::ccfifo<char, tll::lf2::mode::dense, tll::lf2::mode::dense> fifo{kCount * 2, index_seq.value * 0x1000};
             auto doPush = [&fifo]() -> bool { DUMMY_LOOP(); return fifo.enQueue((char)1); };
             auto doPop = [&fifo]() -> bool { char val; DUMMY_LOOP(); return fifo.deQueue(val); };
             
@@ -318,7 +318,7 @@ int benchmark()
         }
 
         {
-            tll::lf2::ccfifo<char, tll::lf2::Mode::kHL, tll::lf2::Mode::kHL> fifo{kCount * 2, index_seq.value * 0x2000};
+            tll::lf2::ccfifo<char, tll::lf2::mode::dense, tll::lf2::mode::dense> fifo{kCount * 2, index_seq.value * 0x2000};
             auto doPush = [&fifo]() -> bool { DUMMY_LOOP(); return fifo.push((char)1); };
             auto doPop = [&fifo]() -> bool { char val; DUMMY_LOOP(); return fifo.pop(val); };
             
@@ -358,7 +358,7 @@ int benchmark()
 
 
         {
-            tll::lf2::ccfifo<char, tll::lf2::Mode::kHL, tll::lf2::Mode::kLL> fifo{kCount * 2, index_seq.value * 0x2000};
+            tll::lf2::ccfifo<char, tll::lf2::mode::dense, tll::lf2::mode::sparse> fifo{kCount * 2, index_seq.value * 0x2000};
             std::vector<char> store_buff;
             store_buff.resize(kCount * 2);
             memset(store_buff.data(), 0, store_buff.size());
