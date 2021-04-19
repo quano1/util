@@ -207,7 +207,8 @@ struct ccfifoBufferStressTest : public ::testing::Test
                         {
                             /// overrun
                         }
-                        std::this_thread::yield();
+                        // std::this_thread::yield();
+                        std::this_thread::sleep_for(std::chrono::nanoseconds(0));
                     }
 
                     prod_completed.fetch_add(1, std::memory_order_relaxed);
@@ -237,19 +238,20 @@ struct ccfifoBufferStressTest : public ::testing::Test
                         {
                             /// underrun
                         }
-                        std::this_thread::yield();
+                        // std::this_thread::yield();
+                        std::this_thread::sleep_for(std::chrono::nanoseconds(0));
                     }
                 }
                 // LOGD("%d Done", kTid);
                 // LOGD("%s", fifo.dump().data());
             }
             double tt_time = counter.elapse().count();
-    // #ifdef DUMP
+#ifdef DUMP
             auto stats = fifo.statistics();
             tll::cc::dumpStat<>(stats, tt_time);
             LOGD("Total time: %f (s)", tt_time);
-    // #endif
             LOGD("%s", fifo.dump().data());
+#endif
             auto ttps = total_push_size.load(std::memory_order_relaxed);
             ASSERT_GE(ttps, (kTotalWriteSize));
             ASSERT_LE(ttps, kStoreSize);
@@ -307,7 +309,7 @@ TEST_F(ccfifoBufferStressTest, MPSCWRandSize)
         constexpr size_t kMul = kMaxPkgSize / kNumOfThreads;
         constexpr size_t kStoreSize = kTotalWriteSize + ((kNumOfThreads - 1) * kMaxPkgSize);
         LOGD("Number of Prods: %ld", kNumOfThreads - 1);
-        ccfifo<char, mode::dense, mode::sparse, true> fifo{kCapacity};
+        ring_fifo_ds<char, true> fifo{kCapacity};
         std::vector<char> store_buff;
         store_buff.resize(kStoreSize);
         memset(store_buff.data(), 0xFF, store_buff.size());
@@ -343,7 +345,8 @@ TEST_F(ccfifoBufferStressTest, MPSCWRandSize)
                         /// overrun
                         // LOGD("\tOVERRUN");
                     }
-                    std::this_thread::yield();
+                    // std::this_thread::yield();
+                    std::this_thread::sleep_for(std::chrono::nanoseconds(0));
                 }
                 // LOGD("%ld", local_push);
                 prod_completed.fetch_add(1, std::memory_order_relaxed);
@@ -373,19 +376,20 @@ TEST_F(ccfifoBufferStressTest, MPSCWRandSize)
                         /// underrun
                         // LOGD("\tUNDERRUN");
                     }
-                    std::this_thread::yield();
+                    // std::this_thread::yield();
+                    std::this_thread::sleep_for(std::chrono::nanoseconds(0));
                 }
             }
             // LOGD("%d Done", kTid);
             // LOGD("%ld %ld", fifo.stat().push_size, fifo.stat().pop_size);
         }
-// #ifdef DUMP
+#ifdef DUMP
         double tt_time = counter.elapse().count();
         auto stats = fifo.statistics();
         tll::cc::dumpStat<>(stats, tt_time);
         LOGD("Total time: %f (s)", tt_time);
-// #endif
         LOGD("%s", fifo.dump().data());
+#endif
         auto ttps = total_push_size.load(std::memory_order_relaxed);
         // LOGD("%ld %ld", fifo.stat().push_size, fifo.stat().pop_size);
         // LOGD("%s", fifo.dump().data());
@@ -448,7 +452,7 @@ TEST_F(ccfifoQueueStressTest, MPMC)
         auto constexpr kNumOfThreads = index_seq.value * 2;
         LOGD("Number of threads: %ld", kNumOfThreads);
         constexpr size_t kStoreSize = kTotalWriteSize + ((index_seq.value - 1) * kPkgSize);
-        ccfifo<std::vector<char>, mode::dense, mode::dense, false> fifo{kCapacity / kPkgSize};
+        ring_fifo_dd<std::vector<char>, false> fifo{kCapacity / kPkgSize};
         std::vector<char> store_buff[index_seq.value];
 
         for(int i=0; i<index_seq.value; i++)
@@ -458,7 +462,7 @@ TEST_F(ccfifoQueueStressTest, MPMC)
         }
         std::atomic<int> prod_completed{0};
         std::atomic<size_t> total_push_count{0}, total_pop_count{0};
-// #ifdef DUMP
+#ifdef DUMP
         std::thread dumpt{[&fifo, &prod_completed, index_seq](){
         	while(prod_completed.load() < index_seq.value)
         	{
@@ -466,7 +470,7 @@ TEST_F(ccfifoQueueStressTest, MPMC)
         		LOGD("%s", fifo.dump().data());
         	}
         }};
-// #endif
+#endif
         tll::time::Counter<> counter;
         #pragma omp parallel num_threads ( kNumOfThreads ) shared(fifo, store_buff)
         {
@@ -487,7 +491,8 @@ TEST_F(ccfifoQueueStressTest, MPMC)
                     {
                         /// overrun
                     }
-                    std::this_thread::yield();
+                    // std::this_thread::yield();
+                    std::this_thread::sleep_for(std::chrono::nanoseconds(0));
                 }
 
                 prod_completed.fetch_add(1, std::memory_order_relaxed);
@@ -518,20 +523,21 @@ TEST_F(ccfifoQueueStressTest, MPMC)
                     {
                         /// underrun
                     }
-                    std::this_thread::yield();
+                    // std::this_thread::yield();
+                    std::this_thread::sleep_for(std::chrono::nanoseconds(0));
                 }
             }
             // LOGD("%d Done", kTid);
             // LOGD("%s", fifo.dump().data());
         }
-// #ifdef DUMP
+#ifdef DUMP
         double tt_time = counter.elapse().count();
         dumpt.join();
         // auto stats = fifo.statistics();
         // tll::cc::dumpStat<>(stats, tt_time);
         LOGD("Total time: %f (s)", tt_time);
-// #endif
         LOGD("%s", fifo.dump().data());
+#endif
         auto ttps = total_push_count.load(std::memory_order_relaxed);
         ASSERT_GE(ttps, (kTotalWriteCount));
         // ASSERT_LE(ttps, kStoreSize);

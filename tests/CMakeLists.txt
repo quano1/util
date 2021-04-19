@@ -13,8 +13,9 @@ ProcessorCount(NUM_CPU)
 target_sources(tll_tests
 PRIVATE
     tll_tests.cc
-    benchmark.cc
-    perf_tunnel.cc
+#     benchmark.cc
+#     perf_tunnel.cc
+    $<$<EQUAL:${HAVE_GTEST},1>:stress_test.cc>
     $<$<EQUAL:${HAVE_GTEST},1>:unittests.cc>
 )
 
