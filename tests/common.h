@@ -19,7 +19,7 @@ void fifing(
         const std::function<size_t(int, size_t, size_t)> &do_push, /// true == producer
         const std::function<size_t(int, size_t, size_t)> &do_pop, /// true == producer
         const std::function<bool(int)> &is_prod, /// true == producer
-        const std::function<void()> &resting, /// std::this_thread::yield()
+        const std::function<void()> &do_rest, /// std::this_thread::yield()
         size_t max_val,
         std::vector<double> &time_lst,
         std::vector<size_t> &total_lst)
@@ -37,7 +37,7 @@ void fifing(
         size_t local_total = 0;
         if(is_prod(kTid)) /// Producer
         {
-            LOGD("Producer: %d, cpu: %d", kTid, sched_getcpu());
+            // LOGD("Producer: %d, cpu: %d", kTid, sched_getcpu());
             running_prod.fetch_add(1);
             for(;total_push.load(std::memory_order_relaxed) < (max_val);)
             {
@@ -48,7 +48,7 @@ void fifing(
                     local_total+=ret;
                 }
                 loop_num++;
-                resting();
+                do_rest();
             }
             running_prod.fetch_add(-1);
         }
@@ -68,7 +68,7 @@ void fifing(
                     local_total+=ret;
                 }
                 loop_num++;
-                resting();
+                do_rest();
             }
         }
 
