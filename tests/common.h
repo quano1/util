@@ -51,14 +51,15 @@ void fifing(
                 do_rest();
             }
             running_prod.fetch_add(-1);
+            // LOGD("Prod Done");
         }
         else /// Consumer
         {
             // LOGD("Consumer: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
             for(;
-                (total_pop.load(std::memory_order_relaxed) < max_val)
+                running_prod.load(std::memory_order_relaxed) > 0
                 || (total_pop.load(std::memory_order_relaxed) < total_push.load(std::memory_order_relaxed))
-                || running_prod.load(std::memory_order_relaxed) > 0
+                || (total_pop.load(std::memory_order_relaxed) < max_val)
                 ;)
             {
                 size_t ret = do_pop(kTid, loop_num, local_total);
@@ -70,9 +71,9 @@ void fifing(
                 loop_num++;
                 do_rest();
             }
+            // LOGD("Cons Done");
         }
 
-        // LOGD("Done");
     }
 
     time_lst.push_back(counter.elapsed().count());
