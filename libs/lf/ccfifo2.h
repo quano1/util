@@ -195,7 +195,12 @@ public:
         consumer_.reset(capacity_, num_threads_);
     }
 
-    inline void reserve(size_t size, size_t num_threads=0x400)
+    inline void reserve(size_t size)
+    {
+        reserve(size, num_threads_);
+    }
+
+    inline void reserve(size_t size, size_t num_threads)
     {
         capacity_ = util::isPowerOf2(size) ? size : util::nextPowerOf2(size);
         if(num_threads > capacity_)

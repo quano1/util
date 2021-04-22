@@ -21,6 +21,42 @@ using namespace tll::lf2;
 /// Should run with --gtest_filter=ccfifoBufferStressTest.* --gtest_repeat=10000
 struct RingBufferStressTest : public ::testing::Test
 {
+    void SetUp()
+    {
+        columns_lst.clear();
+        threads_lst.clear();
+        time_lst.clear();
+        total_size_lst.clear();
+        total_count_lst.clear();
+    }
+
+    void TearDown()
+    {
+        std::vector<double> speed_lst;
+        speed_lst.resize(time_lst.size());
+        for(int i=0; i<total_size_lst.size(); i++)
+        {
+            speed_lst[i*2] = (total_size_lst[i] * 1.f / time_lst[i*2]) / 0x100000; /// push
+            speed_lst[i*2+1] = (total_size_lst[i] * 1.f / time_lst[i*2+1]) / 0x100000; /// pop
+        }
+
+        tll::test::plot_data(tll::util::stringFormat("%s_speed.dat", ::testing::UnitTest::GetInstance()->current_test_info()->name()), "Higher better", "Speed in Mbs",
+                  columns_lst,
+                  threads_lst, 
+                  speed_lst 
+                  );
+        /// calculate relative time
+        for(int i=0; i<time_lst.size(); i++)
+        {
+            time_lst[i] /= threads_lst[i/columns_lst.size()];
+        }
+        tll::test::plot_data(tll::util::stringFormat("%s_time.dat", ::testing::UnitTest::GetInstance()->current_test_info()->name()), "Lower better", "Relative completing time in seconds",
+                  columns_lst,
+                  threads_lst,
+                  time_lst
+                  );
+    }
+
     static void SetUpTestCase()
     {
         LOGD("Should run with --gtest_filter=RingBufferStressTest.* --gtest_repeat=100000 --gtest_break_on_failure");
@@ -209,135 +245,84 @@ struct RingBufferStressTest : public ::testing::Test
             LOGD("Total time: %f (s)", time_lst.back());
         });
     }
+
+    std::vector<std::string> columns_lst;
+    std::vector<int> threads_lst;
+    std::vector<double> time_lst;
+    std::vector<size_t> total_size_lst, total_count_lst;
 };
 
 
 TEST_F(RingBufferStressTest, SlowSingleDDOnly)
 {
-    /// prepare headers
     auto resting = [](){
         std::this_thread::sleep_for(std::chrono::nanoseconds(1));
     };
 
-    std::vector<int> threads_lst;
-    std::vector<double> time_lst;
-    std::vector<size_t> total_size_lst, total_count_lst;
+    constexpr int kExtend = 3;
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x400};
-        RWFixedSize<SINGLE_EXTEND + 2>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x1000};
-        RWFixedSize<SINGLE_EXTEND + 2>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x2000};
-        RWFixedSize<SINGLE_EXTEND + 2>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x4000};
-        RWFixedSize<SINGLE_EXTEND + 2>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
     threads_lst.clear();
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x8000};
-        RWFixedSize<SINGLE_EXTEND + 2>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
 
     // for(auto t : threads_lst) printf("%d ", t); printf("\n");
 
 /// Speed in Mbs
 /// Completing time in seconds
-    std::vector<double> speed_lst;
-    std::vector<std::string> columns_lst = {"dd 0x400", "dd 0x1000", "dd 0x2000", "ss 0x4000", "ss 0x8000"};
-    speed_lst.resize(columns_lst.size() * (5 + SINGLE_EXTEND));
-    for(int i=0; i<total_size_lst.size(); i++)
-    {
-        speed_lst[i*2] = (total_size_lst[i] * 1.f / time_lst[i*2]) / 0x100000; /// push
-        speed_lst[i*2+1] = (total_size_lst[i] * 1.f / time_lst[i*2+1]) / 0x100000; /// pop
-    }
-
-    tll::test::plot_data("slow_single_dd_speed.dat", "Higher better", "Speed in Mbs",
-              columns_lst,
-              threads_lst, 
-              speed_lst 
-              );
-
-    /// calculate relative time
-    for(int i=0; i<time_lst.size(); i++)
-    {
-        time_lst[i] /= threads_lst[i/columns_lst.size()];
-    }
-
-    tll::test::plot_data("slow_single_dd_time.dat", "Lower better", "Relative completing time in seconds",
-              columns_lst,
-              threads_lst,
-              time_lst
-              );
+    columns_lst = {"W 0x400", "R 0x400", "W 0x1000", "R 0x1000", "W 0x2000", "R 0x2000", "W 0x4000", "R 0x4000", "W 0x8000", "R 0x4000"};
 }
 
 TEST_F(RingBufferStressTest, RushSingleDDOnly)
 {
-    /// prepare headers
     auto resting = [](){
         std::this_thread::yield();
     };
 
-    std::vector<int> threads_lst;
-    std::vector<double> time_lst;
-    std::vector<size_t> total_size_lst, total_count_lst;
+    constexpr int kExtend = 3;
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x400};
-        RWFixedSize<SINGLE_EXTEND + 2>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x1000};
-        RWFixedSize<SINGLE_EXTEND + 2>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x2000};
-        RWFixedSize<SINGLE_EXTEND + 2>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x4000};
-        RWFixedSize<SINGLE_EXTEND + 2>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
     threads_lst.clear();
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x8000};
-        RWFixedSize<SINGLE_EXTEND + 2>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
 
     // for(auto t : threads_lst) printf("%d ", t); printf("\n");
 
 /// Speed in Mbs
 /// Completing time in seconds
-    std::vector<double> speed_lst;
-    std::vector<std::string> columns_lst = {"dd 0x400", "dd 0x1000", "dd 0x2000", "dd 0x4000", "dd 0x8000"};
-    speed_lst.resize(columns_lst.size() * (5 + SINGLE_EXTEND));
-    for(int i=0; i<total_size_lst.size(); i++)
-    {
-        speed_lst[i*2] = (total_size_lst[i] * 1.f / time_lst[i*2]) / 0x100000; /// push
-        speed_lst[i*2+1] = (total_size_lst[i] * 1.f / time_lst[i*2+1]) / 0x100000; /// pop
-    }
-
-    tll::test::plot_data("rush_single_dd_speed.dat", "Higher better", "Speed in Mbs",
-              columns_lst,
-              threads_lst, 
-              speed_lst 
-              );
-
-    /// calculate relative time
-    for(int i=0; i<time_lst.size(); i++)
-    {
-        time_lst[i] /= threads_lst[i/columns_lst.size()];
-    }
-
-    tll::test::plot_data("rush_single_dd_time.dat", "Lower better", "Relative completing time in seconds",
-              columns_lst,
-              threads_lst,
-              time_lst
-              );
+    columns_lst = {"W 0x400", "R 0x400", "W 0x1000", "R 0x1000", "W 0x2000", "R 0x2000", "W 0x4000", "R 0x4000", "W 0x8000", "R 0x4000"};
 }
 
 TEST_F(RingBufferStressTest, SlowSingle)
@@ -347,9 +332,6 @@ TEST_F(RingBufferStressTest, SlowSingle)
         std::this_thread::sleep_for(std::chrono::nanoseconds(1));
     };
 
-    std::vector<int> threads_lst;
-    std::vector<double> time_lst;
-    std::vector<size_t> total_size_lst, total_count_lst;
     {
         ring_fifo_dd<char, PROFILING> fifo_dd{kCapacity};
         RWFixedSize<SINGLE_EXTEND>(fifo_dd, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
@@ -364,33 +346,7 @@ TEST_F(RingBufferStressTest, SlowSingle)
 
 /// Speed in Mbs
 /// Completing time in seconds
-    std::vector<double> speed_lst;
-    std::vector<std::string> columns_lst = {"dd push", "dd pop", "ss push", "ss pop"};
-    speed_lst.resize(columns_lst.size() * (3 + SINGLE_EXTEND));
-    for(int i=0; i<total_size_lst.size(); i++)
-    {
-        speed_lst[i*2] = (total_size_lst[i] * 1.f / time_lst[i*2]) / 0x100000; /// push
-        speed_lst[i*2+1] = (total_size_lst[i] * 1.f / time_lst[i*2+1]) / 0x100000; /// pop
-    }
-
-    tll::test::plot_data("slow_single_speed.dat", "Higher better", "Speed in Mbs",
-              columns_lst,
-              threads_lst, 
-              speed_lst 
-              );
-
-    /// calculate relative time
-    for(int i=0; i<time_lst.size(); i++)
-    {
-        time_lst[i] /= threads_lst[i/columns_lst.size()];
-    }
-
-    tll::test::plot_data("slow_single_time.dat", "Lower better", "Relative completing time in seconds",
-              columns_lst,
-              threads_lst,
-              time_lst
-              );
-
+    columns_lst = {"dd push", "dd pop", "ss push", "ss pop"};
 }
 
 TEST_F(RingBufferStressTest, RushSingle)
@@ -400,9 +356,6 @@ TEST_F(RingBufferStressTest, RushSingle)
         std::this_thread::yield();
     };
 
-    std::vector<int> threads_lst;
-    std::vector<double> time_lst;
-    std::vector<size_t> total_size_lst, total_count_lst;
     {
         ring_fifo_dd<char, PROFILING> fifo_dd{kCapacity};
         RWFixedSize<SINGLE_EXTEND>(fifo_dd, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
@@ -417,33 +370,7 @@ TEST_F(RingBufferStressTest, RushSingle)
 
 /// Speed in Mbs
 /// Completing time in seconds
-    std::vector<double> speed_lst;
-    std::vector<std::string> columns_lst = {"dd push", "dd pop", "ss push", "ss pop"};
-    speed_lst.resize(columns_lst.size() * (3 + SINGLE_EXTEND));
-    for(int i=0; i<total_size_lst.size(); i++)
-    {
-        speed_lst[i*2] = (total_size_lst[i] * 1.f / time_lst[i*2]) / 0x100000; /// push
-        speed_lst[i*2+1] = (total_size_lst[i] * 1.f / time_lst[i*2+1]) / 0x100000; /// pop
-    }
-
-    tll::test::plot_data("rush_single_speed.dat", "Higher better", "Speed in Mbs",
-              columns_lst,
-              threads_lst, 
-              speed_lst 
-              );
-
-    /// calculate relative time
-    for(int i=0; i<time_lst.size(); i++)
-    {
-        time_lst[i] /= threads_lst[i/columns_lst.size()];
-    }
-
-    tll::test::plot_data("rush_single_time.dat", "Lower better", "Relative completing time in seconds",
-              columns_lst,
-              threads_lst,
-              time_lst
-              );
-
+    columns_lst = {"dd push", "dd pop", "ss push", "ss pop"};
 }
 
 
@@ -454,9 +381,6 @@ TEST_F(RingBufferStressTest, SlowSimultaneously)
         std::this_thread::sleep_for(std::chrono::nanoseconds(1));
     };
 
-    std::vector<int> threads_lst;
-    std::vector<double> time_lst;
-    std::vector<size_t> total_size_lst, total_count_lst;
     {
         ring_fifo_dd<char, PROFILING> fifo_dd{kCapacity};
         RWSimulFixedSize<SIMUL_EXTEND>(fifo_dd, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
@@ -471,32 +395,7 @@ TEST_F(RingBufferStressTest, SlowSimultaneously)
 
 /// Speed in Mbs
 /// Completing time in seconds
-    std::vector<double> speed_lst;
-    std::vector<std::string> columns_lst = {"dd", "ss"};
-    speed_lst.resize(columns_lst.size() * (3 + SIMUL_EXTEND));
-    // LOGD("%ld %ld", speed_lst.size(), total_size_lst.size());
-    for(int i=0; i<total_size_lst.size(); i++)
-    {
-        speed_lst[i] = ((total_size_lst[i] * 1.f / time_lst[i]) / 0x100000) / threads_lst[i/columns_lst.size()];
-    }
-
-    tll::test::plot_data("slow_simul_speed.dat", "Higher better", "Speed in Mbs",
-              columns_lst,
-              threads_lst, 
-              speed_lst 
-              );
-
-    /// calculate relative time
-    for(int i=0; i<time_lst.size(); i++)
-    {
-        time_lst[i] /= threads_lst[i/columns_lst.size()];
-    }
-
-    tll::test::plot_data("slow_simul_time.dat", "Lower better", "Relative completing time in seconds",
-              columns_lst,
-              threads_lst,
-              time_lst
-              );
+    columns_lst = {"dd", "ss"};
 }
 
 TEST_F(RingBufferStressTest, RushSimultaneously)
@@ -506,9 +405,6 @@ TEST_F(RingBufferStressTest, RushSimultaneously)
         std::this_thread::yield();
     };
 
-    std::vector<int> threads_lst;
-    std::vector<double> time_lst;
-    std::vector<size_t> total_size_lst, total_count_lst;
     {
         ring_fifo_dd<char, PROFILING> fifo_dd{kCapacity};
         RWSimulFixedSize<SIMUL_EXTEND>(fifo_dd, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
@@ -523,30 +419,6 @@ TEST_F(RingBufferStressTest, RushSimultaneously)
 
 /// Speed in Mbs
 /// Completing time in seconds
-    std::vector<double> speed_lst;
-    std::vector<std::string> columns_lst = {"dd", "ss"};
-    speed_lst.resize(columns_lst.size() * (3 + SIMUL_EXTEND));
-    for(int i=0; i<total_size_lst.size(); i++)
-    {
-        speed_lst[i] = ((total_size_lst[i] * 1.f / time_lst[i]) / 0x100000) / threads_lst[i/columns_lst.size()];
-    }
-
-    tll::test::plot_data("rush_simul_speed.dat", "Higher better", "Speed in Mbs",
-              columns_lst,
-              threads_lst, 
-              speed_lst 
-              );
-
-    /// calculate relative time
-    for(int i=0; i<time_lst.size(); i++)
-    {
-        time_lst[i] /= threads_lst[i/columns_lst.size()];
-    }
-
-    tll::test::plot_data("rush_simul_time.dat", "Lower better", "Relative completing time in seconds",
-              columns_lst,
-              threads_lst,
-              time_lst
-              );
+    columns_lst = {"dd", "ss"};
 }
 #endif

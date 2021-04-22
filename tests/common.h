@@ -126,8 +126,8 @@ void plot_data(const std::string &file_name, const std::string &title, const std
     }
 
     ofs.flush();
-    system(tll::util::stringFormat("./plothist.sh %s", file_name.data()).data());
-    system(tll::util::stringFormat("./plot.sh %s", file_name.data()).data());
+    (void)system(tll::util::stringFormat("./plothist.sh %s", file_name.data()).data());
+    (void)system(tll::util::stringFormat("./plot.sh %s", file_name.data()).data());
 }
 
 } /// tll::test
