@@ -61,6 +61,11 @@ if(HAVE_GTEST)
 	include_directories(${GTest_SOURCE_DIR}/include ${GTest_SOURCE_DIR})
 	target_link_libraries(tll_tests gtest)
 endif()
+
+# add_test(NAME test COMMAND tll_tests)
+add_custom_command(TARGET tll_tests POST_BUILD
+                  COMMAND cmake -E copy ${CMAKE_CURRENT_LIST_DIR}/../tools/plot*sh ${CMAKE_BINARY_DIR}/)
+
 # include_directories(
 #   ${PRJ_ROOT}
 #   ${PRJ_ROOT}/libs
