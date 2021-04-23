@@ -13,6 +13,7 @@
 #include "../libs/util.h"
 #include "../libs/counter.h"
 
+#define NOP_LOOP() for(int i__=0; i__<0x400; i__++) __asm__("nop")
 namespace tll::test {
 
 template <int num_of_threads>
@@ -51,9 +52,10 @@ size_t fifing(
                     total_push_count.fetch_add(1, std::memory_order_relaxed);
                     total_push_size.fetch_add(ret, std::memory_order_relaxed);
                     local_total+=ret;
+                    NOP_LOOP();
+                    do_rest();
                 }
                 loop_num++;
-                do_rest();
             }
             running_prod.fetch_add(-1);
             // LOGD("Prod Done");
@@ -73,9 +75,10 @@ size_t fifing(
                     total_pop_count.fetch_add(1, std::memory_order_relaxed);
                     total_pop_size.fetch_add(ret, std::memory_order_relaxed);
                     local_total+=ret;
+                    NOP_LOOP();
+                    do_rest();
                 }
                 loop_num++;
-                do_rest();
             }
             // LOGD("Cons Done");
         }

@@ -13,7 +13,6 @@
 
 using namespace tll::lf2;
 
-#define NOP_LOOP() for(int i__=0; i__<0x400; i__++) __asm__("nop")
 #define PROFILING false
 #define SINGLE_EXTEND 1u
 #define SIMUL_EXTEND 0u
@@ -31,6 +30,16 @@ struct RingBufferStressTest : public ::testing::Test
     }
 
     void TearDown()
+    {
+        // plotting();
+    }
+
+    static void SetUpTestCase()
+    {
+        LOGD("Should run with --gtest_filter=RingBufferStressTest.* --gtest_repeat=100000 --gtest_break_on_failure");
+    }
+
+    void plotting()
     {
         std::vector<double> speed_lst;
         speed_lst.resize(time_lst.size());
@@ -55,11 +64,6 @@ struct RingBufferStressTest : public ::testing::Test
                   threads_lst,
                   time_lst
                   );
-    }
-
-    static void SetUpTestCase()
-    {
-        LOGD("Should run with --gtest_filter=RingBufferStressTest.* --gtest_repeat=100000 --gtest_break_on_failure");
     }
 
     // static constexpr size_t kTotalWriteSize = 20 * 0x100000; /// 1 Mbs
@@ -91,7 +95,6 @@ struct RingBufferStressTest : public ::testing::Test
 
             auto do_push = [&](int tid, size_t loop_num, size_t local_total) -> size_t {
                 size_t ret = fifo.push([](char *el, size_t size, int tid, char val, size_t push_size) {
-                    NOP_LOOP();
                     memset(el, (char)(tid), size);
                 }, kMaxPkgSize, tid, (char)loop_num, local_total);
                 return ret;
@@ -102,7 +105,6 @@ struct RingBufferStressTest : public ::testing::Test
                     auto dst = store_buff[tid].data() + pop_size;
                     auto src = el;
                     memcpy(dst, src, size);
-                    NOP_LOOP();
                 }, kMaxPkgSize, local_total);
                 return ret;
             };
@@ -179,8 +181,7 @@ struct RingBufferStressTest : public ::testing::Test
             }
 
             auto do_push = [&](int tid, size_t loop_num, size_t local_total) -> size_t {
-                size_t ret = fifo.push([](char *el, size_t size, int tid, char val, size_t push_size) {
-                    NOP_LOOP();
+                size_t ret = fifo.push2([](char *el, size_t size, int tid, char val, size_t push_size) {
                     memset(el, (char)(tid), size);
                 }, kMaxPkgSize, tid, (char)loop_num, local_total);
                 return ret;
@@ -191,7 +192,6 @@ struct RingBufferStressTest : public ::testing::Test
                     auto dst = store_buff[tid / 2].data() + pop_size;
                     auto src = el;
                     memcpy(dst, src, size);
-                    NOP_LOOP();
                 }, kMaxPkgSize, local_total);
                 return ret;
             };
@@ -272,13 +272,9 @@ TEST_F(RingBufferStressTest, SlowSingleDDOnly)
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x2000};
         RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
-    {
-        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x4000};
-        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
-    }
     threads_lst.clear();
     {
-        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x8000};
+        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x4000};
         RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
 
@@ -286,7 +282,8 @@ TEST_F(RingBufferStressTest, SlowSingleDDOnly)
 
 /// Speed in Mbs
 /// Completing time in seconds
-    columns_lst = {"W 0x400", "R 0x400", "W 0x1000", "R 0x1000", "W 0x2000", "R 0x2000", "W 0x4000", "R 0x4000", "W 0x8000", "R 0x4000"};
+    columns_lst = {"W 0x400", "R 0x400", "W 0x1000", "R 0x1000", "W 0x2000", "R 0x2000", "W 0x4000", "R 0x4000"};
+    plotting();
 }
 
 TEST_F(RingBufferStressTest, RushSingleDDOnly)
@@ -308,13 +305,9 @@ TEST_F(RingBufferStressTest, RushSingleDDOnly)
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x2000};
         RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
-    {
-        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x4000};
-        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
-    }
     threads_lst.clear();
     {
-        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x8000};
+        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x4000};
         RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
 
@@ -322,7 +315,8 @@ TEST_F(RingBufferStressTest, RushSingleDDOnly)
 
 /// Speed in Mbs
 /// Completing time in seconds
-    columns_lst = {"W 0x400", "R 0x400", "W 0x1000", "R 0x1000", "W 0x2000", "R 0x2000", "W 0x4000", "R 0x4000", "W 0x8000", "R 0x4000"};
+    columns_lst = {"W 0x400", "R 0x400", "W 0x1000", "R 0x1000", "W 0x2000", "R 0x2000", "W 0x4000", "R 0x4000"};
+    plotting();
 }
 
 TEST_F(RingBufferStressTest, SlowSingle)

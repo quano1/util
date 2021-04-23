@@ -11,6 +11,7 @@ struct ccfifoBufferBasicTest : public ::testing::Test
     template <typename elem_t, tll::lf2::Mode prod_mode, tll::lf2::Mode cons_mode>
     void RWInSequencePrimitive(size_t loop)
     {
+        // LOGD("[%ld] sizeof elem_t: %ld", loop, sizeof(elem_t));
         tll::lf2::ccfifo<elem_t, prod_mode, cons_mode> fifo;
         elem_t val = -1;
         size_t ret = -1;
@@ -19,38 +20,38 @@ struct ccfifoBufferBasicTest : public ::testing::Test
         {
             for(int i=0; i<sz; i++) *(el+i) = val;
         };
-        /// reserve not power of 2
-        fifo.reserve(7);
+        // LOGD("reserve not power of 2");
+        fifo.reserve(7, 0x400);
         ASSERT_EQ(fifo.capacity(), 8);
-        /// simple push/pop
+        // LOGD("simple push/pop");
         for(size_t i=0; i < fifo.capacity()*loop; i++)
         {
             /// https://stackoverflow.com/questions/610245/where-and-why-do-i-have-to-put-the-template-and-typename-keywords
-            ret = fifo.push( (elem_t)i );
+            ret = fifo.push2( (elem_t)i );
             EXPECT_EQ(ret, 1);
             fifo.pop(val);
             EXPECT_EQ(val, (elem_t)i);
         }
         fifo.reset();
-        /// fill
+        // LOGD("fill");
         for(size_t i=0; i < fifo.capacity(); i++) 
-            fifo.push((elem_t)i);
-        /// overrun
+            fifo.push2((elem_t)i);
+        // LOGD("overrun");
         EXPECT_FALSE(fifo.empty());
-        ret = fifo.push((elem_t)val);
+        ret = fifo.push2((elem_t)val);
         EXPECT_EQ(ret, 0);
-        /// pop all
+        // LOGD("pop all");
         ret = fifo.pop(do_nothing, -1);
         EXPECT_EQ(ret, fifo.capacity());
-        /// underrun
+        // LOGD("underrun");
         EXPECT_TRUE(fifo.empty());
         EXPECT_EQ(fifo.pop(val), 0);
-        /// push/pop odd size
+        // LOGD("push/pop odd size");
         fifo.reset();
         constexpr size_t kPushSize = 3;
         for(size_t i=0; i < fifo.capacity()*loop; i++)
         {
-            ret = fifo.push(pushCb, kPushSize, (elem_t)i);
+            ret = fifo.push2(pushCb, kPushSize, (elem_t)i);
             EXPECT_EQ(ret, kPushSize);
 
             ret = fifo.pop([i](const elem_t *el, size_t sz){
@@ -72,19 +73,19 @@ struct ccfifoBufferBasicTest : public ::testing::Test
         size_t ret = -1;
         elem_t val;
 
-        fifo.push((elem_t)0);
+        fifo.push2((elem_t)0);
         fifo.pop(val);
         /// Now the fifo is empty.
         /// But should not be able to push capacity size
-        EXPECT_EQ(fifo.push(do_nothing, capa), 0);
+        EXPECT_EQ(fifo.push2(do_nothing, capa), 0);
         /// Can only pushing the reset of the buffer.
-        EXPECT_EQ(fifo.push(do_nothing, capa - 1), capa - 1);
+        EXPECT_EQ(fifo.push2(do_nothing, capa - 1), capa - 1);
         /// reset everything
         fifo.reset();
-        fifo.push(do_nothing, capa);
+        fifo.push2(do_nothing, capa);
         fifo.pop(do_nothing, capa/2);
         /// wrapped perfectly
-        fifo.push(do_nothing, capa/2);
+        fifo.push2(do_nothing, capa/2);
         /// should having the capacity elems
         EXPECT_EQ(fifo.size(), capa);
         /// Should only be able to pop capa/2 due to wrapped (contiguously)
@@ -158,9 +159,9 @@ struct ccfifoBufferStressTest : public ::testing::Test
 
     // static constexpr size_t kTotalWriteSize = 20 * 0x100000; /// 1 Mbs
     // static constexpr size_t kCapacity = kTotalWriteSize / 4;
-    static constexpr size_t kCapacity = 0x100000; /// 1 Mbs
-    static constexpr size_t kTotalWriteSize = 20 * kCapacity;
-    static constexpr size_t kMaxPkgSize = 0x100;
+    static constexpr size_t kCapacity = 0x100; /// 1 Mbs
+    static constexpr size_t kTotalWriteSize = 0x10 * kCapacity;
+    static constexpr size_t kMaxPkgSize = 0xF;
     // static constexpr size_t kWrap = 16;
 
     template <tll::lf2::Mode prod_mode, tll::lf2::Mode cons_mode, size_t extend>
@@ -173,7 +174,7 @@ struct ccfifoBufferStressTest : public ::testing::Test
             // if(index_seq.value == 1) return;
             auto constexpr kNumOfThreads = index_seq.value * 2;
             LOGD("Number of threads: %ld", kNumOfThreads);
-            constexpr size_t kStoreSize = kTotalWriteSize + ((index_seq.value - 1) * kMaxPkgSize);
+            constexpr size_t kStoreSize = kTotalWriteSize + ((index_seq.value) * kMaxPkgSize);
             ccfifo<char, prod_mode, cons_mode, true> fifo{kCapacity};
             std::vector<char> store_buff[index_seq.value];
 
@@ -194,7 +195,7 @@ struct ccfifoBufferStressTest : public ::testing::Test
                     char i=0;
                     for(;total_push_size.load(std::memory_order_relaxed) < (kTotalWriteSize);)
                     {
-                        size_t ret_size = fifo.push([](char *el, size_t size, char val) {
+                        size_t ret_size = fifo.push2([](char *el, size_t size, char val) {
                             memset(el, val, size);
                         }, kMaxPkgSize, i);
                         if(ret_size)
@@ -202,13 +203,13 @@ struct ccfifoBufferStressTest : public ::testing::Test
                             // LOGD("%ld\t%s", ret_size, fifo.dump().data());
                             total_push_size.fetch_add(ret_size, std::memory_order_relaxed);
                             (++i);
+                            std::this_thread::yield();
                         }
                         else
                         {
                             /// overrun
                         }
-                        // std::this_thread::yield();
-                        std::this_thread::sleep_for(std::chrono::nanoseconds(0));
+                        // std::this_thread::sleep_for(std::chrono::nanoseconds(0));
                     }
 
                     prod_completed.fetch_add(1, std::memory_order_relaxed);
@@ -233,26 +234,26 @@ struct ccfifoBufferStressTest : public ::testing::Test
                             // LOGD("%ld\t%s", ret_size, fifo.dump().data());
                             pop_size += ret_size;
                             total_pop_size.fetch_add(ret_size, std::memory_order_relaxed);
+                            std::this_thread::yield();
                         }
                         else
                         {
                             /// underrun
                         }
-                        // std::this_thread::yield();
-                        std::this_thread::sleep_for(std::chrono::nanoseconds(0));
+                        // std::this_thread::sleep_for(std::chrono::nanoseconds(0));
                     }
                 }
                 // LOGD("%d Done", kTid);
                 // LOGD("%s", fifo.dump().data());
             }
             double tt_time = counter.elapse().count();
+            auto ttps = total_push_size.load(std::memory_order_relaxed);
 #ifdef DUMP
             auto stats = fifo.statistics();
             tll::cc::dumpStat<>(stats, tt_time);
             LOGD("Total time: %f (s)", tt_time);
-            LOGD("%s", fifo.dump().data());
 #endif
-            auto ttps = total_push_size.load(std::memory_order_relaxed);
+            LOGD("%ld:%ld\t%s", total_pop_size.load(), kStoreSize, fifo.dump().data());
             ASSERT_GE(ttps, (kTotalWriteSize));
             ASSERT_LE(ttps, kStoreSize);
             ASSERT_EQ(fifo.ph(), fifo.pt());
@@ -262,8 +263,17 @@ struct ccfifoBufferStressTest : public ::testing::Test
 
             for(int i=0; i<index_seq.value; i++)
             {
-                for(int j=0;j<store_buff[i].size(); j+=kMaxPkgSize)
-                    ASSERT_EQ(memcmp(store_buff[i].data()+j, store_buff[i].data()+j+1, kMaxPkgSize - 1), 0);
+                for(int j=0;j<store_buff[i].size()-1; j+=kMaxPkgSize)
+                {
+                    int ret = memcmp(store_buff[i].data()+j, store_buff[i].data()+j+1, kMaxPkgSize - 1);
+                    if(ret != 0)
+                    {
+                        LOGD("[%d:%d]", i, j);
+                        for(int _i=j; _i<j+kMaxPkgSize; _i++) printf("%2d:", store_buff[i][_i]);
+                            printf("\n");
+                        ASSERT_EQ(ret, 0);
+                    }
+                }
             }
         });
     }
@@ -273,7 +283,7 @@ struct ccfifoBufferStressTest : public ::testing::Test
 TEST_F(ccfifoBufferStressTest, MPMCRWFixedSizeDD)
 {
     using namespace tll::lf2;
-    RWSimulFixedSize<mode::dense, mode::dense, 2>();
+    RWSimulFixedSize<mode::dense, mode::dense, 0u>();
 }
 
 /// MPMC read write fixed size
@@ -301,7 +311,7 @@ TEST_F(ccfifoBufferStressTest, MPMCRWFixedSizeSS)
 TEST_F(ccfifoBufferStressTest, MPSCWRandSize)
 {
     using namespace tll::lf2;
-    tll::util::CallFuncInSeq<NUM_CPU, 2>( [&](auto index_seq)
+    tll::util::CallFuncInSeq<NUM_CPU, 0u>( [&](auto index_seq)
     {
         static_assert(index_seq.value > 0);
         // if(index_seq.value == 1) return;
@@ -326,7 +336,7 @@ TEST_F(ccfifoBufferStressTest, MPSCWRandSize)
                 // size_t local_push=0;
                 for(;total_push_size.load(std::memory_order_relaxed) < (kTotalWriteSize);)
                 {
-                    size_t ws = fifo.push([&fifo, &total_push_size, kTid](char *el, size_t size) {
+                    size_t ws = fifo.push2([&fifo, &total_push_size, kTid](char *el, size_t size) {
                         *el = '{';
                         *(el + size - 1) = '}';
                         memset(el + 1, (uint8_t)kTid, size - 2);
@@ -451,7 +461,7 @@ TEST_F(ccfifoQueueStressTest, MPMC)
         // if(index_seq.value == 1) return;
         auto constexpr kNumOfThreads = index_seq.value * 2;
         LOGD("Number of threads: %ld", kNumOfThreads);
-        constexpr size_t kStoreSize = kTotalWriteSize + ((index_seq.value - 1) * kPkgSize);
+        constexpr size_t kStoreSize = kTotalWriteSize + ((index_seq.value) * kPkgSize);
         ring_fifo_dd<std::vector<char>, false> fifo{kCapacity / kPkgSize};
         std::vector<char> store_buff[index_seq.value];
 
