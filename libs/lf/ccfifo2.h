@@ -160,6 +160,82 @@ public:
         reserve(size, num_threads);
     }
 
+    // template <uint8_t type = 3>
+    inline void dumpStat(double real_total_time, int type=3) const
+    {
+        if(!profiling) return;
+        using namespace std::chrono;
+        if(type) printf("        count(K) |err(%%) | miss(%%) t:c |try(%%) |comp(%%)| cb(%%) | all(%%)| Mbs   | cb try comp (min:max:avg) (nano sec)\n");
+        auto stats = statistics();
+        /// producer
+        if(type & 1)
+        {
+            auto &st = stats.first;
+            // double time_total = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_total)).count();
+            size_t comp_count = st.try_count - st.error_count;
+            size_t time_avg_cb = st.time_cb / comp_count;
+            size_t time_avg_try = st.time_try / st.try_count;
+            size_t time_avg_comp = st.time_comp / comp_count;
+
+            size_t time_real = st.time_cb + st.time_try + st.time_comp;
+            double time_try_rate = st.time_try*100.f/ time_real;
+            double time_complete_rate = st.time_comp*100.f/ time_real;
+            double time_callback_rate = st.time_cb*100.f/ time_real;
+            double time_real_rate = (time_real)*100.f/ st.time_total;
+
+            double try_count = st.try_count * 1.f / 1000;
+            double error_rate = (st.error_count*100.f)/st.try_count;
+            double try_miss_rate = (st.try_miss_count*100.f)/st.try_count;
+            double comp_miss_rate = (st.comp_miss_count*100.f)/st.try_count;
+
+            // double opss = st.total_size * .001f / real_total_time;
+            double speed = st.total_size * 1.f / 0x100000 / real_total_time;
+
+
+            printf(" push: %9.3f | %5.2f | %5.2f:%5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %.3f | (%ld:%ld:%ld) (%ld:%ld:%ld) (%ld:%ld:%ld)\n",
+                   try_count, error_rate, try_miss_rate, comp_miss_rate
+                   , time_try_rate, time_complete_rate, time_callback_rate, time_real_rate
+                   , speed,
+                   st.time_min_cb, st.time_max_cb, time_avg_cb,
+                   st.time_min_try, st.time_max_try, time_avg_try,
+                   st.time_min_comp, st.time_max_comp, time_avg_comp
+                   );
+        }
+
+        if(type & 2)
+        {
+            auto &st = stats.second;
+            // double time_total = duration_cast<duration<double, std::ratio<1>>>(StatDuration(st.time_total)).count();
+            size_t comp_count = st.try_count - st.error_count;
+            size_t time_avg_cb = st.time_cb / comp_count;
+            size_t time_avg_try = st.time_try / st.try_count;
+            size_t time_avg_comp = st.time_comp / comp_count;
+
+            size_t time_real = st.time_cb + st.time_try + st.time_comp;
+            double time_try_rate = st.time_try*100.f/ time_real;
+            double time_complete_rate = st.time_comp*100.f/ time_real;
+            double time_callback_rate = st.time_cb*100.f/ time_real;
+            double time_real_rate = (time_real)*100.f/ st.time_total;
+
+            double try_count = st.try_count * 1.f / 1000;
+            double error_rate = (st.error_count*100.f)/st.try_count;
+            double try_miss_rate = (st.try_miss_count*100.f)/st.try_count;
+            double comp_miss_rate = (st.comp_miss_count*100.f)/st.try_count;
+
+            // double opss = st.total_size * .001f / real_total_time;
+            double speed = st.total_size * 1.f / 0x100000 / real_total_time;
+
+            printf(" pop : %9.3f | %5.2f | %5.2f:%5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %.3f | (%ld:%ld:%ld) (%ld:%ld:%ld) (%ld:%ld:%ld)\n",
+                   try_count, error_rate, try_miss_rate, comp_miss_rate
+                   , time_try_rate, time_complete_rate, time_callback_rate, time_real_rate
+                   , speed,
+                   st.time_min_cb, st.time_max_cb, time_avg_cb,
+                   st.time_min_try, st.time_max_try, time_avg_try,
+                   st.time_min_comp, st.time_max_comp, time_avg_comp
+                   );
+        }
+    }
+
     inline auto dump() const
     {
         size_t ph = producer_.index_head().load(std::memory_order_relaxed);
@@ -367,6 +443,75 @@ public:
     }
 
     template <Mode mode>
+    bool completePop2(size_t entry_id, size_t curr_index, size_t next_index, size_t size)
+    {
+        auto &marker = consumer_;
+        if(mode == mode::dense)
+        {
+            // LOGD("%ld:%ld:%ld:%ld:%ld", entry_id, curr_index, next_index, marker.exit_id().load(std::memory_order_relaxed). num_threads_);
+            if(entry_id >= (marker.exit_id().load(std::memory_order_relaxed) + num_threads_)) return false;
+
+            // size_t t_pos = wrap(entry_id, num_threads_);
+            // marker.size_list(wrap(entry_id, num_threads_)).store(size);
+            // marker.curr_index_list(wrap(entry_id, num_threads_)).store(curr_index);
+            marker.next_index_list(wrap(entry_id, num_threads_)).store(next_index + size);
+            size_t const kIdx = entry_id;
+            size_t next_exit_id = marker.exit_id_list(wrap(entry_id, num_threads_)).load(std::memory_order_relaxed);
+            // LOGD("%ld/%ld %ld/%ld %s", curr_index, next_index, next_exit_id, entry_id, dump().data());
+
+            for(;;marker.comp_miss_count.fetch_add(1, std::memory_order_relaxed))
+            {
+                // size_t next_exit_id;
+                size_t curr_exit_id = marker.exit_id().load(std::memory_order_relaxed);
+
+                // LOGD(">(%ld/%ld)\t{%ld/%ld}", kIdx, entry_id, curr_exit_id, next_exit_id);
+                if(entry_id < curr_exit_id)
+                {
+                    break;
+                }
+                else if (entry_id == curr_exit_id)
+                {
+                    next_exit_id = curr_exit_id + 1;
+                    while((entry_id - curr_exit_id < num_threads_) && (next_exit_id > curr_exit_id))
+                    {
+                        // size = marker.size_list(wrap(entry_id, num_threads_)).load(std::memory_order_relaxed);
+                        // curr_index = marker.curr_index_list(wrap(next_exit_id, num_threads_)).load(std::memory_order_relaxed);
+                        // next_index = marker.next_index_list(wrap(entry_id, num_threads_)).load(std::memory_order_relaxed);
+
+                        entry_id++;
+                        next_exit_id = marker.exit_id_list(wrap(entry_id, num_threads_)).load(std::memory_order_relaxed);
+                        // LOGD(" -(%ld)\t%ld/%ld\t%ld/%ld/%ld\t%s", kIdx, 
+                        //      next_exit_id, entry_id,
+                        //      curr_index, next_index, size, 
+                        //      dump().data());
+
+                    }
+                    next_index = marker.next_index_list(wrap(entry_id - 1, num_threads_)).load(std::memory_order_relaxed);
+                    marker.index_tail().store(next_index, std::memory_order_relaxed);
+                    marker.exit_id().store(entry_id, std::memory_order_relaxed);
+                    // marker.index_tail().store(next_index + size, std::memory_order_relaxed);
+                }
+
+                // LOGD(" (%ld)\t%ld/%ld\t%s", 
+                //          kIdx, 
+                //          next_exit_id, entry_id, 
+                //          dump().data());
+                if(marker.exit_id_list(wrap(entry_id, num_threads_)).compare_exchange_strong(next_exit_id, entry_id, std::memory_order_relaxed, std::memory_order_relaxed)) break;
+
+                // LOGD(" M(%ld/%ld) {%ld}", kIdx, entry_id, marker.exit_id().load(std::memory_order_relaxed));
+            }
+        }
+        else
+        {
+            for(;marker.index_tail().load(std::memory_order_relaxed) != curr_index;){}
+            marker.index_tail().store(next_index + size, std::memory_order_relaxed);
+        }
+        // LOGD(" <(%ld/%ld) {%ld}", kIdx, entry_id, marker.exit_id().load(std::memory_order_relaxed));
+
+        return true;
+    }
+
+    template <Mode mode>
     size_t tryPush(size_t &entry_id, size_t &prod_index_head, size_t &size)
     {
         size_t prod_next_index;
@@ -546,6 +691,7 @@ public:
             {
                 water_mark_head_.store(curr_index, std::memory_order_relaxed);
             }
+                    marker.next_index_list(wrap(entry_id, num_threads_)).store(next_index + size);
 
             for(;;marker.comp_miss_count.fetch_add(1, std::memory_order_relaxed))
             {
@@ -560,26 +706,14 @@ public:
                 else if(entry_id > curr_exit_id)
                 {
                     // marker.size_list(wrap(entry_id, num_threads_)).store(size);
-                    marker.next_index_list(wrap(entry_id, num_threads_)).store(next_index + size);
                 }
                 else /// if (entry_id == curr_exit_id)
                 {
                     // marker.size_list(wrap(entry_id, num_threads_)).store(size);
-                    marker.next_index_list(wrap(entry_id, num_threads_)).store(next_index + size);
+                    // marker.next_index_list(wrap(entry_id, num_threads_)).store(next_index + size);
                     next_exit_id = curr_exit_id + 1;
                     while((entry_id - curr_exit_id < num_threads_) && (next_exit_id > curr_exit_id))
                     {
-                        // size = marker.size_list(wrap(entry_id, num_threads_)).load(std::memory_order_relaxed);
-                        // curr_index = marker.index_tail().load(std::memory_order_relaxed);
-                        // next_index = marker.next_index_list(wrap(entry_id, num_threads_)).load(std::memory_order_relaxed);
-
-                        // if(next_index >= this->next(curr_index))
-                        // {
-                        //     // marker.index_tail().store(curr_index, std::memory_order_relaxed);
-                        //     water_mark_.store(curr_index, std::memory_order_relaxed);
-                        //     // LOGD("%ld/%ld\t\t%s", curr_index, next_index, dump().data());
-                        // }
-                        // marker.index_tail().store(next_index + size, std::memory_order_relaxed);
                         entry_id++;
                         next_exit_id = marker.exit_id_list(wrap(entry_id, num_threads_)).load(std::memory_order_relaxed);
                         // LOGD(" -(%ld)\t%ld:%ld\t%s", entry_id, 
@@ -595,9 +729,9 @@ public:
                     {
                         marker.index_tail().store(wmh, std::memory_order_relaxed);
                         water_mark_.store(wmh, std::memory_order_relaxed);
-                        LOGD(" -(%ld:%ld)\t%ld:%ld\t%s", entry_id, next_index,
-                                 next_exit_id, marker.exit_id().load(),
-                                 dump().data());
+                        // LOGD(" -(%ld:%ld)\t%ld:%ld\t%s", entry_id, next_index,
+                        //          next_exit_id, marker.exit_id().load(),
+                        //          dump().data());
                     }
 
                     marker.index_tail().store(next_index, std::memory_order_relaxed);
@@ -694,20 +828,55 @@ public:
     template <typename F, typename ...Args>
     size_t push2(const F &callback, size_t size, Args &&...args)
     {
-        auto &marker = producer_;
+        return fifing<0>(callback, size, std::forward<Args>(args)...);
+    }
+
+    template<typename U>
+    size_t push2(U &&val)
+    {
+        return push2([&val](T *el, size_t){ *el = std::forward<U>(val); }, 1);
+    }
+
+    template <typename F, typename ...Args>
+    size_t pop2(F &&callback, size_t size, Args &&...args)
+    {
+        return fifing<1>(std::forward<F>(callback), size, std::forward<Args>(args)...);
+    }
+
+    size_t pop2(T &val)
+    {
+        return pop2([&val](T *el, size_t){ val = std::move(*el); }, 1);
+    }
+
+    template <int type, typename F, typename ...Args>
+    size_t fifing(F &&callback, size_t size, Args &&...args)
+    {
+        // if(type == 0)
+        auto &marker = (type == 0) ? producer_ : consumer_;
+        // auto mode = (type == 0) ? prod_mode : cons_mode;
         size_t id, index;
         size_t time_cb{0}, time_try{0}, time_comp{0};
         profTimerReset();
-        size_t next = tryPush<prod_mode>(id, index, size);
+        size_t next = (type == 0) ? tryPush<prod_mode>(id, index, size) : tryPop<cons_mode>(id, index, size);
         time_try = profTimerElapse(marker.time_try);
         profTimerStart();
         if(size)
         {
+            if(type == 1) 
+                std::atomic_thread_fence(std::memory_order_acquire);
+
             callback(elemAt(next), size, std::forward<Args>(args)...);
-            std::atomic_thread_fence(std::memory_order_release);
+            if(type == 0)
+                std::atomic_thread_fence(std::memory_order_release);
+
             time_cb = profTimerElapse(marker.time_cb);
             profTimerStart();
-            while(!completePush2<prod_mode>(id, index, next, size)){};
+            
+            if(type == 0)
+                while(!completePush2<prod_mode>(id, index, next, size)){}
+            else
+                while(!completePop2<cons_mode>(id, index, next, size)){}
+
             time_comp = profTimerElapse(marker.time_comp);
             profTimerAbsElapse(marker.time_total);
             profAdd(marker.total_size, size);
@@ -722,21 +891,15 @@ public:
         return size;
     }
 
+    size_t pop(T &val)
+    {
+        return pop([&val](T *el, size_t){ val = std::move(*el); }, 1);
+    }
+
     template<typename U>
     size_t push(U &&val)
     {
         return push([&val](T *el, size_t){ *el = std::forward<U>(val); }, 1);
-    }
-
-    template<typename U>
-    size_t push2(U &&val)
-    {
-        return push2([&val](T *el, size_t){ *el = std::forward<U>(val); }, 1);
-    }
-
-    size_t pop(T &val)
-    {
-        return pop([&val](T *el, size_t){ val = std::move(*el); }, 1);
     }
 
     inline bool completeQueue(size_t idx, int type)

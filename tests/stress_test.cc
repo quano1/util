@@ -13,7 +13,7 @@
 
 using namespace tll::lf2;
 
-#define PROFILING true
+#define PROFILING false
 #define SEQUENCE_EXTEND 1u
 #define CONCURRENT_EXTEND 0u
 // #define DUMP
@@ -69,7 +69,7 @@ struct RingBufferStressTest : public ::testing::Test
     // static constexpr size_t kTotalWriteSize = 20 * 0x100000; /// 1 Mbs
     // static constexpr size_t kCapacity = kTotalWriteSize / 4;
     // static constexpr size_t kMaxPkgSize = 0x3;
-    static constexpr size_t kCapacity = 0x400;
+    static constexpr size_t kCapacity = 0x100;
     // static constexpr size_t kWrap = 16;
 
     template <size_t extend, typename FIFO>
@@ -95,19 +95,19 @@ struct RingBufferStressTest : public ::testing::Test
                 memset(store_buff[i].data(), 0xFF, store_buff[i].size());
             }
 
-            auto do_push = [&](int tid, size_t loop_num, size_t local_total) -> size_t {
+            auto do_push = [&](int tid, size_t loop_num, size_t lt_size, size_t tt_count, size_t tt_size) -> size_t {
                 size_t ret = fifo.push2([](char *el, size_t size, int tid, char val, size_t push_size) {
                     memset(el, (char)(tid), size);
-                }, max_pkg_size, tid, (char)loop_num, local_total);
+                }, max_pkg_size, tid, (char)loop_num, lt_size);
                 return ret;
             };
 
-            auto do_pop = [&](int tid, size_t loop_num, size_t local_total) -> size_t {
+            auto do_pop = [&](int tid, size_t loop_num, size_t lt_size, size_t tt_count, size_t tt_size) -> size_t {
                 size_t ret = fifo.pop([&](const char *el, size_t size, size_t pop_size) {
                     auto dst = store_buff[tid].data() + pop_size;
                     auto src = el;
                     memcpy(dst, src, size);
-                }, max_pkg_size, local_total);
+                }, max_pkg_size, lt_size);
                 return ret;
             };
 
@@ -120,25 +120,28 @@ struct RingBufferStressTest : public ::testing::Test
             //     return ret;
             // };
 
-            auto real_total_write_size = tll::test::fifing<index_seq.value>(do_push, nullptr, [](int tid){return true;}, resting, total_write_size, threads_lst, time_lst, total_count_lst);
+            size_t rts_push = tll::test::fifing<index_seq.value>(do_push, nullptr, [](int tid){return true;}, resting, total_write_size, threads_lst, time_lst, total_count_lst).first;
             /// push >= kTotalWriteSize
-            ASSERT_GE(real_total_write_size, total_write_size);
+            ASSERT_GE(rts_push, total_write_size);
             threads_lst.pop_back();
-            tll::test::fifing<index_seq.value>(nullptr, do_pop, [](int tid){return false;}, resting, real_total_write_size, threads_lst, time_lst, total_count_lst);
+            size_t rts_pop = tll::test::fifing<index_seq.value>(nullptr, do_pop, [](int tid){return false;}, resting, rts_push, threads_lst, time_lst, total_count_lst).second;
+            size_t tc_push = total_count_lst[total_count_lst.size() - 2];
+            size_t tc_pop = total_count_lst.back();
             /// push == pop
-            ASSERT_EQ(total_count_lst[total_count_lst.size() - 1], total_count_lst[total_count_lst.size() - 2]);
+            ASSERT_EQ(rts_push, rts_pop);
+            ASSERT_EQ(tc_push, tc_pop);
 
             if(fifo.isProfilingEnabled())
             {
                 auto stats = fifo.statistics();
                 tll::cc::dumpStat<1>(stats, time_lst.back());
-                LOGD("%ld\t%s", real_total_write_size, fifo.dump().data());
+                LOGD("%ld\t%s", rts_push, fifo.dump().data());
             }
             // LOGD("Total time: %f (s)", time_lst.back());
 
             for(int i=0; i<index_seq.value; i++)
             {
-                for(int j=0;j<real_total_write_size; j+=max_pkg_size)
+                for(int j=0;j<rts_push; j+=max_pkg_size)
                 {
                     int cmp = memcmp(store_buff[i].data()+j, store_buff[i].data()+j+1, max_pkg_size - 1);
                     ASSERT_EQ(cmp, 0);
@@ -158,7 +161,7 @@ struct RingBufferStressTest : public ::testing::Test
             // time_lst[time_lst.size() - 1] /= index_seq.value;
             // time_lst[time_lst.size() - 2] /= index_seq.value;
             // for(auto &val : total_size_lst) printf("%ld ", val); printf("\n");
-            total_size_lst.push_back(real_total_write_size);
+            total_size_lst.push_back(rts_push);
         });
     }
 
@@ -173,7 +176,7 @@ struct RingBufferStressTest : public ::testing::Test
     {
         tll::util::CallFuncInSeq<NUM_CPU, extend>( [&](auto index_seq) {
             fifo.reserve(kCapacity * index_seq.value);
-            size_t total_write_size = fifo.capacity() * 4;
+            size_t total_write_size = fifo.capacity() * 0x100;
             size_t store_size = total_write_size + ((index_seq.value) * max_pkg_size);
             LOGD("Number of threads: %ld\tpkg_size: %ld/%ld", index_seq.value * 2, max_pkg_size, total_write_size);
             
@@ -184,30 +187,23 @@ struct RingBufferStressTest : public ::testing::Test
                 memset(store_buff[i].data(), 0xFF, store_buff[i].size());
             }
 
-            auto do_push = [&](int tid, size_t loop_num, size_t local_total) -> size_t {
+            auto do_push = [&](int tid, size_t loop_num, size_t lt_size, size_t tt_count, size_t tt_size) -> size_t {
                 size_t ret = fifo.push2([](char *el, size_t size, int tid, char val, size_t push_size) {
                     memset(el, (char)(tid), size);
-                }, max_pkg_size, tid, (char)loop_num, local_total);
+                }, max_pkg_size, tid, (char)loop_num, lt_size);
                 return ret;
             };
 
-            auto do_pop_while_doing_push = [&](int tid, size_t loop_num, size_t local_total) -> size_t {
-                size_t ret = fifo.pop([&](const char *el, size_t size, size_t pop_size) {
+            auto do_pop_while_doing_push = [&](int tid, size_t loop_num, size_t lt_size, size_t tt_count, size_t tt_size) -> size_t {
+                size_t ret = fifo.pop2([&](const char *el, size_t size, size_t pop_size) {
                     auto dst = store_buff[tid / 2].data() + pop_size;
                     auto src = el;
                     memcpy(dst, src, size);
-                }, max_pkg_size, local_total);
+                    if(size != 3) LOGD("%ld:%ld:%ld\t%s", size, tt_count, tt_size, fifo.dump().data());
+                }, max_pkg_size, lt_size);
+                // LOGD("tt_count: %ld\ttt_size: %ld", tt_count, tt_size);
                 return ret;
             };
-
-            // total_write_size = total_write_size * 4;
-            // store_size = total_write_size + ((index_seq.value) * max_pkg_size);
-            // std::vector<char> store_buff[index_seq.value];
-            // for(int i=0; i<index_seq.value; i++)
-            // {
-            //     store_buff[i].resize(store_size);
-            //     memset(store_buff[i].data(), 0xFF, store_buff[i].size());
-            // }
 
 // #ifdef DUMP
 //         std::atomic<bool> running{true};
@@ -220,33 +216,33 @@ struct RingBufferStressTest : public ::testing::Test
 //         }};
 // #endif
 
-            size_t real_total_write_size = tll::test::fifing<index_seq.value * 2>(do_push, do_pop_while_doing_push, [](int tid){ return (tid&1);}, resting, total_write_size, threads_lst, time_lst, total_count_lst);
-
+            auto rtt_size = tll::test::fifing<index_seq.value * 2>(do_push, do_pop_while_doing_push, [](int tid){ return (tid&1);}, resting, total_write_size, threads_lst, time_lst, total_count_lst);
+            size_t rts_push = rtt_size.first;
+            size_t rts_pop = rtt_size.second;
 // #ifdef DUMP
 //             running.store(false);
 //             dumpt.join();
 // #endif
 
-            if(fifo.isProfilingEnabled())
-            {
-                auto stats = fifo.statistics();
-                tll::cc::dumpStat<>(stats, time_lst.back());
-                LOGD("%ld\t%s", real_total_write_size, fifo.dump().data());
-            }
+            fifo.dumpStat(time_lst.back());
+            LOGD("%ld:%ld\t%s", rts_push, rts_pop, fifo.dump().data());
 
-            ASSERT_GE(real_total_write_size, total_write_size);
-            ASSERT_EQ(total_count_lst[total_count_lst.size() - 1], total_count_lst[total_count_lst.size() - 2]);
+            ASSERT_GE(rts_push, total_write_size);
+            ASSERT_EQ(rts_push, rts_pop);
+            size_t total_push_count = total_count_lst[total_count_lst.size() - 2];
+            size_t total_pop_count = total_count_lst.back();
+            ASSERT_EQ(total_push_count, total_pop_count);
 
             for(int i=0; i<index_seq.value; i++)
             {
-                for(int j=0;j<real_total_write_size; j+=max_pkg_size)
+                for(int j=0;j<rts_push; j+=max_pkg_size)
                 {
                     int cmp = memcmp(store_buff[i].data()+j, store_buff[i].data()+j+1, max_pkg_size - 1);
                     ASSERT_EQ(cmp, 0);
                 }
             }
 
-            total_size_lst.push_back(real_total_write_size);
+            total_size_lst.push_back(rts_push);
             // LOGD("Total time: %f (s)", time_lst.back());
         });
     }
@@ -407,8 +403,8 @@ TEST_F(RingBufferStressTest, DDRushConcurrentFixedSize)
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity};
         ConcurrentFixedSize<CONCURRENT_EXTEND>(fifo, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
-        fifo.reset();
-        ConcurrentFixedSize<CONCURRENT_EXTEND>(fifo, 2, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        // fifo.reset();
+        // ConcurrentFixedSize<CONCURRENT_EXTEND>(fifo, 2, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
     // threads_lst.clear();
     // {

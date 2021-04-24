@@ -17,20 +17,20 @@
 namespace tll::test {
 
 template <int num_of_threads>
-size_t fifing(
-        const std::function<size_t(int, size_t, size_t)> &do_push, /// true == producer
-        const std::function<size_t(int, size_t, size_t)> &do_pop, /// true == producer
+std::pair<size_t, size_t> fifing(
+        const std::function<size_t(int, size_t, size_t, size_t, size_t)> &do_push, /// true == producer
+        const std::function<size_t(int, size_t, size_t, size_t, size_t)> &do_pop, /// true == producer
         const std::function<bool(int)> &is_prod, /// true == producer
         const std::function<void()> &do_rest, /// std::this_thread::yield()
         size_t max_val,
         std::vector<int> &threads_lst,
         std::vector<double> &time_lst,
-        std::vector<size_t> &total_count_lst)
+        std::vector<size_t> &tt_count_lst)
 {
     static_assert(num_of_threads > 0);
     std::atomic<size_t> running_prod{0}, 
-        total_push_count{0}, total_pop_count{0},
-        total_push_size{0}, total_pop_size{0};
+        tt_push_count{0}, tt_pop_count{0},
+        tt_push_size{0}, tt_pop_size{0};
     tll::time::Counter<std::chrono::duration<double, std::ratio<1, 1>>> counter; /// second
     // double tt_time;
     counter.start();
@@ -39,19 +39,21 @@ size_t fifing(
     {
         const int kTid = omp_get_thread_num();
         size_t loop_num = 0;
-        size_t local_total = 0;
+        size_t lc_tt_size = 0;
         if(is_prod(kTid)) /// Producer
         {
             // LOGD("Producer: %d, cpu: %d", kTid, sched_getcpu());
             running_prod.fetch_add(1);
-            for(;total_push_size.load(std::memory_order_relaxed) < (max_val);)
+            for(;tt_push_size.load(std::memory_order_relaxed) < (max_val);)
             {
-                size_t ret = do_push(kTid, loop_num, local_total);
+                size_t ret = do_push(kTid, loop_num, lc_tt_size, 
+                                     tt_push_count.load(std::memory_order_relaxed),
+                                     tt_push_size.load(std::memory_order_relaxed));
                 if(ret)
                 {
-                    total_push_count.fetch_add(1, std::memory_order_relaxed);
-                    total_push_size.fetch_add(ret, std::memory_order_relaxed);
-                    local_total+=ret;
+                    tt_push_count.fetch_add(1, std::memory_order_relaxed);
+                    tt_push_size.fetch_add(ret, std::memory_order_relaxed);
+                    lc_tt_size+=ret;
                     NOP_LOOP();
                     do_rest();
                 }
@@ -65,16 +67,18 @@ size_t fifing(
             // LOGD("Consumer: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
             for(;
                 running_prod.load(std::memory_order_relaxed) > 0
-                || (total_pop_count.load(std::memory_order_relaxed) < total_push_count.load(std::memory_order_relaxed))
-                || (total_pop_size.load(std::memory_order_relaxed) < max_val)
+                || (tt_pop_count.load(std::memory_order_relaxed) < tt_push_count.load(std::memory_order_relaxed))
+                || (tt_pop_size.load(std::memory_order_relaxed) < max_val)
                 ;)
             {
-                size_t ret = do_pop(kTid, loop_num, local_total);
+                size_t ret = do_pop(kTid, loop_num, lc_tt_size, 
+                                    tt_pop_count.load(std::memory_order_relaxed),
+                                    tt_pop_size.load(std::memory_order_relaxed));
                 if(ret)
                 {
-                    total_pop_count.fetch_add(1, std::memory_order_relaxed);
-                    total_pop_size.fetch_add(ret, std::memory_order_relaxed);
-                    local_total+=ret;
+                    tt_pop_count.fetch_add(1, std::memory_order_relaxed);
+                    tt_pop_size.fetch_add(ret, std::memory_order_relaxed);
+                    lc_tt_size+=ret;
                     NOP_LOOP();
                     do_rest();
                 }
@@ -86,9 +90,9 @@ size_t fifing(
     }
     threads_lst.push_back(num_of_threads);
     time_lst.push_back(counter.elapsed().count());
-    if(do_push) total_count_lst.push_back(total_push_count.load());
-    if(do_pop) total_count_lst.push_back(total_pop_count.load());
-    return total_push_size.load();
+    if(do_push) tt_count_lst.push_back(tt_push_count.load());
+    if(do_pop) tt_count_lst.push_back(tt_pop_count.load());
+    return {tt_push_size.load(), tt_pop_size.load()};
 }
 
 void plot_data(const std::string &file_name, const std::string &title, const std::string &y_title, 
@@ -129,8 +133,9 @@ void plot_data(const std::string &file_name, const std::string &title, const std
     }
 
     ofs.flush();
-    (void)system(tll::util::stringFormat("./plothist.sh %s", file_name.data()).data());
-    (void)system(tll::util::stringFormat("./plot.sh %s", file_name.data()).data());
+
+    (void)(system(tll::util::stringFormat("./plothist.sh %s", file_name.data()).data()));
+    (void)(system(tll::util::stringFormat("./plot.sh %s", file_name.data()).data()));
 }
 
 } /// tll::test
