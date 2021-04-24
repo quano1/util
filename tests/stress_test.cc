@@ -13,9 +13,9 @@
 
 using namespace tll::lf2;
 
-#define PROFILING false
-#define SINGLE_EXTEND 1u
-#define SIMUL_EXTEND 0u
+#define PROFILING true
+#define SEQUENCE_EXTEND 1u
+#define CONCURRENT_EXTEND 0u
 // #define DUMP
 /// Should run with --gtest_filter=ccfifoBufferStressTest.* --gtest_repeat=10000
 struct RingBufferStressTest : public ::testing::Test
@@ -68,12 +68,14 @@ struct RingBufferStressTest : public ::testing::Test
 
     // static constexpr size_t kTotalWriteSize = 20 * 0x100000; /// 1 Mbs
     // static constexpr size_t kCapacity = kTotalWriteSize / 4;
-    static constexpr size_t kMaxPkgSize = 0x2;
-    static constexpr size_t kCapacity = 0x4000 * kMaxPkgSize;
+    // static constexpr size_t kMaxPkgSize = 0x3;
+    static constexpr size_t kCapacity = 0x400;
     // static constexpr size_t kWrap = 16;
 
     template <size_t extend, typename FIFO>
-    void RWFixedSize(FIFO &fifo, const std::function<void()> &resting, 
+    void SequenceFixedSize(FIFO &fifo,
+                     size_t max_pkg_size,
+                     const std::function<void()> &resting, 
                      std::vector<int> &threads_lst, 
                      std::vector<double> &time_lst, 
                      std::vector<size_t> &total_size_lst,
@@ -81,10 +83,10 @@ struct RingBufferStressTest : public ::testing::Test
     {
         tll::util::CallFuncInSeq<NUM_CPU, extend>( [&](auto index_seq)
         {
-            LOGD("Number of threads: %ld", index_seq.value);
             fifo.reserve(kCapacity * index_seq.value);
             size_t total_write_size = fifo.capacity() / 2;
-            size_t store_size = total_write_size + ((index_seq.value) * kMaxPkgSize);
+            size_t store_size = total_write_size + ((index_seq.value) * max_pkg_size);
+            LOGD("Number of threads: %ld\tpkg_size: %ld/%ld", index_seq.value, max_pkg_size, total_write_size);
             
             std::vector<char> store_buff[index_seq.value];
             for(int i=0; i<index_seq.value; i++)
@@ -94,9 +96,9 @@ struct RingBufferStressTest : public ::testing::Test
             }
 
             auto do_push = [&](int tid, size_t loop_num, size_t local_total) -> size_t {
-                size_t ret = fifo.push([](char *el, size_t size, int tid, char val, size_t push_size) {
+                size_t ret = fifo.push2([](char *el, size_t size, int tid, char val, size_t push_size) {
                     memset(el, (char)(tid), size);
-                }, kMaxPkgSize, tid, (char)loop_num, local_total);
+                }, max_pkg_size, tid, (char)loop_num, local_total);
                 return ret;
             };
 
@@ -105,7 +107,7 @@ struct RingBufferStressTest : public ::testing::Test
                     auto dst = store_buff[tid].data() + pop_size;
                     auto src = el;
                     memcpy(dst, src, size);
-                }, kMaxPkgSize, local_total);
+                }, max_pkg_size, local_total);
                 return ret;
             };
 
@@ -114,7 +116,7 @@ struct RingBufferStressTest : public ::testing::Test
             //         auto dst = store_buff[tid / 2].data() + pop_size;
             //         auto src = el;
             //         memcpy(dst, src, size);
-            //     }, kMaxPkgSize, local_total);
+            //     }, max_pkg_size, local_total);
             //     return ret;
             // };
 
@@ -130,15 +132,15 @@ struct RingBufferStressTest : public ::testing::Test
             {
                 auto stats = fifo.statistics();
                 tll::cc::dumpStat<1>(stats, time_lst.back());
-                // LOGD("%s", fifo.dump().data());
+                LOGD("%ld\t%s", real_total_write_size, fifo.dump().data());
             }
-            LOGD("Total time: %f (s)", time_lst.back());
+            // LOGD("Total time: %f (s)", time_lst.back());
 
             for(int i=0; i<index_seq.value; i++)
             {
-                for(int j=0;j<store_buff[i].size(); j+=kMaxPkgSize)
+                for(int j=0;j<real_total_write_size; j+=max_pkg_size)
                 {
-                    int cmp = memcmp(store_buff[i].data()+j, store_buff[i].data()+j+1, kMaxPkgSize - 1);
+                    int cmp = memcmp(store_buff[i].data()+j, store_buff[i].data()+j+1, max_pkg_size - 1);
                     ASSERT_EQ(cmp, 0);
                 }
             }
@@ -149,7 +151,7 @@ struct RingBufferStressTest : public ::testing::Test
                 tll::cc::dumpStat<2>(stats, time_lst.back());
                 // LOGD("%s", fifo.dump().data());
             }
-            LOGD("Total time: %f (s)", time_lst.back());
+            // LOGD("Total time: %f (s)", time_lst.back());
 
             // total_size_lst[total_size_lst.size() - 1] /= index_seq.value;
             // total_size_lst[total_size_lst.size() - 2] /= index_seq.value;
@@ -161,17 +163,19 @@ struct RingBufferStressTest : public ::testing::Test
     }
 
     template <size_t extend, typename FIFO>
-    void RWSimulFixedSize(FIFO &fifo, const std::function<void()> &resting,
+    void ConcurrentFixedSize(FIFO &fifo,
+                          size_t max_pkg_size,
+                          const std::function<void()> &resting,
                           std::vector<int> &threads_lst, 
                           std::vector<double> &time_lst, 
                           std::vector<size_t> &total_size_lst,
                           std::vector<size_t> &total_count_lst)
     {
         tll::util::CallFuncInSeq<NUM_CPU, extend>( [&](auto index_seq) {
-            LOGD("Number of threads: %ld", index_seq.value * 2);
             fifo.reserve(kCapacity * index_seq.value);
             size_t total_write_size = fifo.capacity() * 4;
-            size_t store_size = total_write_size + ((index_seq.value) * kMaxPkgSize);
+            size_t store_size = total_write_size + ((index_seq.value) * max_pkg_size);
+            LOGD("Number of threads: %ld\tpkg_size: %ld/%ld", index_seq.value * 2, max_pkg_size, total_write_size);
             
             std::vector<char> store_buff[index_seq.value];
             for(int i=0; i<index_seq.value; i++)
@@ -183,7 +187,7 @@ struct RingBufferStressTest : public ::testing::Test
             auto do_push = [&](int tid, size_t loop_num, size_t local_total) -> size_t {
                 size_t ret = fifo.push2([](char *el, size_t size, int tid, char val, size_t push_size) {
                     memset(el, (char)(tid), size);
-                }, kMaxPkgSize, tid, (char)loop_num, local_total);
+                }, max_pkg_size, tid, (char)loop_num, local_total);
                 return ret;
             };
 
@@ -192,12 +196,12 @@ struct RingBufferStressTest : public ::testing::Test
                     auto dst = store_buff[tid / 2].data() + pop_size;
                     auto src = el;
                     memcpy(dst, src, size);
-                }, kMaxPkgSize, local_total);
+                }, max_pkg_size, local_total);
                 return ret;
             };
 
             // total_write_size = total_write_size * 4;
-            // store_size = total_write_size + ((index_seq.value) * kMaxPkgSize);
+            // store_size = total_write_size + ((index_seq.value) * max_pkg_size);
             // std::vector<char> store_buff[index_seq.value];
             // for(int i=0; i<index_seq.value; i++)
             // {
@@ -223,26 +227,27 @@ struct RingBufferStressTest : public ::testing::Test
 //             dumpt.join();
 // #endif
 
-            ASSERT_EQ(total_count_lst[total_count_lst.size() - 1], total_count_lst[total_count_lst.size() - 2]);
-            ASSERT_GE(real_total_write_size, total_write_size);
-
-            for(int i=0; i<index_seq.value; i++)
-            {
-                for(int j=0;j<store_buff[i].size(); j+=kMaxPkgSize)
-                {
-                    int cmp = memcmp(store_buff[i].data()+j, store_buff[i].data()+j+1, kMaxPkgSize - 1);
-                    ASSERT_EQ(cmp, 0);
-                }
-            }
-
             if(fifo.isProfilingEnabled())
             {
                 auto stats = fifo.statistics();
                 tll::cc::dumpStat<>(stats, time_lst.back());
-                // LOGD("%s", fifo.dump().data());
+                LOGD("%ld\t%s", real_total_write_size, fifo.dump().data());
             }
+
+            ASSERT_GE(real_total_write_size, total_write_size);
+            ASSERT_EQ(total_count_lst[total_count_lst.size() - 1], total_count_lst[total_count_lst.size() - 2]);
+
+            for(int i=0; i<index_seq.value; i++)
+            {
+                for(int j=0;j<real_total_write_size; j+=max_pkg_size)
+                {
+                    int cmp = memcmp(store_buff[i].data()+j, store_buff[i].data()+j+1, max_pkg_size - 1);
+                    ASSERT_EQ(cmp, 0);
+                }
+            }
+
             total_size_lst.push_back(real_total_write_size);
-            LOGD("Total time: %f (s)", time_lst.back());
+            // LOGD("Total time: %f (s)", time_lst.back());
         });
     }
 
@@ -262,20 +267,20 @@ TEST_F(RingBufferStressTest, SlowSingleDDOnly)
     constexpr int kExtend = 3;
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x400};
-        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        SequenceFixedSize<kExtend>(fifo, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x1000};
-        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        SequenceFixedSize<kExtend>(fifo, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x2000};
-        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        SequenceFixedSize<kExtend>(fifo, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
     threads_lst.clear();
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x4000};
-        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        SequenceFixedSize<kExtend>(fifo, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
 
     // for(auto t : threads_lst) printf("%d ", t); printf("\n");
@@ -295,28 +300,28 @@ TEST_F(RingBufferStressTest, RushSingleDDOnly)
     constexpr int kExtend = 3;
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x400};
-        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        SequenceFixedSize<kExtend>(fifo, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
-    {
-        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x1000};
-        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
-    }
-    {
-        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x2000};
-        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
-    }
-    threads_lst.clear();
-    {
-        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x4000};
-        RWFixedSize<kExtend>(fifo, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
-    }
+    // {
+    //     ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x1000};
+    //     SequenceFixedSize<kExtend>(fifo, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+    // }
+    // {
+    //     ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x2000};
+    //     SequenceFixedSize<kExtend>(fifo, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+    // }
+    // threads_lst.clear();
+    // {
+    //     ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x4000};
+    //     SequenceFixedSize<kExtend>(fifo, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+    // }
 
     // for(auto t : threads_lst) printf("%d ", t); printf("\n");
 
 /// Speed in Mbs
 /// Completing time in seconds
-    columns_lst = {"W 0x400", "R 0x400", "W 0x1000", "R 0x1000", "W 0x2000", "R 0x2000", "W 0x4000", "R 0x4000"};
-    plotting();
+    // columns_lst = {"W 0x400", "R 0x400", "W 0x1000", "R 0x1000", "W 0x2000", "R 0x2000", "W 0x4000", "R 0x4000"};
+    // plotting();
 }
 
 TEST_F(RingBufferStressTest, SlowSingle)
@@ -328,12 +333,12 @@ TEST_F(RingBufferStressTest, SlowSingle)
 
     {
         ring_fifo_dd<char, PROFILING> fifo_dd{kCapacity};
-        RWFixedSize<SINGLE_EXTEND>(fifo_dd, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        SequenceFixedSize<SEQUENCE_EXTEND>(fifo_dd, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
     threads_lst.clear();
     {
         ring_fifo_ss<char, PROFILING> fifo_ss{kCapacity};
-        RWFixedSize<SINGLE_EXTEND>(fifo_ss, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        SequenceFixedSize<SEQUENCE_EXTEND>(fifo_ss, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
 
     // for(auto t : threads_lst) printf("%d ", t); printf("\n");
@@ -352,12 +357,12 @@ TEST_F(RingBufferStressTest, RushSingle)
 
     {
         ring_fifo_dd<char, PROFILING> fifo_dd{kCapacity};
-        RWFixedSize<SINGLE_EXTEND>(fifo_dd, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        SequenceFixedSize<SEQUENCE_EXTEND>(fifo_dd, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
     threads_lst.clear();
     {
         ring_fifo_ss<char, PROFILING> fifo_ss{kCapacity};
-        RWFixedSize<SINGLE_EXTEND>(fifo_ss, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        SequenceFixedSize<SEQUENCE_EXTEND>(fifo_ss, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
 
     // for(auto t : threads_lst) printf("%d ", t); printf("\n");
@@ -377,12 +382,12 @@ TEST_F(RingBufferStressTest, SlowSimultaneously)
 
     {
         ring_fifo_dd<char, PROFILING> fifo_dd{kCapacity};
-        RWSimulFixedSize<SIMUL_EXTEND>(fifo_dd, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        ConcurrentFixedSize<CONCURRENT_EXTEND>(fifo_dd, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
     threads_lst.clear();
     {
         ring_fifo_ss<char, PROFILING> fifo_ss{kCapacity};
-        RWSimulFixedSize<SIMUL_EXTEND>(fifo_ss, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        ConcurrentFixedSize<CONCURRENT_EXTEND>(fifo_ss, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
 
     // for(auto t : threads_lst) printf("%d ", t); printf("\n");
@@ -390,6 +395,32 @@ TEST_F(RingBufferStressTest, SlowSimultaneously)
 /// Speed in Mbs
 /// Completing time in seconds
     columns_lst = {"dd", "ss"};
+}
+
+TEST_F(RingBufferStressTest, DDRushConcurrentFixedSize)
+{
+    /// prepare headers
+    auto resting = [](){
+        std::this_thread::yield();
+    };
+
+    {
+        ring_fifo_dd<char, PROFILING> fifo{kCapacity};
+        ConcurrentFixedSize<CONCURRENT_EXTEND>(fifo, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        fifo.reset();
+        ConcurrentFixedSize<CONCURRENT_EXTEND>(fifo, 2, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+    }
+    // threads_lst.clear();
+    // {
+    //     ring_fifo_ss<char, PROFILING> fifo_ss{kCapacity};
+    //     ConcurrentFixedSize<CONCURRENT_EXTEND>(fifo_ss, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+    // }
+
+    // for(auto t : threads_lst) printf("%d ", t); printf("\n");
+
+/// Speed in Mbs
+/// Completing time in seconds
+    // columns_lst = {"dd", "ss"};
 }
 
 TEST_F(RingBufferStressTest, RushSimultaneously)
@@ -401,12 +432,12 @@ TEST_F(RingBufferStressTest, RushSimultaneously)
 
     {
         ring_fifo_dd<char, PROFILING> fifo_dd{kCapacity};
-        RWSimulFixedSize<SIMUL_EXTEND>(fifo_dd, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        ConcurrentFixedSize<CONCURRENT_EXTEND>(fifo_dd, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
     threads_lst.clear();
     {
         ring_fifo_ss<char, PROFILING> fifo_ss{kCapacity};
-        RWSimulFixedSize<SIMUL_EXTEND>(fifo_ss, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+        ConcurrentFixedSize<CONCURRENT_EXTEND>(fifo_ss, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
     }
 
     // for(auto t : threads_lst) printf("%d ", t); printf("\n");

@@ -161,7 +161,7 @@ struct ccfifoBufferStressTest : public ::testing::Test
     // static constexpr size_t kCapacity = kTotalWriteSize / 4;
     static constexpr size_t kCapacity = 0x100; /// 1 Mbs
     static constexpr size_t kTotalWriteSize = 0x10 * kCapacity;
-    static constexpr size_t kMaxPkgSize = 0xF;
+    static constexpr size_t kMaxPkgSize = 0x3;
     // static constexpr size_t kWrap = 16;
 
     template <tll::lf2::Mode prod_mode, tll::lf2::Mode cons_mode, size_t extend>
@@ -248,6 +248,7 @@ struct ccfifoBufferStressTest : public ::testing::Test
             }
             double tt_time = counter.elapse().count();
             auto ttps = total_push_size.load(std::memory_order_relaxed);
+#define DUMP
 #ifdef DUMP
             auto stats = fifo.statistics();
             tll::cc::dumpStat<>(stats, tt_time);
@@ -269,7 +270,7 @@ struct ccfifoBufferStressTest : public ::testing::Test
                     if(ret != 0)
                     {
                         LOGD("[%d:%d]", i, j);
-                        for(int _i=j; _i<j+kMaxPkgSize; _i++) printf("%2d:", store_buff[i][_i]);
+                        for(int _i=j; _i<j+kMaxPkgSize; _i++) printf("%2x:", store_buff[i][_i]);
                             printf("\n");
                         ASSERT_EQ(ret, 0);
                     }

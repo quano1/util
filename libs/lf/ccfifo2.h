@@ -175,15 +175,16 @@ public:
         size_t cex = consumer_.exit_id().load(std::memory_order_relaxed);
 
         size_t wm = water_mark_.load(std::memory_order_relaxed);
+        size_t wmh = water_mark_head_.load(std::memory_order_relaxed);
 
         return util::stringFormat("(p/(%ld:%ld) (%ld:%ld)) "
                                   "(c/(%ld:%ld) (%ld:%ld)) "
-                                  "(wm/%ld:%ld sz/%ld) "
+                                  "(wm/%ld:%ld:%ld sz/%ld) "
                                   "(pe/%ld:%ld:%ld) "
                                   "(ce/%ld:%ld:%ld) ",
             wrap(ph), wrap(pt), ph, pt,
             wrap(ch), wrap(ct), ch, ct,
-            wrap(wm), wm, capacity_,
+            wrap(wm), wm, wmh, capacity_,
             peh, pet, pex,
             ceh, cet, cex);
     }
@@ -581,9 +582,8 @@ public:
                         // marker.index_tail().store(next_index + size, std::memory_order_relaxed);
                         entry_id++;
                         next_exit_id = marker.exit_id_list(wrap(entry_id, num_threads_)).load(std::memory_order_relaxed);
-                        // LOGD(" -(%ld)\t%ld/%ld\t%ld/%ld/%ld\t%s", kIdx, 
+                        // LOGD(" -(%ld)\t%ld:%ld\t%s", entry_id, 
                         //      next_exit_id, marker.exit_id().load(),
-                        //      curr_index, next_index, size, 
                         //      dump().data());
                     }
 
@@ -595,7 +595,9 @@ public:
                     {
                         marker.index_tail().store(wmh, std::memory_order_relaxed);
                         water_mark_.store(wmh, std::memory_order_relaxed);
-                        LOGD("%ld\t%s", next_index, dump().data());
+                        LOGD(" -(%ld:%ld)\t%ld:%ld\t%s", entry_id, next_index,
+                                 next_exit_id, marker.exit_id().load(),
+                                 dump().data());
                     }
 
                     marker.index_tail().store(next_index, std::memory_order_relaxed);
