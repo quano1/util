@@ -470,6 +470,7 @@ public:
                 if(exit_id >= curr_exit_id)
                 {
                     new_exit_id = exit_id + 1;
+                    if(exit_id == curr_exit_id || exit_id & 1 == 0)
                     while(true)
                     {
                         old_exit_id = marker.exit_id_list(wrap(new_exit_id, num_threads_)).load(std::memory_order_relaxed);

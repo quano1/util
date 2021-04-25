@@ -13,7 +13,7 @@
 
 using namespace tll::lf2;
 
-static constexpr size_t kCapacity = 0x400;
+static constexpr size_t kCapacity = 0x1000;
 
 #define PROFILING true
 #define SEQUENCE_EXTEND 1u
@@ -67,6 +67,24 @@ struct StressTestRingBuffer : public ::testing::Test
                   time_lst
                   );
     }
+
+    // template <typename Stat>
+    // void plottingStat(const std::vector<Stat> &stat_lst)
+    // {
+    //     columns_lst.clear();
+    //     std::vector<> data;
+    //     for(int i=0; i<stat_lst.size(); i++)
+    //     {
+    //         columns_lst.push_back(std::to_string("i"));
+    //     }
+
+    //     tll::test::plot_data(tll::util::stringFormat("%s_time.dat", ::testing::UnitTest::GetInstance()->current_test_info()->name()), "Lower better", "Relative completing time in seconds",
+    //               columns_lst,
+    //               threads_lst,
+    //               time_lst
+    //               );
+
+    // }
 
     template <size_t extend, typename FIFO>
     void SequenceFixedSize(FIFO &fifo,
@@ -373,7 +391,7 @@ struct StressTestRingBuffer : public ::testing::Test
         threads_lst.clear();
         tll::util::CallFuncInSeq<NUM_CPU, extend>( [&](auto index_seq) {
             fifo.reserve(kCapacity * index_seq.value);
-            size_t total_write_size = fifo.capacity() * 0x100;
+            size_t total_write_size = fifo.capacity() * 2 * index_seq.value;
             size_t store_size = total_write_size + ((index_seq.value) * max_pkg_size);
             LOGD("Number of threads: %ld\tpkg_size: %ld:%ld:%ld", index_seq.value, max_pkg_size, total_write_size, total_write_size/max_pkg_size);
             
@@ -520,29 +538,29 @@ struct StressTestRingBuffer : public ::testing::Test
 //     columns_lst = {"dd push", "dd pop", "ss push", "ss pop"};
 // }
 
-// TEST_F(StressTestRingBuffer, RushSingle)
-// {
-//     /// prepare headers
-//     auto resting = [](){
-//         std::this_thread::yield();
-//     };
+TEST_F(StressTestRingBuffer, RushSequence)
+{
+    /// prepare headers
+    auto resting = [](){
+        std::this_thread::yield();
+    };
 
-//     {
-//         ring_fifo_dd<char, PROFILING> fifo_dd{kCapacity};
-//         SequenceFixedSize<SEQUENCE_EXTEND>(fifo_dd, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
-//     }
-//     threads_lst.clear();
-//     {
-//         ring_fifo_ss<char, PROFILING> fifo_ss{kCapacity};
-//         SequenceFixedSize<SEQUENCE_EXTEND>(fifo_ss, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
-//     }
+    {
+        ring_fifo_dd<char, PROFILING> fifo_dd{kCapacity};
+        SequenceFixedSize2<0u>(fifo_dd, 3, resting);
+    }
+    {
+        ring_fifo_ss<char, PROFILING> fifo_ss{kCapacity};
+        SequenceFixedSize<0u>(fifo_ss, 3, resting);
+    }
 
-//     // for(auto t : threads_lst) printf("%d ", t); printf("\n");
+    // for(auto t : threads_lst) printf("%d ", t); printf("\n");
 
-// /// Speed in Mbs
-// /// Completing time in seconds
-//     columns_lst = {"dd push", "dd pop", "ss push", "ss pop"};
-// }
+/// Speed in Mbs
+/// Completing time in seconds
+    columns_lst = {"dd push", "dd pop", "ss push", "ss pop"};
+    plotting();
+}
 
 // TEST_F(StressTestRingBuffer, SSRushSequence)
 // {
@@ -566,7 +584,7 @@ TEST_F(StressTestRingBuffer, DDRushConcurrent)
         std::this_thread::yield();
     };
 
-    constexpr int kExtend = 5u;
+    constexpr int kExtend = 1u;
     constexpr size_t kPkgSize = 3;
 
     // {
@@ -587,8 +605,8 @@ TEST_F(StressTestRingBuffer, DDRushConcurrent)
 
 /// Speed in Mbs
 /// Completing time in seconds
-    columns_lst = {"con", "con2"};
-    plotting();
+    // columns_lst = {"con", "con2"};
+    // plotting();
 }
 
 TEST_F(StressTestRingBuffer, DDRushSequence)
@@ -597,31 +615,46 @@ TEST_F(StressTestRingBuffer, DDRushSequence)
         std::this_thread::yield();
     };
 
-    constexpr int kExtend = 7u;
+    constexpr int kExtend = 1u;
     constexpr size_t kPkgSize = 2;
 
-    // {
-    //     ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x400};
-    //     SequenceFixedSize<kExtend>(fifo, kPkgSize, resting);
-    // }
+    std::vector<Statistics> stat_lst;
+
+    {
+        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x40};
+        SequenceFixedSize2<kExtend>(fifo, kPkgSize, resting);
+        stat_lst.push_back(fifo.statistics());
+    }
+
+    {
+        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x80};
+        SequenceFixedSize2<kExtend>(fifo, kPkgSize, resting);
+        stat_lst.push_back(fifo.statistics());
+    }
 
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x100};
         SequenceFixedSize2<kExtend>(fifo, kPkgSize, resting);
+        stat_lst.push_back(fifo.statistics());
     }
-    // {
-    //     ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x1000};
-    //     SequenceFixedSize<kExtend>(fifo, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
-    // }
-    // {
-    //     ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x2000};
-    //     SequenceFixedSize<kExtend>(fifo, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
-    // }
-    // threads_lst.clear();
-    // {
-    //     ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x4000};
-    //     SequenceFixedSize<kExtend>(fifo, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
-    // }
+
+    {
+        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x200};
+        SequenceFixedSize2<kExtend>(fifo, kPkgSize, resting);
+        stat_lst.push_back(fifo.statistics());
+    }
+
+    {
+        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x400};
+        SequenceFixedSize2<kExtend>(fifo, kPkgSize, resting);
+        stat_lst.push_back(fifo.statistics());
+    }
+
+    {
+        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x1000};
+        SequenceFixedSize2<kExtend>(fifo, kPkgSize, resting);
+        stat_lst.push_back(fifo.statistics());
+    }
 
     // for(auto t : threads_lst) printf("%d ", t); printf("\n");
 
@@ -629,7 +662,7 @@ TEST_F(StressTestRingBuffer, DDRushSequence)
 /// Completing time in seconds
     // columns_lst = {"W 0x400", "R 0x400", "W 0x1000", "R 0x1000", "W 0x2000", "R 0x2000", "W 0x4000", "R 0x4000"};
     // columns_lst = {"seq W", "seq R", "seq2 W", "seq2 R"};
-    // plotting();
+    // plottingStat(stat_lst);
 }
 
 #endif

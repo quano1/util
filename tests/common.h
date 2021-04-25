@@ -119,7 +119,7 @@ void plot_data(const std::string &file_name, const std::string &title, const std
 {
     std::ofstream ofs{file_name, std::ios::out | std::ios::binary};
     assert(ofs.is_open());
-    assert(x_axes.size() == column_lst.size());
+    // assert(x_axes.size() == column_lst.size());
     assert(x_axes.size() * column_lst.size() == data.size());
 
     // ofs << tll::util::stringFormat("#%d\n", column_lst.size());
@@ -130,8 +130,8 @@ void plot_data(const std::string &file_name, const std::string &title, const std
     ofs << "#" << col_size << "\n";
     ofs << "#" << NUM_CPU << "\n";
     ofs << "#" << title << "\n";
-    ofs << "#Number of threads\n";
     ofs << "#" << y_title << "\n";
+    ofs << "#Number of threads\n";
     ofs << "\"\"\t";
     for(int i=0; i<col_size; i++)
     {
