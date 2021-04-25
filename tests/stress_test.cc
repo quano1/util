@@ -13,7 +13,7 @@
 
 using namespace tll::lf2;
 
-#define PROFILING false
+#define PROFILING true
 #define SEQUENCE_EXTEND 1u
 #define CONCURRENT_EXTEND 0u
 // #define DUMP
@@ -103,7 +103,7 @@ struct RingBufferStressTest : public ::testing::Test
             };
 
             auto do_pop = [&](int tid, size_t loop_num, size_t lt_size, size_t tt_count, size_t tt_size) -> size_t {
-                size_t ret = fifo.pop([&](const char *el, size_t size, size_t pop_size) {
+                size_t ret = fifo.pop2([&](const char *el, size_t size, size_t pop_size) {
                     auto dst = store_buff[tid].data() + pop_size;
                     auto src = el;
                     memcpy(dst, src, size);
@@ -287,13 +287,13 @@ TEST_F(RingBufferStressTest, SlowSingleDDOnly)
     plotting();
 }
 
-TEST_F(RingBufferStressTest, RushSingleDDOnly)
+TEST_F(RingBufferStressTest, DDRushSequence)
 {
     auto resting = [](){
         std::this_thread::yield();
     };
 
-    constexpr int kExtend = 3;
+    constexpr int kExtend = 1u;
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x400};
         SequenceFixedSize<kExtend>(fifo, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
@@ -318,6 +318,19 @@ TEST_F(RingBufferStressTest, RushSingleDDOnly)
 /// Completing time in seconds
     // columns_lst = {"W 0x400", "R 0x400", "W 0x1000", "R 0x1000", "W 0x2000", "R 0x2000", "W 0x4000", "R 0x4000"};
     // plotting();
+}
+
+TEST_F(RingBufferStressTest, SSRushSequence)
+{
+    auto resting = [](){
+        std::this_thread::yield();
+    };
+
+    constexpr int kExtend = 0u;
+    {
+        ring_fifo_ss<char, PROFILING> fifo{kCapacity, 0x400};
+        SequenceFixedSize<kExtend>(fifo, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
+    }
 }
 
 TEST_F(RingBufferStressTest, SlowSingle)
@@ -393,7 +406,7 @@ TEST_F(RingBufferStressTest, SlowSimultaneously)
     columns_lst = {"dd", "ss"};
 }
 
-TEST_F(RingBufferStressTest, DDRushConcurrentFixedSize)
+TEST_F(RingBufferStressTest, DDRushConcurrent)
 {
     /// prepare headers
     auto resting = [](){

@@ -672,56 +672,55 @@ public:
     }
 
     template <Mode mode>
-    bool completePush2(size_t entry_id, size_t curr_index, size_t next_index, size_t size)
+    bool completePush2(size_t exit_id, size_t curr_index, size_t next_index, size_t size)
     {
         auto &marker = producer_;
         if(mode == mode::dense)
         {
-            if(entry_id >= (marker.exit_id().load(std::memory_order_relaxed) + num_threads_)) return false;
+            if(exit_id >= (marker.exit_id().load(std::memory_order_relaxed) + num_threads_)) return false;
+            size_t const kIdx = exit_id;
 
-            // size_t t_pos = wrap(entry_id, num_threads_);
-            // marker.size_list(wrap(entry_id, num_threads_)).store(size);
-            // marker.curr_index_list(wrap(exit_id, num_threads_)).store(curr_index);
-            
-            size_t const kIdx = entry_id;
-            size_t next_exit_id = marker.exit_id_list(wrap(entry_id, num_threads_)).load(std::memory_order_relaxed);
+            size_t old_exit_id = marker.exit_id_list(wrap(kIdx, num_threads_)).load(std::memory_order_relaxed);
+            size_t new_exit_id=0;
 
-            // LOGD("%ld/%ld %ld/%ld %s", curr_index, next_index, next_exit_id, entry_id, dump().data());
+            // LOGD("%ld/%ld %ld/%ld %s", curr_index, next_index, old_exit_id, exit_id, dump().data());
             if(next_index >= this->next(curr_index))
             {
                 water_mark_head_.store(curr_index, std::memory_order_relaxed);
             }
-                    marker.next_index_list(wrap(entry_id, num_threads_)).store(next_index + size);
+            marker.next_index_list(wrap(exit_id, num_threads_)).store(next_index + size);
 
             for(;;marker.comp_miss_count.fetch_add(1, std::memory_order_relaxed))
             {
-                // size_t next_exit_id;
                 size_t curr_exit_id = marker.exit_id().load(std::memory_order_relaxed);
 
-                // LOGD(">(%ld/%ld)\t{%ld/%ld}", kIdx, entry_id, curr_exit_id, next_exit_id);
-                if(entry_id < curr_exit_id)
+                // LOGD(">%ld:%ld\t%ld:%ld", kIdx, curr_exit_id, exit_id, old_exit_id);
+                
+                if(exit_id < curr_exit_id)
                 {
                     break;
                 }
-                else if(entry_id > curr_exit_id)
+                else if(exit_id > curr_exit_id)
                 {
-                    // marker.size_list(wrap(entry_id, num_threads_)).store(size);
+                    new_exit_id = exit_id + 1;
+                    // LOGD(" !%ld:%ld\t%ld:%ld:%ld\t%s", kIdx, curr_exit_id, exit_id, old_exit_id, new_exit_id, dump().data());
                 }
-                else /// if (entry_id == curr_exit_id)
+                else /// if (exit_id == curr_exit_id)
                 {
-                    // marker.size_list(wrap(entry_id, num_threads_)).store(size);
-                    // marker.next_index_list(wrap(entry_id, num_threads_)).store(next_index + size);
-                    next_exit_id = curr_exit_id + 1;
-                    while((entry_id - curr_exit_id < num_threads_) && (next_exit_id > curr_exit_id))
+                    new_exit_id = exit_id + 1;
+                    while(true)
                     {
-                        entry_id++;
-                        next_exit_id = marker.exit_id_list(wrap(entry_id, num_threads_)).load(std::memory_order_relaxed);
-                        // LOGD(" -(%ld)\t%ld:%ld\t%s", entry_id, 
-                        //      next_exit_id, marker.exit_id().load(),
-                        //      dump().data());
+                        old_exit_id = marker.exit_id_list(wrap(new_exit_id, num_threads_)).load(std::memory_order_relaxed);
+
+                        if(old_exit_id > new_exit_id)
+                        {
+                            new_exit_id = old_exit_id;
+                        }
+                        else
+                            break;
                     }
 
-                    next_index = marker.next_index_list(wrap(entry_id - 1, num_threads_)).load(std::memory_order_relaxed);
+                    next_index = marker.next_index_list(wrap(new_exit_id - 1, num_threads_)).load(std::memory_order_relaxed);
 
                     size_t wmh = water_mark_head_.load(std::memory_order_relaxed);
                     if((water_mark_.load(std::memory_order_relaxed) < wmh) 
@@ -729,24 +728,16 @@ public:
                     {
                         marker.index_tail().store(wmh, std::memory_order_relaxed);
                         water_mark_.store(wmh, std::memory_order_relaxed);
-                        // LOGD(" -(%ld:%ld)\t%ld:%ld\t%s", entry_id, next_index,
-                        //          next_exit_id, marker.exit_id().load(),
-                        //          dump().data());
                     }
 
                     marker.index_tail().store(next_index, std::memory_order_relaxed);
-                    // marker.index_tail().store(next_index + size, std::memory_order_relaxed);
-                    // LOGD("store %ld", entry_id);
-                    marker.exit_id().store(entry_id, std::memory_order_relaxed);
+                    exit_id = new_exit_id;
+                    marker.exit_id().store(exit_id, std::memory_order_relaxed);
+                    // LOGD(" =%ld:%ld\t%ld:%ld:%ld\t%s", kIdx, curr_exit_id, exit_id, old_exit_id, new_exit_id, dump().data());
                 }
 
-                // LOGD(" (%ld)\t%ld/%ld\t%s", 
-                //          kIdx, 
-                //          next_exit_id, entry_id, 
-                //          dump().data());
-                if(marker.exit_id_list(wrap(entry_id, num_threads_)).compare_exchange_strong(next_exit_id, entry_id, std::memory_order_relaxed, std::memory_order_relaxed)) break;
-
-                // LOGD(" M(%ld/%ld) {%ld}", kIdx, entry_id, marker.exit_id().load(std::memory_order_relaxed));
+                if(marker.exit_id_list(wrap(exit_id, num_threads_)).compare_exchange_strong(old_exit_id, new_exit_id, std::memory_order_relaxed, std::memory_order_relaxed)) break;
+                // LOGD(" M%ld:%ld\t%ld:%ld:%ld\t%s", kIdx, curr_exit_id, exit_id, old_exit_id, new_exit_id, dump().data());
             }
         }
         else
