@@ -8,12 +8,15 @@
 #include <thread>
 #include <chrono>
 #include <fstream>
+#include <cassert>
+#include <condition_variable>
+#include <mutex>
 
 #include <omp.h>
 #include "../libs/util.h"
 #include "../libs/counter.h"
 
-#define NOP_LOOP() for(int i__=0; i__<0x400; i__++) __asm__("nop")
+#define NOP_LOOP() for(int i__=0; i__<0x100; i__++) __asm__("nop")
 namespace tll::test {
 
 template <int num_of_threads>
@@ -22,6 +25,7 @@ std::pair<size_t, size_t> fifing(
         const std::function<size_t(int, size_t, size_t, size_t, size_t)> &do_pop, /// true == producer
         const std::function<bool(int)> &is_prod, /// true == producer
         const std::function<void()> &do_rest, /// std::this_thread::yield()
+        const std::function<void()> &do_dump,
         size_t max_val,
         std::vector<int> &threads_lst,
         std::vector<double> &time_lst,
@@ -33,6 +37,16 @@ std::pair<size_t, size_t> fifing(
         tt_push_size{0}, tt_pop_size{0};
     tll::time::Counter<std::chrono::duration<double, std::ratio<1, 1>>> counter; /// second
     // double tt_time;
+    std::atomic<bool> is_done{false};
+    std::condition_variable cv;
+    std::mutex cv_m;
+    std::thread dumpt = std::thread{[&](){
+        std::unique_lock<std::mutex> lk(cv_m);
+        while(! cv.wait_for(lk, std::chrono::milliseconds(3000), [&]{return is_done.load();}) )
+        {
+            do_dump();
+        }
+    }};
     counter.start();
     
     #pragma omp parallel num_threads ( num_of_threads )
@@ -88,8 +102,11 @@ std::pair<size_t, size_t> fifing(
         }
 
     }
-    threads_lst.push_back(num_of_threads);
     time_lst.push_back(counter.elapsed().count());
+    is_done.store(true);
+    cv.notify_all();
+    dumpt.join();
+    threads_lst.push_back(num_of_threads);
     if(do_push) tt_count_lst.push_back(tt_push_count.load());
     if(do_pop) tt_count_lst.push_back(tt_pop_count.load());
     return {tt_push_size.load(), tt_pop_size.load()};
@@ -102,6 +119,8 @@ void plot_data(const std::string &file_name, const std::string &title, const std
 {
     std::ofstream ofs{file_name, std::ios::out | std::ios::binary};
     assert(ofs.is_open());
+    assert(x_axes.size() == column_lst.size());
+    assert(x_axes.size() * column_lst.size() == data.size());
 
     // ofs << tll::util::stringFormat("#%d\n", column_lst.size());
     // ofs << tll::util::stringFormat("#%d\n", NUM_CPU);
