@@ -34,6 +34,7 @@ struct StressTestRingBuffer : public ::testing::Test
     void TearDown()
     {
         // plotting();
+        LOGD("");
     }
 
     static void SetUpTestCase()
@@ -51,7 +52,7 @@ struct StressTestRingBuffer : public ::testing::Test
             speed_lst[i*2+1] = (total_size_lst[i] * 1.f / time_lst[i*2+1]) / 0x100000; /// pop
         }
 
-        tll::test::plot_data(tll::util::stringFormat("%s_speed.dat", ::testing::UnitTest::GetInstance()->current_test_info()->name()), "Higher better", "Speed in Mbs",
+        tll::test::plot_data(tll::util::stringFormat("%s_speed.dat", ::testing::UnitTest::GetInstance()->current_test_info()->name()), tll::util::stringFormat("Higher better (CPU: %d)", NUM_CPU), "Speed in Mbs",
                   column_lst,
                   threads_lst, 
                   speed_lst 
@@ -61,7 +62,7 @@ struct StressTestRingBuffer : public ::testing::Test
         {
             time_lst[i] /= threads_lst[i/column_lst.size()];
         }
-        tll::test::plot_data(tll::util::stringFormat("%s_time.dat", ::testing::UnitTest::GetInstance()->current_test_info()->name()), "Lower better", "Relative completing time in seconds",
+        tll::test::plot_data(tll::util::stringFormat("%s_time.dat", ::testing::UnitTest::GetInstance()->current_test_info()->name()), tll::util::stringFormat("Lower better (CPU: %d)", NUM_CPU), "Relative completing time in seconds",
                   column_lst,
                   threads_lst,
                   time_lst
@@ -309,7 +310,7 @@ struct StressTestRingBuffer : public ::testing::Test
         threads_lst.clear();
         tll::util::CallFuncInSeq<NUM_CPU, extend>( [&](auto index_seq) {
             fifo.reserve(kCapacity * index_seq.value);
-            size_t total_write_size = fifo.capacity() * 0x100;
+            size_t total_write_size = fifo.capacity() * 2;
             size_t store_size = total_write_size + ((index_seq.value) * max_pkg_size);
             LOGD("Number of threads: %ld\tpkg_size: %ld:%ld:%ld", index_seq.value, max_pkg_size, total_write_size, total_write_size/max_pkg_size);
             
@@ -619,7 +620,7 @@ TEST_F(StressTestRingBuffer, DDRushConcurrent)
         std::this_thread::yield();
     };
 
-    constexpr int kExtend = 1u;
+    constexpr int kExtend = 0u;
     constexpr size_t kPkgSize = 3;
 
     // {
@@ -628,8 +629,18 @@ TEST_F(StressTestRingBuffer, DDRushConcurrent)
     // }
 
     {
-        ring_fifo_dd<char, PROFILING> fifo{kCapacity};
-        ConcurrentFixedSize2<kExtend>(fifo, kPkgSize, resting);
+        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x100};
+        ConcurrentFixedSize<kExtend>(fifo, kPkgSize, resting);
+    }
+
+    {
+        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x200};
+        ConcurrentFixedSize<kExtend>(fifo, kPkgSize, resting);
+    }
+
+    {
+        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x400};
+        ConcurrentFixedSize<kExtend>(fifo, kPkgSize, resting);
     }
     // {
     //     ring_fifo_ss<char, PROFILING> fifo_ss{kCapacity};
@@ -641,7 +652,7 @@ TEST_F(StressTestRingBuffer, DDRushConcurrent)
 /// Speed in Mbs
 /// Completing time in seconds
     // column_lst = {"con", "con2"};
-    // plotting();
+    plotting();
 }
 
 TEST_F(StressTestRingBuffer, DDRushSequence)
@@ -681,12 +692,6 @@ TEST_F(StressTestRingBuffer, DDRushSequence)
 
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x400};
-        SequenceFixedSize2<kExtend>(fifo, kPkgSize, resting);
-        stat_lst.push_back(fifo.statistics());
-    }
-
-    {
-        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x1000};
         SequenceFixedSize2<kExtend>(fifo, kPkgSize, resting);
         stat_lst.push_back(fifo.statistics());
     }
