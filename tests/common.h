@@ -11,6 +11,8 @@
 #include <cassert>
 #include <condition_variable>
 #include <mutex>
+#include <cstring>
+#include <string>
 
 #include <omp.h>
 #include "../libs/util.h"
@@ -113,18 +115,26 @@ std::pair<size_t, size_t> fifing(
 }
 
 void plot_data(const std::string &file_name, const std::string &title, const std::string &y_title, 
-                const std::vector<std::string> column_lst,
-                const std::vector<int> x_axes,
-                const std::vector<double> data)
+                std::vector<std::string> &column_lst,
+                const std::vector<int> &x_axes,
+                const std::vector<double> &data)
 {
     std::ofstream ofs{file_name, std::ios::out | std::ios::binary};
     assert(ofs.is_open());
     // assert(x_axes.size() == column_lst.size());
-    assert(x_axes.size() * column_lst.size() == data.size());
+    // assert(x_axes.size() * column_lst.size() == data.size());
+    size_t col_size = data.size() / x_axes.size();
+    if(column_lst.size() < col_size)
+    {
+        for(size_t i=column_lst.size(); i<col_size; i++)
+        {
+            column_lst.push_back(std::to_string(i));
+        }
+    }
 
     // ofs << tll::util::stringFormat("#%d\n", column_lst.size());
     // ofs << tll::util::stringFormat("#%d\n", NUM_CPU);
-    auto col_size = column_lst.size();
+    // auto col_size = column_lst.size();
     auto x_size = data.size() / col_size;
 
     ofs << "#" << col_size << "\n";

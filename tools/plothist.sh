@@ -44,6 +44,7 @@ for input in "$@"; do
     echo "set y2tics" >> .plothist.gpl;
     echo "set grid" >> .plothist.gpl;
     echo "set key right top" >> .plothist.gpl;
+    # echo "set key reverse Left outside" >> .plothist.gpl;
 
     echo "set style data histogram" >> .plothist.gpl;
     echo "set style histogram cluster gap 1" >> .plothist.gpl;

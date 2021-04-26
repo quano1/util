@@ -451,7 +451,7 @@ public:
             size_t const kIdx = exit_id;
 
             size_t old_exit_id = marker.exit_id_list(wrap(kIdx, num_threads_)).load(std::memory_order_relaxed);
-            size_t new_exit_id=0;
+            size_t new_exit_id=exit_id + 1;
 
             // LOGD("%d\t%ld:%ld", is_producer, next_index, this->next(curr_index));
             if(is_producer && next_index >= this->next(curr_index))
@@ -469,7 +469,7 @@ public:
                 // LOGD(">%ld:%ld\t%ld:%ld", kIdx, curr_exit_id, exit_id, old_exit_id);
                 if(exit_id >= curr_exit_id)
                 {
-                    new_exit_id = exit_id + 1;
+                    // new_exit_id = exit_id + 1;
                     if(exit_id == curr_exit_id || exit_id & 1 == 0)
                     while(true)
                     {

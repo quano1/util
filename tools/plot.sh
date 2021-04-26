@@ -43,7 +43,8 @@ for input in "$@"; do
     echo "set xlabel \"$xasix\"" >> .plot.gpl;
     echo "set y2tics" >> .plot.gpl;
     echo "set grid" >> .plot.gpl;
-    echo "set key left top" >> .plot.gpl;
+    # echo "set key left top" >> .plot.gpl;
+    echo "set key reverse Left outside" >> .plot.gpl;
 
     echo "num_cpus = $num_cpus" >> .plot.gpl;
 

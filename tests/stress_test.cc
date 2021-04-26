@@ -13,7 +13,7 @@
 
 using namespace tll::lf2;
 
-static constexpr size_t kCapacity = 0x1000;
+static constexpr size_t kCapacity = 0x10000;
 
 #define PROFILING true
 #define SEQUENCE_EXTEND 1u
@@ -24,7 +24,7 @@ struct StressTestRingBuffer : public ::testing::Test
 {
     void SetUp()
     {
-        columns_lst.clear();
+        column_lst.clear();
         threads_lst.clear();
         time_lst.clear();
         total_size_lst.clear();
@@ -52,17 +52,17 @@ struct StressTestRingBuffer : public ::testing::Test
         }
 
         tll::test::plot_data(tll::util::stringFormat("%s_speed.dat", ::testing::UnitTest::GetInstance()->current_test_info()->name()), "Higher better", "Speed in Mbs",
-                  columns_lst,
+                  column_lst,
                   threads_lst, 
                   speed_lst 
                   );
         /// calculate relative time
         for(int i=0; i<time_lst.size(); i++)
         {
-            time_lst[i] /= threads_lst[i/columns_lst.size()];
+            time_lst[i] /= threads_lst[i/column_lst.size()];
         }
         tll::test::plot_data(tll::util::stringFormat("%s_time.dat", ::testing::UnitTest::GetInstance()->current_test_info()->name()), "Lower better", "Relative completing time in seconds",
-                  columns_lst,
+                  column_lst,
                   threads_lst,
                   time_lst
                   );
@@ -71,15 +71,15 @@ struct StressTestRingBuffer : public ::testing::Test
     // template <typename Stat>
     // void plottingStat(const std::vector<Stat> &stat_lst)
     // {
-    //     columns_lst.clear();
+    //     column_lst.clear();
     //     std::vector<> data;
     //     for(int i=0; i<stat_lst.size(); i++)
     //     {
-    //         columns_lst.push_back(std::to_string("i"));
+    //         column_lst.push_back(std::to_string("i"));
     //     }
 
     //     tll::test::plot_data(tll::util::stringFormat("%s_time.dat", ::testing::UnitTest::GetInstance()->current_test_info()->name()), "Lower better", "Relative completing time in seconds",
-    //               columns_lst,
+    //               column_lst,
     //               threads_lst,
     //               time_lst
     //               );
@@ -91,6 +91,7 @@ struct StressTestRingBuffer : public ::testing::Test
                      size_t max_pkg_size,
                      const std::function<void()> &resting)
     {
+        LOGD("=====================================================");
         threads_lst.clear();
         tll::util::CallFuncInSeq<NUM_CPU, extend>( [&](auto index_seq)
         {
@@ -175,7 +176,6 @@ struct StressTestRingBuffer : public ::testing::Test
             // for(auto &val : total_size_lst) printf("%ld ", val); printf("\n");
             total_size_lst.push_back(rts_push);
         });
-        LOGD("=====================================================");
     }
 
     template <size_t extend, typename FIFO>
@@ -183,6 +183,7 @@ struct StressTestRingBuffer : public ::testing::Test
                      size_t max_pkg_size,
                      const std::function<void()> &resting)
     {
+        LOGD("=====================================================");
         threads_lst.clear();
         tll::util::CallFuncInSeq<NUM_CPU, extend>( [&](auto index_seq)
         {
@@ -298,7 +299,6 @@ struct StressTestRingBuffer : public ::testing::Test
             // for(auto &val : total_size_lst) printf("%ld ", val); printf("\n");
             total_size_lst.push_back(rts_push);
         });
-        LOGD("=====================================================");
     }
 
     template <size_t extend, typename FIFO>
@@ -466,7 +466,7 @@ struct StressTestRingBuffer : public ::testing::Test
         });
     }
 
-    std::vector<std::string> columns_lst;
+    std::vector<std::string> column_lst;
     std::vector<int> threads_lst;
     std::vector<double> time_lst;
     std::vector<size_t> total_size_lst, total_count_lst;
@@ -509,7 +509,7 @@ struct StressTestRingBuffer : public ::testing::Test
 
 // /// Speed in Mbs
 // /// Completing time in seconds
-//     columns_lst = {"W 0x400", "R 0x400", "W 0x1000", "R 0x1000", "W 0x2000", "R 0x2000", "W 0x4000", "R 0x4000"};
+//     column_lst = {"W 0x400", "R 0x400", "W 0x1000", "R 0x1000", "W 0x2000", "R 0x2000", "W 0x4000", "R 0x4000"};
 //     plotting();
 // }
 
@@ -535,7 +535,7 @@ struct StressTestRingBuffer : public ::testing::Test
 
 // /// Speed in Mbs
 // /// Completing time in seconds
-//     columns_lst = {"dd push", "dd pop", "ss push", "ss pop"};
+//     column_lst = {"dd push", "dd pop", "ss push", "ss pop"};
 // }
 
 TEST_F(StressTestRingBuffer, RushSequence)
@@ -545,20 +545,55 @@ TEST_F(StressTestRingBuffer, RushSequence)
         std::this_thread::yield();
     };
 
+    constexpr int kExtend = 1u;
     {
-        ring_fifo_dd<char, PROFILING> fifo_dd{kCapacity};
-        SequenceFixedSize2<0u>(fifo_dd, 3, resting);
+        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x20};
+        SequenceFixedSize<kExtend>(fifo, 3, resting);
+        fifo.reset();
+        SequenceFixedSize2<kExtend>(fifo, 3, resting);
     }
     {
-        ring_fifo_ss<char, PROFILING> fifo_ss{kCapacity};
-        SequenceFixedSize<0u>(fifo_ss, 3, resting);
+        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x40};
+        SequenceFixedSize<kExtend>(fifo, 3, resting);
+        fifo.reset();
+        SequenceFixedSize2<kExtend>(fifo, 3, resting);
+    }
+    {
+        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x80};
+        SequenceFixedSize<kExtend>(fifo, 3, resting);
+        fifo.reset();
+        SequenceFixedSize2<kExtend>(fifo, 3, resting);
+    }
+    {
+        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x100};
+        SequenceFixedSize<kExtend>(fifo, 3, resting);
+        fifo.reset();
+        SequenceFixedSize2<kExtend>(fifo, 3, resting);
+    }
+    {
+        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x200};
+        SequenceFixedSize<kExtend>(fifo, 3, resting);
+        fifo.reset();
+        SequenceFixedSize2<kExtend>(fifo, 3, resting);
+    }
+    {
+        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x400};
+        SequenceFixedSize<kExtend>(fifo, 3, resting);
+        fifo.reset();
+        SequenceFixedSize2<kExtend>(fifo, 3, resting);
+    }
+    {
+        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x800};
+        SequenceFixedSize<kExtend>(fifo, 3, resting);
+        fifo.reset();
+        SequenceFixedSize2<kExtend>(fifo, 3, resting);
     }
 
     // for(auto t : threads_lst) printf("%d ", t); printf("\n");
 
 /// Speed in Mbs
 /// Completing time in seconds
-    columns_lst = {"dd push", "dd pop", "ss push", "ss pop"};
+    // column_lst = {"dd push", "dd pop", "dd2 push", "dd2 pop"};
     plotting();
 }
 
@@ -605,7 +640,7 @@ TEST_F(StressTestRingBuffer, DDRushConcurrent)
 
 /// Speed in Mbs
 /// Completing time in seconds
-    // columns_lst = {"con", "con2"};
+    // column_lst = {"con", "con2"};
     // plotting();
 }
 
@@ -660,8 +695,8 @@ TEST_F(StressTestRingBuffer, DDRushSequence)
 
 /// Speed in Mbs
 /// Completing time in seconds
-    // columns_lst = {"W 0x400", "R 0x400", "W 0x1000", "R 0x1000", "W 0x2000", "R 0x2000", "W 0x4000", "R 0x4000"};
-    // columns_lst = {"seq W", "seq R", "seq2 W", "seq2 R"};
+    // column_lst = {"W 0x400", "R 0x400", "W 0x1000", "R 0x1000", "W 0x2000", "R 0x2000", "W 0x4000", "R 0x4000"};
+    // column_lst = {"seq W", "seq R", "seq2 W", "seq2 R"};
     // plottingStat(stat_lst);
 }
 
