@@ -45,11 +45,28 @@ struct StressTestRingBuffer : public ::testing::Test
     void plotting()
     {
         std::vector<double> speed_lst;
+        // LOGD("");
+        // for(auto val : total_size_lst) printf("%ld ", val); printf("\n");
+        // LOGD("");
+        // for(auto val : total_count_lst) printf("%ld ", val); printf("\n");
+        // LOGD("");
+        // for(auto val : time_lst) printf("%.3f ", val); printf("\n");
+
         speed_lst.resize(time_lst.size());
-        for(int i=0; i<total_size_lst.size(); i++)
+        if(total_size_lst.size() == time_lst.size()) /// concurrent
         {
-            speed_lst[i*2] = (total_size_lst[i] * 1.f / time_lst[i*2]) / 0x100000; /// push
-            speed_lst[i*2+1] = (total_size_lst[i] * 1.f / time_lst[i*2+1]) / 0x100000; /// pop
+            for(int i=0; i<total_size_lst.size(); i++)
+            {
+                speed_lst[i] = (total_size_lst[i] * 1.f / time_lst[i]) / 1000000; /// push
+            }
+        }
+        else /// sequence
+        {
+            for(int i=0; i<total_size_lst.size(); i++)
+            {
+                speed_lst[i*2] = (total_size_lst[i] * 1.f / time_lst[i*2]) / 1000000; /// push
+                speed_lst[i*2+1] = (total_size_lst[i] * 1.f / time_lst[i*2+1]) / 1000000; /// pop
+            }
         }
 
         tll::test::plot_data(tll::util::stringFormat("%s_speed.dat", ::testing::UnitTest::GetInstance()->current_test_info()->name()), tll::util::stringFormat("Higher better (CPU: %d)", NUM_CPU), "Speed in Mbs",
@@ -57,6 +74,7 @@ struct StressTestRingBuffer : public ::testing::Test
                   threads_lst, 
                   speed_lst 
                   );
+        // LOGD("%ld:%ld:%ld:%ld", threads_lst.size(), time_lst.size(), total_size_lst.size(), column_lst.size());
         /// calculate relative time
         for(int i=0; i<time_lst.size(); i++)
         {
@@ -638,10 +656,10 @@ TEST_F(StressTestRingBuffer, DDRushConcurrent)
         ConcurrentFixedSize<kExtend>(fifo, kPkgSize, resting);
     }
 
-    {
-        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x400};
-        ConcurrentFixedSize<kExtend>(fifo, kPkgSize, resting);
-    }
+    // {
+    //     ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x400};
+    //     ConcurrentFixedSize<kExtend>(fifo, kPkgSize, resting);
+    // }
     // {
     //     ring_fifo_ss<char, PROFILING> fifo_ss{kCapacity};
     //     ConcurrentFixedSize<CONCURRENT_EXTEND>(fifo_ss, 3, resting, threads_lst, time_lst, total_size_lst, total_count_lst);
@@ -703,6 +721,7 @@ TEST_F(StressTestRingBuffer, DDRushSequence)
     // column_lst = {"W 0x400", "R 0x400", "W 0x1000", "R 0x1000", "W 0x2000", "R 0x2000", "W 0x4000", "R 0x4000"};
     // column_lst = {"seq W", "seq R", "seq2 W", "seq2 R"};
     // plottingStat(stat_lst);
+    plotting();
 }
 
 #endif

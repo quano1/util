@@ -142,23 +142,23 @@ void plot_data(const std::string &file_name, const std::string &title, const std
     ofs << "#" << title << "\n";
     ofs << "#" << y_title << "\n";
     ofs << "#Number of threads\n";
-    ofs << "\"\"\t";
+    ofs << "\"\" ";
     for(int i=0; i<col_size; i++)
     {
-        ofs << "\"" << column_lst[i] << "\"\t";
+        ofs << "\"" << column_lst[i] << "\" ";
     }
 
-    // ofs << "\n" << x_axes[0] << "\t";
+    // ofs << "\n" << x_axes[0] << " ";
 
     for(int i=0; i<data.size(); i++)
     {
         if(i % col_size == 0)
         {
             /// 0, 4, 8, 12
-            ofs << "\n" << x_axes[i/col_size] << "\t";
+            ofs << "\n" << x_axes[i/col_size] << " ";
         }
 
-        ofs << data[i] << "\t";
+        ofs << data[i] << " ";
     }
 
     ofs.flush();
