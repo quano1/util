@@ -460,6 +460,96 @@ public:
             }
 
             // LOGD("%ld/%ld %ld/%ld %s", curr_index, next_index, old_exit_id, exit_id, dump().data());
+            next_index+=size;
+            marker.next_index_list(wrap(exit_id, num_threads_)).store(next_index);
+
+            for(;;marker.comp_miss_count.fetch_add(1, std::memory_order_relaxed))
+            {
+                size_t curr_exit_id = marker.exit_id().load(std::memory_order_relaxed);
+
+                // LOGD(">%ld:%ld\t%ld:%ld", kIdx, curr_exit_id, exit_id, old_exit_id);
+                if(exit_id < curr_exit_id)
+                { break; }
+
+                // new_exit_id = exit_id + 1;
+                if(exit_id > curr_exit_id)
+                {
+                    // LOGD(" !%ld:%ld\t%ld:%ld:%ld\t%s", kIdx, curr_exit_id, exit_id, old_exit_id, new_exit_id, dump().data());
+                    next_index = marker.next_index_list(wrap(new_exit_id - 1, num_threads_)).load(std::memory_order_relaxed);
+                    marker.next_index_list(wrap(exit_id, num_threads_)).store(next_index);
+                }
+                else
+                {
+                    while(true)
+                    {
+                        old_exit_id = marker.exit_id_list(wrap(new_exit_id, num_threads_)).load(std::memory_order_relaxed);
+
+                        if(old_exit_id > new_exit_id)
+                        {
+                            new_exit_id = old_exit_id;
+                        }
+                        else
+                            break;
+                    }
+
+                    next_index = marker.next_index_list(wrap(new_exit_id - 1, num_threads_)).load(std::memory_order_relaxed);
+
+                    if(is_producer)
+                    {
+                        size_t wmh = water_mark_head_.load(std::memory_order_relaxed);
+                        if((water_mark_.load(std::memory_order_relaxed) < wmh) 
+                           && (next_index > wmh))
+                        {
+                            marker.index_tail().store(wmh, std::memory_order_relaxed);
+                            water_mark_.store(wmh, std::memory_order_relaxed);
+                        }
+                    }
+
+                    marker.index_tail().store(next_index, std::memory_order_relaxed);
+                    exit_id = new_exit_id;
+                    marker.exit_id().store(exit_id, std::memory_order_relaxed);
+                    // LOGD(" =%ld:%ld\t%ld:%ld:%ld\t%s", kIdx, curr_exit_id, exit_id, old_exit_id, new_exit_id, dump().data());
+                }
+
+                if(marker.exit_id_list(wrap(exit_id, num_threads_)).compare_exchange_strong(old_exit_id, new_exit_id, std::memory_order_relaxed, std::memory_order_relaxed)) break;
+                // LOGD(" M%ld:%ld\t%ld:%ld:%ld\t%s", kIdx, curr_exit_id, exit_id, old_exit_id, new_exit_id, dump().data());
+            }
+        }
+        else
+        {
+
+            for(;marker.index_tail().load(std::memory_order_relaxed) != curr_index;){}
+            if(is_producer && next_index >= this->next(curr_index))
+            {
+                water_mark_.store(curr_index, std::memory_order_relaxed);
+            }
+            marker.index_tail().store(next_index + size, std::memory_order_release);
+        }
+        // LOGD(" <(%ld/%ld) {%ld}", kIdx, entry_id, marker.exit_id().load(std::memory_order_relaxed));
+
+        // return true;
+    }
+
+    template <bool is_producer>
+    void complete2(size_t exit_id, size_t curr_index, size_t next_index, size_t size)
+    {
+        auto &marker = is_producer ? producer_ : consumer_;
+        constexpr Mode mode = is_producer ? prod_mode : cons_mode;
+        if(mode == mode::dense)
+        {
+            while(exit_id >= (marker.exit_id().load(std::memory_order_relaxed) + num_threads_)){};
+            size_t const kIdx = exit_id;
+
+            size_t old_exit_id = marker.exit_id_list(wrap(kIdx, num_threads_)).load(std::memory_order_relaxed);
+            size_t new_exit_id=exit_id + 1;
+
+            // LOGD("%d\t%ld:%ld", is_producer, next_index, this->next(curr_index));
+            if(is_producer && next_index >= this->next(curr_index))
+            {
+                water_mark_head_.store(curr_index, std::memory_order_relaxed);
+            }
+
+            // LOGD("%ld/%ld %ld/%ld %s", curr_index, next_index, old_exit_id, exit_id, dump().data());
             marker.next_index_list(wrap(exit_id, num_threads_)).store(next_index + size);
 
             for(;;marker.comp_miss_count.fetch_add(1, std::memory_order_relaxed))
@@ -470,7 +560,7 @@ public:
                 if(exit_id >= curr_exit_id)
                 {
                     // new_exit_id = exit_id + 1;
-                    if(exit_id == curr_exit_id || exit_id & 1 == 0)
+                    // if(exit_id == curr_exit_id || exit_id & 1 == 0)
                     while(true)
                     {
                         old_exit_id = marker.exit_id_list(wrap(new_exit_id, num_threads_)).load(std::memory_order_relaxed);
