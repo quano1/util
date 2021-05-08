@@ -6,7 +6,7 @@
 #include "../libs/counter.h"
 #include "../libs/contiguouscircular.h"
 
-#if 1
+#if 0
 #define UT_LOGD     LOGD
 #else
 #define UT_LOGD(...)
@@ -17,8 +17,9 @@ struct BasicTestRingBuffer : public ::testing::Test
     template <typename elem_t, tll::lf2::Mode prod_mode, tll::lf2::Mode cons_mode>
     void RWInSequencePrimitive(size_t loop)
     {
+        using namespace tll::lf2;
         UT_LOGD("[%ld] sizeof elem_t: %ld", loop, sizeof(elem_t));
-        tll::lf2::ccfifo<elem_t, prod_mode, cons_mode> fifo;
+        ccfifo<elem_t, type::buffer, prod_mode, cons_mode> fifo;
         elem_t val = -1;
         size_t ret = -1;
         tll::cc::Callback<elem_t> do_nothing = [](const elem_t*, size_t){};
@@ -34,9 +35,9 @@ struct BasicTestRingBuffer : public ::testing::Test
         for(size_t i=0; i < fifo.capacity()*loop; i++)
         {
             /// https://stackoverflow.com/questions/610245/where-and-why-do-i-have-to-put-the-template-and-typename-keywords
-            ret = fifo.push2( (elem_t)i );
+            ret = fifo.push( (elem_t)i );
             EXPECT_EQ(ret, 1);
-            fifo.pop2(val);
+            fifo.pop(val);
             EXPECT_EQ(val, (elem_t)i);
         }
         UT_LOGD("%s", fifo.dump().data());
@@ -45,31 +46,31 @@ struct BasicTestRingBuffer : public ::testing::Test
         for(size_t i=0; i < fifo.capacity(); i++)
         {
             UT_LOGD("%s", fifo.dump().data());
-            fifo.push2((elem_t)i);
+            fifo.push((elem_t)i);
         }
         UT_LOGD("%s", fifo.dump().data());
         UT_LOGD("overrun");
         EXPECT_FALSE(fifo.empty());
-        ret = fifo.push2((elem_t)val);
+        ret = fifo.push((elem_t)val);
         EXPECT_EQ(ret, 0);
         UT_LOGD("%s", fifo.dump().data());
         UT_LOGD("pop all");
-        ret = fifo.pop2(do_nothing, -1);
+        ret = fifo.pop(do_nothing, -1);
         EXPECT_EQ(ret, fifo.capacity());
         UT_LOGD("%s", fifo.dump().data());
         UT_LOGD("underrun");
         EXPECT_TRUE(fifo.empty());
-        EXPECT_EQ(fifo.pop2(val), 0);
+        EXPECT_EQ(fifo.pop(val), 0);
         UT_LOGD("%s", fifo.dump().data());
         UT_LOGD("push/pop odd size");
         fifo.reset();
         constexpr size_t kPushSize = 3;
         for(size_t i=0; i < fifo.capacity()*loop; i++)
         {
-            ret = fifo.push2(pushCb, kPushSize, (elem_t)i);
+            ret = fifo.push(pushCb, kPushSize, (elem_t)i);
             EXPECT_EQ(ret, kPushSize);
 
-            ret = fifo.pop2([&](const elem_t *el, size_t sz){
+            ret = fifo.pop([&](const elem_t *el, size_t sz){
                 ASSERT_EQ(sz, kPushSize);
                 EXPECT_EQ(*(el), (elem_t)i);
                 EXPECT_EQ(memcmp(el, el + 1, (sz - 1) * sizeof(elem_t)), 0);
@@ -84,30 +85,30 @@ struct BasicTestRingBuffer : public ::testing::Test
     {
         using namespace tll::lf2;
         typedef int8_t elem_t;
-        ccfifo<elem_t, prod_mode, cons_mode, true> fifo{8};
+        ccfifo<elem_t, type::buffer, prod_mode, cons_mode, true> fifo{8};
         tll::cc::Callback<elem_t> do_nothing = [](const elem_t*, size_t){};
         size_t capa = fifo.capacity();
         size_t ret = -1;
         elem_t val;
 
-        fifo.push2((elem_t)0);
-        fifo.pop2(val);
+        fifo.push((elem_t)0);
+        fifo.pop(val);
         /// Now the fifo is empty.
         /// But should not be able to push capacity size
-        EXPECT_EQ(fifo.push2(do_nothing, capa), 0);
+        EXPECT_EQ(fifo.push(do_nothing, capa), 0);
         /// Can only pushing the reset of the buffer.
-        EXPECT_EQ(fifo.push2(do_nothing, capa - 1), capa - 1);
+        EXPECT_EQ(fifo.push(do_nothing, capa - 1), capa - 1);
         /// reset everything
         fifo.reset();
-        fifo.push2(do_nothing, capa);
-        fifo.pop2(do_nothing, capa/2);
+        fifo.push(do_nothing, capa);
+        fifo.pop(do_nothing, capa/2);
         /// wrapped perfectly
-        fifo.push2(do_nothing, capa/2);
+        fifo.push(do_nothing, capa/2);
         /// should having the capacity elems
         EXPECT_EQ(fifo.size(), capa);
         /// Should only be able to pop capa/2 due to wrapped (contiguously)
-        EXPECT_EQ(fifo.pop2(do_nothing, -1), capa/2);
-        EXPECT_EQ(fifo.pop2(do_nothing, -1), capa/2);
+        EXPECT_EQ(fifo.pop(do_nothing, -1), capa/2);
+        EXPECT_EQ(fifo.pop(do_nothing, -1), capa/2);
     }
 };
 
@@ -192,7 +193,7 @@ struct ccfifoBufferStressTest : public ::testing::Test
             auto constexpr kNumOfThreads = index_seq.value * 2;
             LOGD("Number of threads: %ld", kNumOfThreads);
             constexpr size_t kStoreSize = kTotalWriteSize + ((index_seq.value) * kMaxPkgSize);
-            ccfifo<char, prod_mode, cons_mode, true> fifo{kCapacity};
+            ccfifo<char, type::buffer, prod_mode, cons_mode, true> fifo{kCapacity};
             std::vector<char> store_buff[index_seq.value];
 
             for(int i=0; i<index_seq.value; i++)
@@ -238,7 +239,7 @@ struct ccfifoBufferStressTest : public ::testing::Test
                     for(;prod_completed.load(std::memory_order_relaxed) < index_seq.value /*- (thread_num + 1) / 2*/
                         || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
                     {
-                        size_t ret_size = fifo.pop2([&store_buff, &pop_size, &fifo, kTid](const char *el, size_t size) {
+                        size_t ret_size = fifo.pop([&store_buff, &pop_size, &fifo, kTid](const char *el, size_t size) {
                             // LOGD("%ld\t%s", size, fifo.dump().data());
                             auto dst = store_buff[kTid/2].data() + pop_size;
                             auto src = el;
@@ -337,7 +338,7 @@ TEST_F(ccfifoBufferStressTest, DISABLED_MPSCWRandSize)
         constexpr size_t kMul = kMaxPkgSize / kNumOfThreads;
         constexpr size_t kStoreSize = kTotalWriteSize + ((kNumOfThreads - 1) * kMaxPkgSize);
         LOGD("Number of Prods: %ld", kNumOfThreads - 1);
-        ring_fifo_ds<char, true> fifo{kCapacity};
+        ring_buffer_ds<char, true> fifo{kCapacity};
         std::vector<char> store_buff;
         store_buff.resize(kStoreSize);
         memset(store_buff.data(), 0xFF, store_buff.size());
@@ -354,7 +355,7 @@ TEST_F(ccfifoBufferStressTest, DISABLED_MPSCWRandSize)
                 // size_t local_push=0;
                 for(;total_push_size.load(std::memory_order_relaxed) < (kTotalWriteSize);)
                 {
-                    size_t ws = fifo.push2([&fifo, &total_push_size, kTid](char *el, size_t size) {
+                    size_t ws = fifo.push([&fifo, &total_push_size, kTid](char *el, size_t size) {
                         *el = '{';
                         *(el + size - 1) = '}';
                         memset(el + 1, (uint8_t)kTid, size - 2);
@@ -453,7 +454,7 @@ TEST_F(ccfifoBufferStressTest, DISABLED_MPSCWRandSize)
     });
 }
 
-
+#if 0
 struct ccfifoQueueStressTest : public ::testing::Test
 {
     static void SetUpTestCase()
@@ -480,7 +481,7 @@ TEST_F(ccfifoQueueStressTest, MPMC)
         auto constexpr kNumOfThreads = index_seq.value * 2;
         LOGD("Number of threads: %ld", kNumOfThreads);
         constexpr size_t kStoreSize = kTotalWriteSize + ((index_seq.value) * kPkgSize);
-        ring_fifo_dd<std::vector<char>, false> fifo{kCapacity / kPkgSize};
+        ring_buffer_dd<std::vector<char>, false> fifo{kCapacity / kPkgSize};
         std::vector<char> store_buff[index_seq.value];
 
         for(int i=0; i<index_seq.value; i++)
@@ -581,8 +582,8 @@ TEST_F(ccfifoQueueStressTest, MPMC)
         }
     }); /// CallFuncInSeq
 }
-
-#endif
+#endif /// if 0
+#endif /// #if (HAVE_OPENMP)
 
 int unittests(int argc, char **argv)
 {
