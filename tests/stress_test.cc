@@ -684,17 +684,17 @@ TEST_F(StressTestRingBuffer, DDRushSequence)
 
     std::vector<Statistics> stat_lst;
 
-    {
-        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x40};
-        SequenceFixedSize2<kExtend>(fifo, kPkgSize, resting);
-        stat_lst.push_back(fifo.statistics());
-    }
+    // {
+    //     ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x40};
+    //     SequenceFixedSize2<kExtend>(fifo, kPkgSize, resting);
+    //     stat_lst.push_back(fifo.statistics());
+    // }
 
-    {
-        ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x80};
-        SequenceFixedSize2<kExtend>(fifo, kPkgSize, resting);
-        stat_lst.push_back(fifo.statistics());
-    }
+    // {
+    //     ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x80};
+    //     SequenceFixedSize2<kExtend>(fifo, kPkgSize, resting);
+    //     stat_lst.push_back(fifo.statistics());
+    // }
 
     {
         ring_fifo_dd<char, PROFILING> fifo{kCapacity, 0x100};

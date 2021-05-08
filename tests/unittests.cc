@@ -6,7 +6,7 @@
 #include "../libs/counter.h"
 #include "../libs/contiguouscircular.h"
 
-#if 0
+#if 1
 #define UT_LOGD     LOGD
 #else
 #define UT_LOGD(...)
@@ -29,7 +29,8 @@ struct BasicTestRingBuffer : public ::testing::Test
         UT_LOGD("reserve not power of 2");
         fifo.reserve(7, 0x400);
         ASSERT_EQ(fifo.capacity(), 8);
-        UT_LOGD("simple push/pop");
+        UT_LOGD("%s", fifo.dump().data());
+        UT_LOGD("simple push/pop: %ld", loop);
         for(size_t i=0; i < fifo.capacity()*loop; i++)
         {
             /// https://stackoverflow.com/questions/610245/where-and-why-do-i-have-to-put-the-template-and-typename-keywords
@@ -38,20 +39,28 @@ struct BasicTestRingBuffer : public ::testing::Test
             fifo.pop2(val);
             EXPECT_EQ(val, (elem_t)i);
         }
-        fifo.reset();
+        UT_LOGD("%s", fifo.dump().data());
         UT_LOGD("fill");
-        for(size_t i=0; i < fifo.capacity(); i++) 
+        fifo.reset();
+        for(size_t i=0; i < fifo.capacity(); i++)
+        {
+            UT_LOGD("%s", fifo.dump().data());
             fifo.push2((elem_t)i);
+        }
+        UT_LOGD("%s", fifo.dump().data());
         UT_LOGD("overrun");
         EXPECT_FALSE(fifo.empty());
         ret = fifo.push2((elem_t)val);
         EXPECT_EQ(ret, 0);
+        UT_LOGD("%s", fifo.dump().data());
         UT_LOGD("pop all");
         ret = fifo.pop2(do_nothing, -1);
         EXPECT_EQ(ret, fifo.capacity());
+        UT_LOGD("%s", fifo.dump().data());
         UT_LOGD("underrun");
         EXPECT_TRUE(fifo.empty());
         EXPECT_EQ(fifo.pop2(val), 0);
+        UT_LOGD("%s", fifo.dump().data());
         UT_LOGD("push/pop odd size");
         fifo.reset();
         constexpr size_t kPushSize = 3;
@@ -67,6 +76,7 @@ struct BasicTestRingBuffer : public ::testing::Test
             }, -1);
             EXPECT_EQ(ret, kPushSize);
         }
+        UT_LOGD("%s", fifo.dump().data());
     }
 
     template <tll::lf2::Mode prod_mode, tll::lf2::Mode cons_mode>
