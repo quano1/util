@@ -52,6 +52,8 @@ for input in "$@"; do
     echo "set boxwidth 0.75" >> .plothist.gpl;
 
     echo "num_cpus = $num_cpus" >> .plothist.gpl;
+    # echo "set xrange [0:]" >> .plothist.gpl;
+    echo "set yrange [0:]" >> .plothist.gpl;
 
     echo "plot for [col_=2:${cols}] '$input' u col_:xtic(1) ti col" >> .plothist.gpl;
 

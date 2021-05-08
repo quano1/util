@@ -63,7 +63,7 @@ if(HAVE_GTEST)
 endif()
 
 # add_test(NAME test COMMAND tll_tests)
-add_custom_command(TARGET tll_tests POST_BUILD
+add_custom_command(TARGET tll_tests PRE_BUILD
                   COMMAND cmake -E copy ${CMAKE_CURRENT_LIST_DIR}/../tools/plot*sh ${CMAKE_BINARY_DIR}/)
 
 # include_directories(

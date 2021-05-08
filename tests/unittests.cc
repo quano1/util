@@ -6,7 +6,7 @@
 #include "../libs/counter.h"
 #include "../libs/contiguouscircular.h"
 
-#if 0
+#if 1
 #define UT_LOGD     LOGD
 #else
 #define UT_LOGD(...)
@@ -19,7 +19,7 @@ struct BasicTestRingBuffer : public ::testing::Test
     {
         using namespace tll::lf2;
         UT_LOGD("[%ld] sizeof elem_t: %ld", loop, sizeof(elem_t));
-        ccfifo<elem_t, type::buffer, prod_mode, cons_mode> fifo;
+        ccfifo<elem_t, type::queue, prod_mode, cons_mode> fifo;
         elem_t val = -1;
         size_t ret = -1;
         tll::cc::Callback<elem_t> do_nothing = [](const elem_t*, size_t){};

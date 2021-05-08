@@ -47,6 +47,8 @@ for input in "$@"; do
     echo "set key reverse Left outside" >> .plot.gpl;
 
     echo "num_cpus = $num_cpus" >> .plot.gpl;
+    # echo "set xrange [0:]" >> .plot.gpl;
+    echo "set yrange [0:]" >> .plot.gpl;
 
     echo "plot for [col_=2:${cols}] '$input' u col_:xtic(1) w lp pt 6 lw 2 t columnheader " >> .plot.gpl;
 

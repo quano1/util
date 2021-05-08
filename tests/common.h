@@ -29,9 +29,9 @@ std::pair<size_t, size_t> fifing(
         const std::function<void()> &do_rest, /// std::this_thread::yield()
         const std::function<void()> &do_dump,
         size_t max_val,
-        std::vector<int> &threads_lst,
         std::vector<double> &time_lst,
-        std::vector<size_t> &tt_count_lst)
+        std::vector<size_t> &tt_count_lst,
+        bool scale=true)
 {
     static_assert(num_of_threads > 0);
     std::atomic<size_t> running_prod{0}, 
@@ -44,13 +44,13 @@ std::pair<size_t, size_t> fifing(
     std::mutex cv_m;
     std::thread dumpt = std::thread{[&](){
         std::unique_lock<std::mutex> lk(cv_m);
-        while(! cv.wait_for(lk, std::chrono::milliseconds(3000), [&]{return is_done.load();}) )
+        while(! cv.wait_for(lk, std::chrono::seconds(60), [&]{return is_done.load();}) )
         {
             do_dump();
         }
     }};
     counter.start();
-    
+
     #pragma omp parallel num_threads ( num_of_threads )
     {
         const int kTid = omp_get_thread_num();
@@ -70,7 +70,7 @@ std::pair<size_t, size_t> fifing(
                     tt_push_count.fetch_add(1, std::memory_order_relaxed);
                     tt_push_size.fetch_add(ret, std::memory_order_relaxed);
                     lc_tt_size+=ret;
-                    NOP_LOOP();
+                    // NOP_LOOP();
                     do_rest();
                 }
                 loop_num++;
@@ -104,11 +104,13 @@ std::pair<size_t, size_t> fifing(
         }
 
     }
-    time_lst.push_back(counter.elapsed().count());
+    double tt_time = counter.elapsed().count();
+    if(scale) tt_time /= num_of_threads;
+    time_lst.push_back(tt_time);
+    // LOGD("%f", tt_time);
     is_done.store(true);
     cv.notify_all();
     dumpt.join();
-    threads_lst.push_back(num_of_threads);
     if(do_push) tt_count_lst.push_back(tt_push_count.load());
     if(do_pop) tt_count_lst.push_back(tt_pop_count.load());
     return {tt_push_size.load(), tt_pop_size.load()};
@@ -148,21 +150,19 @@ void plot_data(const std::string &file_name, const std::string &title, const std
         ofs << "\"" << column_lst[i] << "\" ";
     }
 
-    // ofs << "\n" << x_axes[0] << " ";
+    ofs << "\n";
 
-    for(int i=0; i<data.size(); i++)
+    LOGD("%ld %ld", col_size, x_axes.size());
+    for(int i=0; i<x_axes.size(); i++)
     {
-        if(i % col_size == 0)
-        {
-            /// 0, 4, 8, 12
-            ofs << "\n" << x_axes[i/col_size] << " ";
-        }
-
-        ofs << data[i] << " ";
+        ofs << x_axes[i] << " ";
+        for(int j=0; j<col_size; j++)
+            ofs << data[i*col_size + j] << " ";
+        ofs << "\n";
     }
 
     ofs.flush();
-
+    // return;
     int cmd = 0;
     cmd = system(tll::util::stringFormat("./plothist.sh %s", file_name.data()).data());
     cmd = system(tll::util::stringFormat("./plot.sh %s", file_name.data()).data());
