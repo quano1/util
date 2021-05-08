@@ -35,20 +35,20 @@ typedef std::pair<Statistic, Statistic> Statistics;
 struct Marker
 {
     Marker() = default;
-    inline auto &index_head() {return index_head_;}
-    inline auto &index_tail() {return index_tail_;}
-    inline auto &entry_id_head() {return entry_id_head_;}
-    inline auto &entry_id_tail() {return entry_id_tail_;}
-    inline auto &exit_id() {return exit_id_;}
+    inline auto &ref_index_head() {return index_head_;}
+    inline auto &ref_index_tail() {return index_tail_;}
+    inline auto &ref_entry_id_head() {return entry_id_head_;}
+    inline auto &ref_entry_id_tail() {return entry_id_tail_;}
+    inline auto &ref_exit_id() {return exit_id_;}
 
-    inline auto const &index_head() const {return index_head_;}
-    inline auto const &index_tail() const {return index_tail_;}
-    inline auto const &entry_id_head() const {return entry_id_head_;}
-    inline auto const &entry_id_tail() const {return entry_id_tail_;}
-    inline auto const &exit_id() const {return exit_id_;}
+    inline size_t get_index_head(std::memory_order mo=std::memory_order_relaxed) const {return index_head_.load(mo);}
+    inline size_t get_index_tail(std::memory_order mo=std::memory_order_relaxed) const {return index_tail_.load(mo);}
+    inline size_t get_entry_id_head(std::memory_order mo=std::memory_order_relaxed) const {return entry_id_head_.load(mo);}
+    inline size_t get_entry_id_tail(std::memory_order mo=std::memory_order_relaxed) const {return entry_id_tail_.load(mo);}
+    inline size_t get_exit_id(std::memory_order mo=std::memory_order_relaxed) const {return exit_id_.load(mo);}
 
     // inline auto &exit_id_list(size_t i) {return exit_id_list_[i];}
-    inline auto &next_index_list(size_t i) {return next_index_list_[i];}
+    inline auto &ref_next_index_list(size_t i) {return next_index_list_[i];}
     // inline auto &curr_index_list(size_t i) {return curr_index_list_[i];}
     // inline auto &size_list(size_t i) {return size_list_[i];}
 
@@ -293,21 +293,21 @@ private:
     {
         auto &marker = consumer_;
         size_t cons_next_index;
-        size_t entry_id_head = marker.entry_id_head().load(std::memory_order_relaxed);
-        cons_index_head = marker.index_head().load(std::memory_order_relaxed);
+        size_t entry_id_head = marker.get_entry_id_head();
+        cons_index_head = marker.get_index_head();
         size_t next_size = size;
         for(;;profAdd(marker.try_miss_count, 1))
         {
             if(cons_mode == mode::dense)
             {
-                while(entry_id_head != marker.entry_id_tail().load(std::memory_order_relaxed))
-                    entry_id_head = marker.entry_id_head().load(std::memory_order_relaxed);
+                while(entry_id_head != marker.get_entry_id_tail())
+                    entry_id_head = marker.get_entry_id_head();
 
-                cons_index_head = marker.index_head().load(std::memory_order_relaxed);
+                cons_index_head = marker.get_index_head();
             }
 
             cons_next_index = cons_index_head;
-            size_t prod_index = producer_.index_tail().load(std::memory_order_relaxed);
+            size_t prod_index = producer_.get_index_tail();
             size_t wmark = water_mark_.load(std::memory_order_relaxed);
             if(cons_next_index < prod_index)
             {
@@ -346,21 +346,21 @@ private:
 
                 if(cons_mode == mode::dense)
                 {
-                    if(!marker.entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+                    if(!marker.ref_entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
                     {
                         continue;
                     }
                     else
                     {
-                        marker.index_head().store(cons_next_index + next_size, std::memory_order_relaxed);
-                        marker.entry_id_tail().store(entry_id_head + 1, std::memory_order_relaxed);
+                        marker.ref_index_head().store(cons_next_index + next_size, std::memory_order_relaxed);
+                        marker.ref_entry_id_tail().store(entry_id_head + 1, std::memory_order_relaxed);
                         entry_id = entry_id_head;
                         break;
                     }
                 }
                 else
                 {
-                    if(!marker.index_head().compare_exchange_weak(cons_index_head, cons_next_index + next_size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                    if(!marker.ref_index_head().compare_exchange_weak(cons_index_head, cons_next_index + next_size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
                     else break;
                 }
             }
@@ -381,21 +381,21 @@ private:
     {
         size_t prod_next_index;
         auto &marker = producer_;
-        size_t entry_id_head = marker.entry_id_head().load(std::memory_order_relaxed);
-        prod_index_head = marker.index_head().load(std::memory_order_relaxed);
+        size_t entry_id_head = marker.get_entry_id_head();
+        prod_index_head = marker.get_index_head();
 
         for(;;profAdd(marker.try_miss_count, 1))
         {
             if(prod_mode == mode::dense)
             {
-                while(entry_id_head != marker.entry_id_tail().load(std::memory_order_relaxed))
-                    entry_id_head = marker.entry_id_head().load(std::memory_order_relaxed);
+                while(entry_id_head != marker.get_entry_id_tail())
+                    entry_id_head = marker.get_entry_id_head();
 
-                prod_index_head = marker.index_head().load(std::memory_order_relaxed);
+                prod_index_head = marker.get_index_head();
             }
 
             prod_next_index = prod_index_head;
-            size_t cons_index = consumer_.index_tail().load(std::memory_order_relaxed);
+            size_t cons_index = consumer_.get_index_tail();
             if(size <= capacity() - (prod_next_index - cons_index))
             {
                 /// prod leads
@@ -429,21 +429,21 @@ private:
 
                 if(prod_mode == mode::dense)
                 {
-                    if(!marker.entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+                    if(!marker.ref_entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
                     {
                         continue;
                     }
                     else
                     {
-                        marker.index_head().store(prod_next_index + size, std::memory_order_relaxed);
-                        marker.entry_id_tail().store(entry_id_head + 1, std::memory_order_relaxed);
+                        marker.ref_index_head().store(prod_next_index + size, std::memory_order_relaxed);
+                        marker.ref_entry_id_tail().store(entry_id_head + 1, std::memory_order_relaxed);
                         entry_id = entry_id_head;
                         break;
                     }
                 }
                 else
                 {
-                    if(!marker.index_head().compare_exchange_weak(prod_index_head, prod_next_index + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                    if(!marker.ref_index_head().compare_exchange_weak(prod_index_head, prod_next_index + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
                     else break;
                 }
             }
@@ -464,7 +464,7 @@ private:
         constexpr Mode mode = is_producer ? prod_mode : cons_mode;
         if(mode == mode::dense)
         {
-            while(exit_id >= (marker.exit_id().load(std::memory_order_relaxed) + num_threads_)){};
+            while(exit_id >= (marker.get_exit_id() + num_threads_)){};
             size_t const kIdx = exit_id;
 
             // size_t old_exit_id = marker.exit_id_list(wrap(kIdx, num_threads_)).load(std::memory_order_relaxed);
@@ -478,12 +478,13 @@ private:
 
             next_index+=size;
             // LOGD("%ld/%ld %ld/%ld %s", curr_index, next_index, old_exit_id, exit_id, dump().data());
-            size_t old_next_index = marker.next_index_list(wrap(exit_id, num_threads_)).load(std::memory_order_relaxed);
-            // marker.next_index_list(wrap(exit_id, num_threads_)).store(next_index);
+            size_t old_next_index = marker.ref_next_index_list(wrap(exit_id, num_threads_)).load(std::memory_order_relaxed);
+            // marker.ref_next_index_list(wrap(exit_id, num_threads_)).store(next_index);
 
+            size_t new_exit_id=exit_id + 1;
             for(;;marker.comp_miss_count.fetch_add(1, std::memory_order_relaxed))
             {
-                size_t curr_exit_id = marker.exit_id().load(std::memory_order_relaxed);
+                size_t curr_exit_id = marker.get_exit_id();
 
                 // LOGD(">%ld:%ld\t%ld:%ld", kIdx, curr_exit_id, exit_id, old_exit_id);
                 if(exit_id < curr_exit_id)
@@ -493,15 +494,14 @@ private:
                 if(exit_id > curr_exit_id)
                 {
                     // LOGD(" !%ld:%ld\t%ld:%ld:%ld\t%s", kIdx, curr_exit_id, exit_id, old_exit_id, new_exit_id, dump().data());
-                    // next_index = marker.next_index_list(wrap(new_exit_id - 1, num_threads_)).load(std::memory_order_relaxed);
-                    // marker.next_index_list(wrap(exit_id, num_threads_)).store(next_index);
+                    // next_index = marker.ref_next_index_list(wrap(new_exit_id - 1, num_threads_)).load(std::memory_order_relaxed);
+                    // marker.ref_next_index_list(wrap(exit_id, num_threads_)).store(next_index);
                 }
                 else
                 {
-                    size_t new_exit_id=exit_id + 1;
                     while(true)
                     {
-                        old_next_index = marker.next_index_list(wrap(new_exit_id, num_threads_)).load(std::memory_order_relaxed);
+                        old_next_index = marker.ref_next_index_list(wrap(new_exit_id, num_threads_)).load(std::memory_order_relaxed);
 
                         if(old_next_index > next_index)
                         {
@@ -513,7 +513,7 @@ private:
                             break;
                     }
 
-                    // next_index = marker.next_index_list(wrap(new_exit_id - 1, num_threads_)).load(std::memory_order_relaxed);
+                    // next_index = marker.ref_next_index_list(wrap(new_exit_id - 1, num_threads_)).load(std::memory_order_relaxed);
 
                     if(is_producer)
                     {
@@ -521,18 +521,18 @@ private:
                         if((water_mark_.load(std::memory_order_relaxed) < wmh) 
                            && (next_index > wmh))
                         {
-                            marker.index_tail().store(wmh, std::memory_order_relaxed);
+                            marker.ref_index_tail().store(wmh, std::memory_order_relaxed);
                             water_mark_.store(wmh, std::memory_order_relaxed);
                         }
                     }
 
-                    marker.index_tail().store(next_index, std::memory_order_relaxed);
+                    marker.ref_index_tail().store(next_index, std::memory_order_relaxed);
                     exit_id = new_exit_id;
-                    marker.exit_id().store(exit_id, std::memory_order_relaxed);
+                    marker.ref_exit_id().store(exit_id, std::memory_order_relaxed);
                     // LOGD(" =%ld:%ld\t%ld:%ld:%ld\t%s", kIdx, curr_exit_id, exit_id, old_exit_id, new_exit_id, dump().data());
                 }
 
-                if(marker.next_index_list(wrap(exit_id, num_threads_)).compare_exchange_strong(old_next_index, next_index, std::memory_order_relaxed, std::memory_order_relaxed)) break;
+                if(marker.ref_next_index_list(wrap(exit_id, num_threads_)).compare_exchange_strong(old_next_index, next_index, std::memory_order_relaxed, std::memory_order_relaxed)) break;
                 // if(marker.exit_id_list(wrap(exit_id, num_threads_)).compare_exchange_strong(old_exit_id, new_exit_id, std::memory_order_relaxed, std::memory_order_relaxed)) break;
                 // LOGD(" M%ld:%ld:%ld\t%ld:%ld\t%s", kIdx, curr_exit_id, exit_id, old_next_index, next_index, dump().data());
             }
@@ -540,14 +540,14 @@ private:
         else
         {
 
-            for(;marker.index_tail().load(std::memory_order_relaxed) != curr_index;){}
+            for(;marker.get_index_tail() != curr_index;){}
             if(is_producer && next_index >= this->next(curr_index))
             {
                 water_mark_.store(curr_index, std::memory_order_relaxed);
             }
-            marker.index_tail().store(next_index + size, std::memory_order_release);
+            marker.ref_index_tail().store(next_index + size, std::memory_order_release);
         }
-        // LOGD(" <(%ld/%ld) {%ld}", kIdx, entry_id, marker.exit_id().load(std::memory_order_relaxed));
+        // LOGD(" <(%ld/%ld) {%ld}", kIdx, entry_id, marker.get_exit_id());
 
         // return true;
     }
@@ -639,17 +639,17 @@ public:
 
     inline auto dump() const
     {
-        size_t ph = producer_.index_head().load(std::memory_order_relaxed);
-        size_t pt = producer_.index_tail().load(std::memory_order_relaxed);
-        size_t peh = producer_.entry_id_head().load(std::memory_order_relaxed);
-        size_t pet = producer_.entry_id_tail().load(std::memory_order_relaxed);
-        size_t pex = producer_.exit_id().load(std::memory_order_relaxed);
+        size_t ph = producer_.get_index_head();
+        size_t pt = producer_.get_index_tail();
+        size_t peh = producer_.get_entry_id_head();
+        size_t pet = producer_.get_entry_id_tail();
+        size_t pex = producer_.get_exit_id();
 
-        size_t ch = consumer_.index_head().load(std::memory_order_relaxed);
-        size_t ct = consumer_.index_tail().load(std::memory_order_relaxed);
-        size_t ceh = consumer_.entry_id_head().load(std::memory_order_relaxed);
-        size_t cet = consumer_.entry_id_tail().load(std::memory_order_relaxed);
-        size_t cex = consumer_.exit_id().load(std::memory_order_relaxed);
+        size_t ch = consumer_.get_index_head();
+        size_t ct = consumer_.get_index_tail();
+        size_t ceh = consumer_.get_entry_id_head();
+        size_t cet = consumer_.get_entry_id_tail();
+        size_t cex = consumer_.get_exit_id();
 
         size_t wm = water_mark_.load(std::memory_order_relaxed);
         size_t wmh = water_mark_head_.load(std::memory_order_relaxed);
@@ -724,17 +724,17 @@ public:
 
     inline size_t size() const
     {
-        return producer_.index_tail().load(std::memory_order_relaxed) - consumer_.index_head().load(std::memory_order_relaxed);
+        return producer_.get_index_tail() - consumer_.get_index_head();
     }
 
     inline bool empty() const
     {
-        return producer_.index_tail().load(std::memory_order_relaxed) == consumer_.index_head().load(std::memory_order_relaxed);
+        return producer_.get_index_tail() == consumer_.get_index_head();
     }
 
     inline bool real_empty() const
     {
-        return producer_.index_head().load(std::memory_order_relaxed) == consumer_.index_head().load(std::memory_order_relaxed);
+        return producer_.get_index_head() == consumer_.get_index_head();
     }
 
     inline size_t wrap(size_t index, size_t mask) const
@@ -755,10 +755,10 @@ public:
         };
     }
 
-    inline size_t ph() const {return producer_.index_head().load(std::memory_order_relaxed);}
-    inline size_t pt() const {return producer_.index_tail().load(std::memory_order_relaxed);}
-    inline size_t ch() const {return consumer_.index_head().load(std::memory_order_relaxed);}
-    inline size_t ct() const {return consumer_.index_tail().load(std::memory_order_relaxed);}
+    inline size_t ph() const {return producer_.get_index_head();}
+    inline size_t pt() const {return producer_.get_index_tail();}
+    inline size_t ch() const {return consumer_.get_index_head();}
+    inline size_t ct() const {return consumer_.get_index_tail();}
     inline size_t wm() const {return water_mark_.load(std::memory_order_relaxed);}
 
     inline T *elemAt(size_t id)
