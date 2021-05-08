@@ -262,7 +262,15 @@ private:
                 std::atomic_thread_fence(std::memory_order_acquire);
             }
 
-            callback(elemAt(next), size, std::forward<Args>(args)...);
+            if(fifo_type == type::buffer)
+            {
+                callback(elemAt(next), size, std::forward<Args>(args)...);
+            }
+            else
+            {
+                for(size_t i=0; i<size; i++)
+                    callback(elemAt(next+i), size, std::forward<Args>(args)...);
+            }
 
             if(!is_producer)
             {
@@ -298,82 +306,109 @@ private:
         size_t next_size = size;
         for(;;profAdd(marker.try_miss_count, 1))
         {
-            if(cons_mode == mode::dense)
+            if(fifo_type == type::buffer)
             {
-                while(entry_id_head != marker.get_entry_id_tail())
-                    entry_id_head = marker.get_entry_id_head();
-
-                cons_index_head = marker.get_index_head();
-            }
-
-            cons_next_index = cons_index_head;
-            size_t prod_index = producer_.get_index_tail();
-            size_t wmark = water_mark_.load(std::memory_order_relaxed);
-            if(cons_next_index < prod_index)
-            {
-                if(cons_next_index == wmark)
-                {
-                    cons_next_index = next(cons_next_index);
-                    if(prod_index <= cons_next_index)
-                    {
-                        // LOGD("Underrun! %s", dump().data());
-                        next_size = 0;
-                        // profAdd(stat_pop_error, 1);
-                        break;
-                    }
-                    if(size > (prod_index - cons_next_index))
-                    {
-                        // LOGD("%ld:%ld:%ld", next_size, prod_index, cons_next_index);
-                        next_size = prod_index - cons_next_index;
-                    }
-                }
-                else if(cons_next_index < wmark)
-                {
-                    if(size > (wmark - cons_next_index))
-                    {
-                        // LOGD("%ld:%ld:%ld", next_size, wmark, cons_next_index);
-                        next_size = wmark - cons_next_index;
-                    }
-                }
-                else /// cons > wmark
-                {
-                    if(size > (prod_index - cons_next_index))
-                    {
-                        // LOGD("%ld:%ld:%ld", next_size, prod_index, cons_next_index);
-                        next_size = prod_index - cons_next_index;
-                    }
-                }
-
                 if(cons_mode == mode::dense)
                 {
-                    if(!marker.ref_entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+                    while(entry_id_head != marker.get_entry_id_tail())
+                        entry_id_head = marker.get_entry_id_head();
+
+                    cons_index_head = marker.get_index_head();
+                }
+
+                cons_next_index = cons_index_head;
+                size_t prod_index = producer_.get_index_tail();
+                size_t wmark = water_mark_.load(std::memory_order_relaxed);
+                if(cons_next_index < prod_index)
+                {
+                    if(cons_next_index == wmark)
                     {
-                        continue;
+                        cons_next_index = next(cons_next_index);
+                        if(prod_index <= cons_next_index)
+                        {
+                            // LOGD("Underrun! %s", dump().data());
+                            next_size = 0;
+                            // profAdd(stat_pop_error, 1);
+                            break;
+                        }
+                        if(size > (prod_index - cons_next_index))
+                        {
+                            // LOGD("%ld:%ld:%ld", next_size, prod_index, cons_next_index);
+                            next_size = prod_index - cons_next_index;
+                        }
+                    }
+                    else if(cons_next_index < wmark)
+                    {
+                        if(size > (wmark - cons_next_index))
+                        {
+                            // LOGD("%ld:%ld:%ld", next_size, wmark, cons_next_index);
+                            next_size = wmark - cons_next_index;
+                        }
+                    }
+                    else /// cons > wmark
+                    {
+                        if(size > (prod_index - cons_next_index))
+                        {
+                            // LOGD("%ld:%ld:%ld", next_size, prod_index, cons_next_index);
+                            next_size = prod_index - cons_next_index;
+                        }
+                    }
+
+                    if(cons_mode == mode::dense)
+                    {
+                        if(!marker.ref_entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+                        {
+                            continue;
+                        }
+                        else
+                        {
+                            marker.ref_index_head().store(cons_next_index + next_size, std::memory_order_relaxed);
+                            marker.ref_entry_id_tail().store(entry_id_head + 1, std::memory_order_relaxed);
+                            entry_id = entry_id_head;
+                            break;
+                        }
                     }
                     else
                     {
-                        marker.ref_index_head().store(cons_next_index + next_size, std::memory_order_relaxed);
-                        marker.ref_entry_id_tail().store(entry_id_head + 1, std::memory_order_relaxed);
-                        entry_id = entry_id_head;
+                        if(!marker.ref_index_head().compare_exchange_weak(cons_index_head, cons_next_index + next_size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                        else break;
+                    }
+                } /// if(cons_next_index < prod_index)
+                else
+                {
+                    // LOGD("Underrun! %s", dump().data());
+                    next_size = 0;
+                    // profAdd(stat_pop_error, 1);
+                    break;
+                }
+            } /// if(fifo_type == type::buffer)
+            else /// fifo_type == type::queue
+            {
+                for(;;)
+                {
+                    size_t prod_index = producer_.get_index_tail();
+                    if (cons_index_head == marker.get_index_tail())
+                    {
+                        next_size = 0;
+                        break;
+                    }
+
+                    if(size > prod_index - cons_index_head)
+                    {
+                        next_size = prod_index - cons_index_head;
+                    }
+
+                    if(marker.ref_index_head().compare_exchange_weak(cons_index_head, cons_index_head + next_size, std::memory_order_relaxed, std::memory_order_relaxed))
+                    {
+                        entry_id = cons_index_head;
+                        cons_next_index = cons_index_head;
                         break;
                     }
                 }
-                else
-                {
-                    if(!marker.ref_index_head().compare_exchange_weak(cons_index_head, cons_next_index + next_size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
-                    else break;
-                }
             }
-            else
-            {
-                // LOGD("Underrun! %s", dump().data());
-                next_size = 0;
-                // profAdd(stat_pop_error, 1);
-                break;
-            }
-        }
+        } /// /// for(;;)
+
         size = next_size;
-        // profAdd(stat_pop_total, 1);
         return cons_next_index;
     } /// tryPop
 
@@ -386,74 +421,97 @@ private:
 
         for(;;profAdd(marker.try_miss_count, 1))
         {
-            if(prod_mode == mode::dense)
+            if(fifo_type == type::buffer)
             {
-                while(entry_id_head != marker.get_entry_id_tail())
-                    entry_id_head = marker.get_entry_id_head();
-
-                prod_index_head = marker.get_index_head();
-            }
-
-            prod_next_index = prod_index_head;
-            size_t cons_index = consumer_.get_index_tail();
-            if(size <= capacity() - (prod_next_index - cons_index))
-            {
-                /// prod leads
-                if(wrap(prod_next_index) >= wrap(cons_index))
+                if(prod_mode == mode::dense)
                 {
-                    /// not enough space    ?
-                    if(size > capacity() - wrap(prod_next_index))
+                    while(entry_id_head != marker.get_entry_id_tail())
+                        entry_id_head = marker.get_entry_id_head();
+
+                    prod_index_head = marker.get_index_head();
+                }
+
+                prod_next_index = prod_index_head;
+                size_t cons_index = consumer_.get_index_tail();
+                if(size <= capacity() - (prod_next_index - cons_index))
+                {
+                    /// prod leads
+                    if(wrap(prod_next_index) >= wrap(cons_index))
                     {
-                        if(size <= wrap(cons_index))
+                        /// not enough space    ?
+                        if(size > capacity() - wrap(prod_next_index))
                         {
-                            prod_next_index = next(prod_next_index);
+                            if(size <= wrap(cons_index))
+                            {
+                                prod_next_index = next(prod_next_index);
+                            }
+                            else
+                            {
+                                // LOGE("OVERRUN");dump();
+                                size = 0;
+                                break;
+                            }
                         }
-                        else
+                    }
+                    /// cons leads
+                    else
+                    {
+                        if(size > wrap(cons_index) - wrap(prod_next_index))
                         {
                             // LOGE("OVERRUN");dump();
                             size = 0;
                             break;
                         }
                     }
-                }
-                /// cons leads
-                else
-                {
-                    if(size > wrap(cons_index) - wrap(prod_next_index))
-                    {
-                        // LOGE("OVERRUN");dump();
-                        size = 0;
-                        break;
-                    }
-                }
 
-                if(prod_mode == mode::dense)
-                {
-                    if(!marker.ref_entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+                    if(prod_mode == mode::dense)
                     {
-                        continue;
+                        if(!marker.ref_entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+                        {
+                            continue;
+                        }
+                        else
+                        {
+                            marker.ref_index_head().store(prod_next_index + size, std::memory_order_relaxed);
+                            marker.ref_entry_id_tail().store(entry_id_head + 1, std::memory_order_relaxed);
+                            entry_id = entry_id_head;
+                            break;
+                        }
                     }
                     else
                     {
-                        marker.ref_index_head().store(prod_next_index + size, std::memory_order_relaxed);
-                        marker.ref_entry_id_tail().store(entry_id_head + 1, std::memory_order_relaxed);
-                        entry_id = entry_id_head;
-                        break;
+                        if(!marker.ref_index_head().compare_exchange_weak(prod_index_head, prod_next_index + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                        else break;
                     }
                 }
                 else
                 {
-                    if(!marker.ref_index_head().compare_exchange_weak(prod_index_head, prod_next_index + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
-                    else break;
+                    // LOGE("OVERRUN");dump();
+                    size = 0;
+                    break;
+                }
+            } /// if(fifo_type == type::buffer)
+            else /// fifo_type == type::queue
+            {
+                for(;;)
+                {
+                    size_t cons_index = consumer_.get_index_tail();
+
+                    if(prod_index_head + size > cons_index + capacity())
+                    {
+                        size = 0;
+                        break;
+                    }
+
+                    if(marker.ref_index_head().compare_exchange_weak(prod_index_head, prod_index_head + size, std::memory_order_relaxed, std::memory_order_relaxed))
+                    {
+                        entry_id = prod_index_head;
+                        prod_next_index = prod_index_head;
+                        break;
+                    }
                 }
             }
-            else
-            {
-                // LOGE("OVERRUN");dump();
-                size = 0;
-                break;
-            }
-        }
+        } /// for(;;)
         return prod_next_index;
     } /// tryPush
 
