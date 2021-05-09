@@ -146,24 +146,13 @@ namespace mode
     constexpr Mode dense = Mode::kDense;
 }
 
-enum class Type
-{
-    kBuffer,
-    kQueue,
-    kMax
-};
-
-namespace type
-{
-    constexpr Type buffer = Type::kBuffer;
-    constexpr Type queue = Type::kQueue;
-}
-
 /// Contiguous Circular Index
 // template <size_t num_threads=0x400>
-template <typename T, Type fifo_type=Type::kBuffer, Mode prod_mode=Mode::kDense, Mode cons_mode=Mode::kSparse, bool profiling=false>
-struct ccfifo
+template <typename T, Mode prod_mode=Mode::kDense, Mode cons_mode=Mode::kSparse, bool contiguous=true, bool profiling=false>
+struct CCFifo
 {
+public:
+    using elem_t = T;
 private:
     Marker producer_;
     Marker consumer_;
@@ -262,14 +251,14 @@ private:
                 std::atomic_thread_fence(std::memory_order_acquire);
             }
 
-            if(fifo_type == type::buffer)
+            if(contiguous)
             {
                 callback(elemAt(next), size, std::forward<Args>(args)...);
             }
             else
             {
                 for(size_t i=0; i<size; i++)
-                    callback(elemAt(next+i), size, std::forward<Args>(args)...);
+                    callback(elemAt(next+i), size - i - 1, std::forward<Args>(args)...);
             }
 
             if(!is_producer)
@@ -306,20 +295,21 @@ private:
         size_t next_size = size;
         for(;;profAdd(marker.try_miss_count, 1))
         {
-            if(fifo_type == type::buffer)
+            next_size = size;
+            size_t prod_index = producer_.get_index_tail();
+            if(cons_mode == mode::dense)
             {
-                if(cons_mode == mode::dense)
-                {
-                    while(entry_id_head != marker.get_entry_id_tail())
-                        entry_id_head = marker.get_entry_id_head();
+                while(entry_id_head != marker.get_entry_id_tail())
+                    entry_id_head = marker.get_entry_id_head();
 
-                    cons_index_head = marker.get_index_head();
-                }
+                cons_index_head = marker.get_index_head();
+            }
 
-                cons_next_index = cons_index_head;
-                size_t prod_index = producer_.get_index_tail();
-                size_t wmark = water_mark_.load(std::memory_order_relaxed);
-                if(cons_next_index < prod_index)
+            cons_next_index = cons_index_head;
+            size_t wmark = water_mark_.load(std::memory_order_relaxed);
+            if(cons_next_index < prod_index)
+            {
+                if(contiguous)
                 {
                     if(cons_next_index == wmark)
                     {
@@ -353,60 +343,43 @@ private:
                             next_size = prod_index - cons_next_index;
                         }
                     }
-
-                    if(cons_mode == mode::dense)
-                    {
-                        if(!marker.ref_entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
-                        {
-                            continue;
-                        }
-                        else
-                        {
-                            marker.ref_index_head().store(cons_next_index + next_size, std::memory_order_relaxed);
-                            marker.ref_entry_id_tail().store(entry_id_head + 1, std::memory_order_relaxed);
-                            entry_id = entry_id_head;
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        if(!marker.ref_index_head().compare_exchange_weak(cons_index_head, cons_next_index + next_size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
-                        else break;
-                    }
-                } /// if(cons_next_index < prod_index)
+                } /// if(contiguous)
                 else
                 {
-                    // LOGD("Underrun! %s", dump().data());
-                    next_size = 0;
-                    // profAdd(stat_pop_error, 1);
-                    break;
-                }
-            } /// if(fifo_type == type::buffer)
-            else /// fifo_type == type::queue
-            {
-                for(;;)
-                {
-                    size_t prod_index = producer_.get_index_tail();
-                    if (cons_index_head == marker.get_index_tail())
-                    {
-                        next_size = 0;
-                        break;
-                    }
-
                     if(size > prod_index - cons_index_head)
                     {
                         next_size = prod_index - cons_index_head;
                     }
+                }
 
-                    if(marker.ref_index_head().compare_exchange_weak(cons_index_head, cons_index_head + next_size, std::memory_order_relaxed, std::memory_order_relaxed))
+                if(cons_mode == mode::dense)
+                {
+                    if(!marker.ref_entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
                     {
-                        entry_id = cons_index_head;
-                        cons_next_index = cons_index_head;
+                        continue;
+                    }
+                    else
+                    {
+                        marker.ref_index_head().store(cons_next_index + next_size, std::memory_order_relaxed);
+                        marker.ref_entry_id_tail().store(entry_id_head + 1, std::memory_order_relaxed);
+                        entry_id = entry_id_head;
                         break;
                     }
                 }
+                else
+                {
+                    if(!marker.ref_index_head().compare_exchange_weak(cons_index_head, cons_next_index + next_size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                    else break;
+                }
+            } /// if(cons_next_index < prod_index)
+            else
+            {
+                // LOGD("Underrun! %s", dump().data());
+                next_size = 0;
+                // profAdd(stat_pop_error, 1);
+                break;
             }
-        } /// /// for(;;)
+        } /// for(;;)
 
         size = next_size;
         return cons_next_index;
@@ -421,19 +394,20 @@ private:
 
         for(;;profAdd(marker.try_miss_count, 1))
         {
-            if(fifo_type == type::buffer)
+            size_t cons_index = consumer_.get_index_tail();
+            if(prod_mode == mode::dense)
             {
-                if(prod_mode == mode::dense)
-                {
-                    while(entry_id_head != marker.get_entry_id_tail())
-                        entry_id_head = marker.get_entry_id_head();
+                while(entry_id_head != marker.get_entry_id_tail())
+                    entry_id_head = marker.get_entry_id_head();
 
-                    prod_index_head = marker.get_index_head();
-                }
+                prod_index_head = marker.get_index_head();
+            }
 
-                prod_next_index = prod_index_head;
-                size_t cons_index = consumer_.get_index_tail();
-                if(size <= capacity() - (prod_next_index - cons_index))
+            prod_next_index = prod_index_head;
+
+            if(prod_next_index + size <= capacity() + cons_index)
+            {
+                if(contiguous)
                 {
                     /// prod leads
                     if(wrap(prod_next_index) >= wrap(cons_index))
@@ -463,53 +437,33 @@ private:
                             break;
                         }
                     }
+                } /// if(contiguous)
 
-                    if(prod_mode == mode::dense)
+                if(prod_mode == mode::dense)
+                {
+                    if(!marker.ref_entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
                     {
-                        if(!marker.ref_entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
-                        {
-                            continue;
-                        }
-                        else
-                        {
-                            marker.ref_index_head().store(prod_next_index + size, std::memory_order_relaxed);
-                            marker.ref_entry_id_tail().store(entry_id_head + 1, std::memory_order_relaxed);
-                            entry_id = entry_id_head;
-                            break;
-                        }
+                        continue;
                     }
                     else
                     {
-                        if(!marker.ref_index_head().compare_exchange_weak(prod_index_head, prod_next_index + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
-                        else break;
+                        marker.ref_index_head().store(prod_next_index + size, std::memory_order_relaxed);
+                        marker.ref_entry_id_tail().store(entry_id_head + 1, std::memory_order_relaxed);
+                        entry_id = entry_id_head;
+                        break;
                     }
-                }
+                } /// prod_mode == mode::dense
                 else
                 {
-                    // LOGE("OVERRUN");dump();
-                    size = 0;
-                    break;
+                    if(!marker.ref_index_head().compare_exchange_weak(prod_index_head, prod_next_index + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                    else break;
                 }
-            } /// if(fifo_type == type::buffer)
-            else /// fifo_type == type::queue
+            }
+            else
             {
-                for(;;)
-                {
-                    size_t cons_index = consumer_.get_index_tail();
-
-                    if(prod_index_head + size > cons_index + capacity())
-                    {
-                        size = 0;
-                        break;
-                    }
-
-                    if(marker.ref_index_head().compare_exchange_weak(prod_index_head, prod_index_head + size, std::memory_order_relaxed, std::memory_order_relaxed))
-                    {
-                        entry_id = prod_index_head;
-                        prod_next_index = prod_index_head;
-                        break;
-                    }
-                }
+                // LOGE("OVERRUN");dump();
+                size = 0;
+                break;
             }
         } /// for(;;)
         return prod_next_index;
@@ -528,8 +482,8 @@ private:
             // size_t old_exit_id = marker.exit_id_list(wrap(kIdx, num_threads_)).load(std::memory_order_relaxed);
             // size_t new_exit_id=exit_id + 1;
 
-            // LOGD("%d\t%ld:%ld", is_producer, next_index, this->next(curr_index));
-            if(is_producer && next_index >= this->next(curr_index))
+            // LOGD("%d:%ld\t%ld:%ld", is_producer, kIdx, next_index, this->next(curr_index));
+            if(contiguous && is_producer && next_index >= this->next(curr_index))
             {
                 water_mark_head_.store(curr_index, std::memory_order_relaxed);
             }
@@ -573,7 +527,7 @@ private:
 
                     // next_index = marker.ref_next_index_list(wrap(new_exit_id - 1, num_threads_)).load(std::memory_order_relaxed);
 
-                    if(is_producer)
+                    if(contiguous && is_producer)
                     {
                         size_t wmh = water_mark_head_.load(std::memory_order_relaxed);
                         if((water_mark_.load(std::memory_order_relaxed) < wmh) 
@@ -594,12 +548,11 @@ private:
                 // if(marker.exit_id_list(wrap(exit_id, num_threads_)).compare_exchange_strong(old_exit_id, new_exit_id, std::memory_order_relaxed, std::memory_order_relaxed)) break;
                 // LOGD(" M%ld:%ld:%ld\t%ld:%ld\t%s", kIdx, curr_exit_id, exit_id, old_next_index, next_index, dump().data());
             }
-        }
+        } /// if(mode == mode::dense)
         else
         {
-
             for(;marker.get_index_tail() != curr_index;){}
-            if(is_producer && next_index >= this->next(curr_index))
+            if(contiguous && is_producer && next_index >= this->next(curr_index))
             {
                 water_mark_.store(curr_index, std::memory_order_relaxed);
             }
@@ -611,10 +564,10 @@ private:
     }
 
 public:
-    ccfifo() = default;
-    ~ccfifo() = default;
+    CCFifo() = default;
+    ~CCFifo() = default;
 
-    ccfifo(size_t size, size_t num_threads=0x400)
+    CCFifo(size_t size, size_t num_threads=0x400)
     {
         reserve(size, num_threads);
     }
@@ -838,29 +791,43 @@ public:
     {
         return profiling;
     }
-};
+}; /// CCFifo
 
 template <typename T, bool P=false>
-using ring_buffer_dd = typename tll::lf2::ccfifo<T, type::buffer, mode::dense, mode::dense, P>;
+using ring_buffer_dd = typename tll::lf2::CCFifo<T, mode::dense, mode::dense, true, P>;
 template <typename T, bool P=false>
-using ring_buffer_ds = typename tll::lf2::ccfifo<T, type::buffer, mode::dense, mode::sparse, P>;
+using ring_buffer_ds = typename tll::lf2::CCFifo<T, mode::dense, mode::sparse, true, P>;
 template <typename T, bool P=false>
-using ring_buffer_ss = typename tll::lf2::ccfifo<T, type::buffer, mode::sparse, mode::sparse, P>;
+using ring_buffer_ss = typename tll::lf2::CCFifo<T, mode::sparse, mode::sparse, true, P>;
 template <typename T, bool P=false>
-using ring_buffer_sd = typename tll::lf2::ccfifo<T, type::buffer, mode::sparse, mode::dense, P>;
-
-
+using ring_buffer_sd = typename tll::lf2::CCFifo<T, mode::sparse, mode::dense, true, P>;
 
 template <typename T, bool P=false>
 using ring_buffer_mpmc = typename tll::lf2::ring_buffer_dd<T, P>;
-
 template <typename T, bool P=false>
 using ring_buffer_mpsc = typename tll::lf2::ring_buffer_ds<T, P>;
-
 template <typename T, bool P=false>
 using ring_buffer_spmc = typename tll::lf2::ring_buffer_sd<T, P>;
-
 template <typename T, bool P=false>
 using ring_buffer_spsc = typename tll::lf2::ring_buffer_ss<T, P>;
+
+
+template <typename T, bool P=false>
+using ring_queue_dd = typename tll::lf2::CCFifo<T, mode::dense, mode::dense, false, P>;
+template <typename T, bool P=false>
+using ring_queue_ds = typename tll::lf2::CCFifo<T, mode::dense, mode::sparse, false, P>;
+template <typename T, bool P=false>
+using ring_queue_ss = typename tll::lf2::CCFifo<T, mode::sparse, mode::sparse, false, P>;
+template <typename T, bool P=false>
+using ring_queue_sd = typename tll::lf2::CCFifo<T, mode::sparse, mode::dense, false, P>;
+
+template <typename T, bool P=false>
+using ring_queue_mpmc = typename tll::lf2::ring_queue_dd<T, P>;
+template <typename T, bool P=false>
+using ring_queue_mpsc = typename tll::lf2::ring_queue_ds<T, P>;
+template <typename T, bool P=false>
+using ring_queue_spmc = typename tll::lf2::ring_queue_sd<T, P>;
+template <typename T, bool P=false>
+using ring_queue_spsc = typename tll::lf2::ring_queue_ss<T, P>;
 
 } /// tll::lf
