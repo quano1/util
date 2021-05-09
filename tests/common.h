@@ -70,7 +70,7 @@ std::pair<size_t, size_t> fifing(
                     tt_push_count.fetch_add(1, std::memory_order_relaxed);
                     tt_push_size.fetch_add(ret, std::memory_order_relaxed);
                     lc_tt_size+=ret;
-                    // NOP_LOOP();
+                    NOP_LOOP();
                     do_rest();
                 }
                 loop_num++;
@@ -95,7 +95,7 @@ std::pair<size_t, size_t> fifing(
                     tt_pop_count.fetch_add(1, std::memory_order_relaxed);
                     tt_pop_size.fetch_add(ret, std::memory_order_relaxed);
                     lc_tt_size+=ret;
-                    // NOP_LOOP();
+                    NOP_LOOP();
                     do_rest();
                 }
                 loop_num++;
