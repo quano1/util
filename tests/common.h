@@ -116,10 +116,11 @@ std::pair<size_t, size_t> fifing(
     return {tt_push_size.load(), tt_pop_size.load()};
 }
 
+template <typename T>
 void plot_data(const std::string &file_name, const std::string &title, const std::string &y_title, 
                 std::vector<std::string> &column_lst,
                 const std::vector<int> &x_axes,
-                const std::vector<double> &data)
+                const std::vector<T> &data)
 {
     std::ofstream ofs{file_name, std::ios::out | std::ios::binary};
     assert(ofs.is_open());
@@ -137,7 +138,7 @@ void plot_data(const std::string &file_name, const std::string &title, const std
     // ofs << tll::util::stringFormat("#%d\n", column_lst.size());
     // ofs << tll::util::stringFormat("#%d\n", NUM_CPU);
     // auto col_size = column_lst.size();
-    auto x_size = data.size() / col_size;
+    // auto x_size = data.size() / col_size;
 
     ofs << "#" << col_size << "\n";
     ofs << "#" << NUM_CPU << "\n";
@@ -152,7 +153,7 @@ void plot_data(const std::string &file_name, const std::string &title, const std
 
     ofs << "\n";
 
-    LOGD("%ld %ld", col_size, x_axes.size());
+    // LOGD("%ld %ld", col_size, x_axes.size());
     for(int i=0; i<x_axes.size(); i++)
     {
         ofs << x_axes[i] << " ";

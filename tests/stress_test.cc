@@ -14,14 +14,14 @@
 using namespace tll::lf2;
 
 // static constexpr size_t kCapacity = 0x100000;
-static constexpr size_t kWriteCount = 250000;
+static constexpr size_t kWriteCount = 500000;
 
 #define PROFILING true
 #define SEQUENCE_EXTEND 1u
 #define CONCURRENT_EXTEND 0u
 // #define DUMP 3000
 /// Should run with --gtest_filter=ccfifoBufferStressTest.* --gtest_repeat=10000
-struct RingBufferStressTest : public ::testing::Test
+struct CCFifoStressTest : public ::testing::Test
 {
     void SetUp()
     {
@@ -35,7 +35,7 @@ struct RingBufferStressTest : public ::testing::Test
 
     static void SetUpTestCase()
     {
-        LOGD("Should run with --gtest_filter=RingBufferStressTest.* --gtest_repeat=100000 --gtest_break_on_failure");
+        LOGD("Should run with --gtest_filter=CCFifoStressTest.* --gtest_repeat=100000 --gtest_break_on_failure");
     }
 
     void plotting()
@@ -46,30 +46,80 @@ struct RingBufferStressTest : public ::testing::Test
                   time_lst
                   );
 
-        column_lst.clear();
-        thread_lst.clear();
-        time_lst.clear();
-        total_size_lst.clear();
-        total_count_lst.clear();
+        // column_lst.clear();
+        // thread_lst.clear();
+        // time_lst.clear();
+        // total_size_lst.clear();
+        // total_count_lst.clear();
     }
 
-    // template <typename Stat>
-    // void plottingStat(const std::vector<Stat> &stat_lst)
-    // {
-    //     column_lst.clear();
-    //     std::vector<> data;
-    //     for(int i=0; i<stat_lst.size(); i++)
-    //     {
-    //         column_lst.push_back(std::to_string("i"));
-    //     }
+    void plotting(std::vector<Statistics> stat_lst)
+    {
+        std::vector<size_t> data;
+        for(auto &stat : stat_lst)
+        {
+            auto &push_stat = stat.first;
+            auto &pop_stat = stat.second;
+            data.push_back(push_stat.time_try / push_stat.try_count);
+            data.push_back(pop_stat.time_try / pop_stat.try_count);
+        }
+        
+        tll::test::plot_data(tll::util::stringFormat("%s_stat_try.dat", ::testing::UnitTest::GetInstance()->current_test_info()->name()), tll::util::stringFormat("Lower better (CPU: %d)", NUM_CPU), "Avg time (ns) of try",
+                  column_lst,
+                  thread_lst,
+                  data
+                  );
 
-    //     tll::test::plot_data(tll::util::stringFormat("%s_time.dat", ::testing::UnitTest::GetInstance()->current_test_info()->name()), "Lower better", "Relative completing time in seconds",
-    //               column_lst,
-    //               thread_lst,
-    //               time_lst
-    //               );
+        data.clear();
+        for(auto &stat : stat_lst)
+        {
+            auto &push_stat = stat.first;
+            size_t comp_count = push_stat.try_count - push_stat.error_count;
+            data.push_back(push_stat.time_comp / comp_count);
 
-    // }
+            auto &pop_stat = stat.second;
+            comp_count = push_stat.try_count - push_stat.error_count;
+            data.push_back(pop_stat.time_comp / comp_count);
+        }
+        
+        tll::test::plot_data(tll::util::stringFormat("%s_push_stat_comp.dat", ::testing::UnitTest::GetInstance()->current_test_info()->name()), tll::util::stringFormat("Lower better (CPU: %d)", NUM_CPU), "Avg time (ns) of comp",
+                  column_lst,
+                  thread_lst,
+                  data
+                  );
+
+        data.clear();
+        for(auto &stat : stat_lst)
+        {
+            auto &push_stat = stat.first;
+            data.push_back(push_stat.try_miss_count);
+
+            auto &pop_stat = stat.second;
+            data.push_back(pop_stat.try_miss_count);
+        }
+        
+        tll::test::plot_data(tll::util::stringFormat("%s_push_stat_try_miss.dat", ::testing::UnitTest::GetInstance()->current_test_info()->name()), tll::util::stringFormat("Lower better (CPU: %d)", NUM_CPU), "Avg time (ns) of try_miss",
+                  column_lst,
+                  thread_lst,
+                  data
+                  );
+
+        data.clear();
+        for(auto &stat : stat_lst)
+        {
+            auto &push_stat = stat.first;
+            data.push_back(push_stat.comp_miss_count);
+
+            auto &pop_stat = stat.second;
+            data.push_back(pop_stat.comp_miss_count);
+        }
+        
+        tll::test::plot_data(tll::util::stringFormat("%s_push_stat_comp_miss.dat", ::testing::UnitTest::GetInstance()->current_test_info()->name()), tll::util::stringFormat("Lower better (CPU: %d)", NUM_CPU), "Avg time (ns) of comp_miss",
+                  column_lst,
+                  thread_lst,
+                  data
+                  );
+    }
 
     template <size_t num_of_threads, typename FIFO>
     void SequenceFixedSize(FIFO &fifo,
@@ -225,16 +275,16 @@ struct RingBufferStressTest : public ::testing::Test
     // static constexpr size_t kCapacity = kTotalWriteSize / 4;
     // static constexpr size_t kMaxPkgSize = 0x3;
     // static constexpr size_t kWrap = 16;
-}; /// RingBufferStressTest
+}; /// CCFifoStressTest
 
-std::vector<std::string> RingBufferStressTest::column_lst;
-std::vector<int> RingBufferStressTest::thread_lst;
-std::vector<double> RingBufferStressTest::time_lst;
-std::vector<size_t> RingBufferStressTest::total_size_lst;
-std::vector<size_t> RingBufferStressTest::total_count_lst;
+std::vector<std::string> CCFifoStressTest::column_lst;
+std::vector<int> CCFifoStressTest::thread_lst;
+std::vector<double> CCFifoStressTest::time_lst;
+std::vector<size_t> CCFifoStressTest::total_size_lst;
+std::vector<size_t> CCFifoStressTest::total_count_lst;
 
 
-// TEST_F(RingBufferStressTest, SlowSequence)
+// TEST_F(CCFifoStressTest, SlowSequence)
 // {
 //     /// prepare headers
 //     auto resting = [](){
@@ -258,7 +308,7 @@ std::vector<size_t> RingBufferStressTest::total_count_lst;
 //     plotting();
 // }
 
-// TEST_F(RingBufferStressTest, RushSequence)
+// TEST_F(CCFifoStressTest, RushSequence)
 // {
 //     /// prepare headers
 //     auto resting = [](){
@@ -283,10 +333,9 @@ std::vector<size_t> RingBufferStressTest::total_count_lst;
 //     plotting();
 // }
 
-TEST_F(RingBufferStressTest, DDSlowSequence)
+TEST_F(CCFifoStressTest, SequenceTrafficJamDD)
 {
     auto resting = [](){
-        std::this_thread::yield();
         std::this_thread::sleep_for(std::chrono::nanoseconds(0));
     };
 
@@ -359,18 +408,18 @@ TEST_F(RingBufferStressTest, DDSlowSequence)
         "W 0x10000", "R 0x10000",
     };
     plotting();
-} /// DDSlowSequence
+} /// SequenceTrafficJamDD
 
-TEST_F(RingBufferStressTest, DDRushSequence)
+TEST_F(CCFifoStressTest, SequenceRushDD)
 {
     auto resting = [](){
         std::this_thread::yield();
     };
 
-    constexpr int kExtend = 3u;
+    constexpr int kExtend = 5u;
     constexpr size_t kPkgSize = 5;
 
-    // std::vector<Statistics> stat_lst;
+    std::vector<Statistics> stat_lst;
     tll::util::CallFuncInSeq<NUM_CPU, kExtend>( [&](auto index_seq)
     {
         thread_lst.push_back(index_seq.value);
@@ -381,48 +430,48 @@ TEST_F(RingBufferStressTest, DDRushSequence)
         {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x400};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
-            // stat_lst.push_back(fifo.statistics());
+            stat_lst.push_back(fifo.statistics());
         }
         LOGD("-----------------------------------------");
 
         {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x800};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
-            // stat_lst.push_back(fifo.statistics());
+            stat_lst.push_back(fifo.statistics());
         }
         LOGD("-----------------------------------------");
 
         {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x1000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
-            // stat_lst.push_back(fifo.statistics());
+            stat_lst.push_back(fifo.statistics());
         }
         LOGD("-----------------------------------------");
 
         {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x2000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
-            // stat_lst.push_back(fifo.statistics());
+            stat_lst.push_back(fifo.statistics());
         }
 
         {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x4000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
-            // stat_lst.push_back(fifo.statistics());
+            stat_lst.push_back(fifo.statistics());
         }
         LOGD("-----------------------------------------");
 
         {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x8000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
-            // stat_lst.push_back(fifo.statistics());
+            stat_lst.push_back(fifo.statistics());
         }
         LOGD("-----------------------------------------");
 
         {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x10000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
-            // stat_lst.push_back(fifo.statistics());
+            stat_lst.push_back(fifo.statistics());
         }
         LOGD("-----------------------------------------");
     });
@@ -436,10 +485,11 @@ TEST_F(RingBufferStressTest, DDRushSequence)
         "W 0x10000", "R 0x10000",
     };
     plotting();
-} /// DDRushSequence
+    plotting(stat_lst);
+} /// SequenceRushDD
 
 
-TEST_F(RingBufferStressTest, SequenceRushMixed)
+TEST_F(CCFifoStressTest, SequenceRushMixed)
 {
     auto resting = [](){
         std::this_thread::yield();
@@ -494,7 +544,7 @@ TEST_F(RingBufferStressTest, SequenceRushMixed)
 } /// DDRushSequence
 
 
-TEST_F(RingBufferStressTest, DISABLED_DDRushConcurrent)
+TEST_F(CCFifoStressTest, DISABLED_DDRushConcurrent)
 {
     auto resting = [](){
         std::this_thread::yield();
