@@ -499,17 +499,7 @@ private:
                 size_t curr_exit_id = marker.get_exit_id();
 
                 // LOGD(">%ld:%ld\t%ld:%ld", kIdx, curr_exit_id, exit_id, old_exit_id);
-                if(exit_id < curr_exit_id)
-                { break; }
-
-                // new_exit_id = exit_id + 1;
-                if(exit_id > curr_exit_id)
-                {
-                    // LOGD(" !%ld:%ld\t%ld:%ld:%ld\t%s", kIdx, curr_exit_id, exit_id, old_exit_id, new_exit_id, dump().data());
-                    // next_index = marker.ref_next_index_list(wrap(new_exit_id - 1, num_threads_)).load(std::memory_order_relaxed);
-                    // marker.ref_next_index_list(wrap(exit_id, num_threads_)).store(next_index);
-                }
-                else
+                if(exit_id == curr_exit_id)
                 {
                     while(true)
                     {
@@ -543,6 +533,8 @@ private:
                     marker.ref_exit_id().store(exit_id, std::memory_order_relaxed);
                     // LOGD(" =%ld:%ld\t%ld:%ld:%ld\t%s", kIdx, curr_exit_id, exit_id, old_exit_id, new_exit_id, dump().data());
                 }
+                else if(exit_id < curr_exit_id)
+                { break; }
 
                 if(marker.ref_next_index_list(wrap(exit_id, num_threads_)).compare_exchange_strong(old_next_index, next_index, std::memory_order_relaxed, std::memory_order_relaxed)) break;
                 // if(marker.exit_id_list(wrap(exit_id, num_threads_)).compare_exchange_strong(old_exit_id, new_exit_id, std::memory_order_relaxed, std::memory_order_relaxed)) break;
@@ -567,7 +559,7 @@ public:
     CCFifo() = default;
     ~CCFifo() = default;
 
-    CCFifo(size_t size, size_t num_threads=0x400)
+    CCFifo(size_t size, size_t num_threads=0x1000)
     {
         reserve(size, num_threads);
     }
