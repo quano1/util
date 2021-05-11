@@ -8,10 +8,18 @@
 #include <vector>
 #include <mutex>
 #include <bitset>
-#include "../counter.h"
-#include "../util.h"
 
-namespace tll::lf2 {
+#include "counter.h"
+#include "util.h"
+
+typedef std::chrono::steady_clock StatClock;
+typedef std::chrono::duration<size_t, std::ratio<1, 1000000000>> StatDuration; /// ns
+
+namespace tll::lf {
+
+template <typename T>
+using Callback = std::function<void(const T *o, size_t s)>;
+
 
 namespace st {
 static thread_local tll::time::Counter<StatDuration, StatClock> counter;
@@ -149,7 +157,7 @@ namespace mode
 /// Contiguous Circular Index
 // template <size_t num_threads=0x400>
 template <typename T, Mode prod_mode=Mode::kDense, Mode cons_mode=Mode::kSparse, bool contiguous=true, bool profiling=false>
-struct CCFifo
+struct Fifo
 {
 public:
     using elem_t = T;
@@ -556,10 +564,10 @@ private:
     }
 
 public:
-    CCFifo() = default;
-    ~CCFifo() = default;
+    Fifo() = default;
+    ~Fifo() = default;
 
-    CCFifo(size_t size, size_t num_threads=0x1000)
+    Fifo(size_t size, size_t num_threads=0x1000)
     {
         reserve(size, num_threads);
     }
@@ -783,43 +791,43 @@ public:
     {
         return profiling;
     }
-}; /// CCFifo
+}; /// Fifo
 
 template <typename T, bool P=false>
-using ring_buffer_dd = typename tll::lf2::CCFifo<T, mode::dense, mode::dense, true, P>;
+using ring_buffer_dd = typename tll::lf::Fifo<T, mode::dense, mode::dense, true, P>;
 template <typename T, bool P=false>
-using ring_buffer_ds = typename tll::lf2::CCFifo<T, mode::dense, mode::sparse, true, P>;
+using ring_buffer_ds = typename tll::lf::Fifo<T, mode::dense, mode::sparse, true, P>;
 template <typename T, bool P=false>
-using ring_buffer_ss = typename tll::lf2::CCFifo<T, mode::sparse, mode::sparse, true, P>;
+using ring_buffer_ss = typename tll::lf::Fifo<T, mode::sparse, mode::sparse, true, P>;
 template <typename T, bool P=false>
-using ring_buffer_sd = typename tll::lf2::CCFifo<T, mode::sparse, mode::dense, true, P>;
+using ring_buffer_sd = typename tll::lf::Fifo<T, mode::sparse, mode::dense, true, P>;
 
 template <typename T, bool P=false>
-using ring_buffer_mpmc = typename tll::lf2::ring_buffer_dd<T, P>;
+using ring_buffer_mpmc = typename tll::lf::ring_buffer_dd<T, P>;
 template <typename T, bool P=false>
-using ring_buffer_mpsc = typename tll::lf2::ring_buffer_ds<T, P>;
+using ring_buffer_mpsc = typename tll::lf::ring_buffer_ds<T, P>;
 template <typename T, bool P=false>
-using ring_buffer_spmc = typename tll::lf2::ring_buffer_sd<T, P>;
+using ring_buffer_spmc = typename tll::lf::ring_buffer_sd<T, P>;
 template <typename T, bool P=false>
-using ring_buffer_spsc = typename tll::lf2::ring_buffer_ss<T, P>;
+using ring_buffer_spsc = typename tll::lf::ring_buffer_ss<T, P>;
 
 
 template <typename T, bool P=false>
-using ring_queue_dd = typename tll::lf2::CCFifo<T, mode::dense, mode::dense, false, P>;
+using ring_queue_dd = typename tll::lf::Fifo<T, mode::dense, mode::dense, false, P>;
 template <typename T, bool P=false>
-using ring_queue_ds = typename tll::lf2::CCFifo<T, mode::dense, mode::sparse, false, P>;
+using ring_queue_ds = typename tll::lf::Fifo<T, mode::dense, mode::sparse, false, P>;
 template <typename T, bool P=false>
-using ring_queue_ss = typename tll::lf2::CCFifo<T, mode::sparse, mode::sparse, false, P>;
+using ring_queue_ss = typename tll::lf::Fifo<T, mode::sparse, mode::sparse, false, P>;
 template <typename T, bool P=false>
-using ring_queue_sd = typename tll::lf2::CCFifo<T, mode::sparse, mode::dense, false, P>;
+using ring_queue_sd = typename tll::lf::Fifo<T, mode::sparse, mode::dense, false, P>;
 
 template <typename T, bool P=false>
-using ring_queue_mpmc = typename tll::lf2::ring_queue_dd<T, P>;
+using ring_queue_mpmc = typename tll::lf::ring_queue_dd<T, P>;
 template <typename T, bool P=false>
-using ring_queue_mpsc = typename tll::lf2::ring_queue_ds<T, P>;
+using ring_queue_mpsc = typename tll::lf::ring_queue_ds<T, P>;
 template <typename T, bool P=false>
-using ring_queue_spmc = typename tll::lf2::ring_queue_sd<T, P>;
+using ring_queue_spmc = typename tll::lf::ring_queue_sd<T, P>;
 template <typename T, bool P=false>
-using ring_queue_spsc = typename tll::lf2::ring_queue_ss<T, P>;
+using ring_queue_spsc = typename tll::lf::ring_queue_ss<T, P>;
 
 } /// tll::lf

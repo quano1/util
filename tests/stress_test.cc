@@ -9,9 +9,9 @@
 #include "common.h"
 #include "../libs/util.h"
 #include "../libs/counter.h"
-#include "../libs/contiguouscircular.h"
+#include "../libs/lffifo.h"
 
-using namespace tll::lf2;
+using namespace tll::lf;
 
 // static constexpr size_t kCapacity = 0x100000;
 static constexpr size_t kWriteCount = 500000;
@@ -170,7 +170,7 @@ struct CCFifoStressTest : public ::testing::Test
         if(fifo.isProfilingEnabled())
         {
             auto stats = fifo.statistics();
-            tll::cc::dumpStat<1>(stats, time_lst.back());
+            fifo.dumpStat(time_lst.back(), 1);
             // LOGD("%ld\t%s", rts_push, fifo.dump().data());
         }
         // LOGD("Total time: %f (s)", time_lst.back());
@@ -188,7 +188,7 @@ struct CCFifoStressTest : public ::testing::Test
         if(fifo.isProfilingEnabled())
         {
             auto stats = fifo.statistics();
-            tll::cc::dumpStat<2>(stats, time_lst.back());
+            fifo.dumpStat(time_lst.back(), 2);
             // LOGD("%ld\t%s", rts_push, fifo.dump().data());
         }
         // LOGD("Total time: %f (s)", time_lst.back());
@@ -243,7 +243,7 @@ struct CCFifoStressTest : public ::testing::Test
         if(fifo.isProfilingEnabled())
         {
             auto stats = fifo.statistics();
-            tll::cc::dumpStat<>(stats, time_lst.back());
+            fifo.dumpStat(time_lst.back());
             // LOGD("%ld\t%s", rts_push, fifo.dump().data());
         }
 

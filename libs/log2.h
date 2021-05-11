@@ -22,7 +22,7 @@
 
 #include "util.h"
 #include "counter.h"
-#include "contiguouscircular.h"
+#include "lffifo.h"
 
 #ifndef TLL_DEFAULT_LOG_PATH
 #define TLL_DEFAULT_LOG_PATH "."
@@ -95,32 +95,11 @@ enum class Type
     kMax,
 };
 
-enum class Flag : uint32_t
-{
-    kTrace = (1U << (int)Type::kTrace),
-    kDebug = (1U << (int)Type::kDebug),
-    kInfo = (1U << (int)Type::kInfo),
-    kWarn = (1U << (int)Type::kWarn),
-    kFatal = (1U << (int)Type::kFatal),
-    kAll = kTrace | kDebug | kInfo | kWarn | kFatal,
-};
-
 enum class Mode
 {
     kSync = 0,
     kAsync,
 };
-
-inline constexpr Flag toFlag(Type type)
-{
-    return static_cast<Flag>(1U << static_cast<int>(type));
-}
-
-template <typename... Args>
-constexpr Flag toFlag(Type type, Args ...args)
-{
-    return toFlag(type) | toFlag(args...);
-}
 
 struct Message
 {
@@ -131,7 +110,6 @@ struct Message
 struct Entity
 {
     std::string name;
-    Flag flag;
     std::function<void(void*, const char*, size_t)> onLog;
     std::function<void *()> onStart;
     std::function<void(void *&)> onStop;
@@ -244,13 +222,13 @@ public:
     }
 
     Manager(uint32_t queue_size) :
-        ccq_{queue_size}
+        rb_{queue_size}
     {}
 
     template < typename ... LogEnts>
     Manager(uint32_t queue_size,
            LogEnts ...ents) :
-        ccq_{queue_size}
+        rb_{queue_size}
     {
         add_(ents...);
     }
@@ -282,112 +260,47 @@ public:
     template <Mode mode>
     void log(Message);
 
-    inline void start(size_t chunk_size = 0x400, uint32_t period_ms=1000) /// 1 Kb, 1000 ms
+    inline void start(size_t chunk_size = 0x400 * 16, uint32_t period_ms=1000) /// 16 Kb, 1000 ms
     {
         bool val = false;
-LOGD("");
         if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
             return;
         broadcast_ = std::thread([this, chunk_size, period_ms]()
         {
             time::Counter<> counter;
-            auto buff_list = init_(chunk_size);
-            uint32_t total_delta = 0;
-            std::vector<char> buff (chunk_size);
-LOGD("");
-            cc::Callback onPopBatch{[this, &buff_list](uint32_t index, uint32_t size)
-            {
-                for(uint32_t i=0; i<size; i++)
-                {
-                    Message &log_msg = *ccq_.elemAt(index + i);
-                    for(auto &entry : buff_list)
-                    {
-                        auto &flag = entry.first;
-                        auto &ccb = entry.second;
-                        if((uint32_t)flag & (uint32_t)toFlag(log_msg.type))
-                        {
-                            std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(log_msg.type)], log_msg.payload);
-                            ccb.push([&payload, &ccb](size_t i, size_t s){
-                                std::memcpy(ccb.elemAt(i), payload.data(), s);
-                            }, payload.size());
-                        }
-                    }
-                }
-            }};
-LOGD("");
+            uint32_t delta = 0;
             while(isRunning())
             {
-                uint32_t delta = counter.elapse().count();
+                delta += counter.elapse().count();
                 counter.start();
-                total_delta += delta;
-LOGD("");
-                if(total_delta >= period_ms)
+                if(delta < period_ms && rb_.size() < chunk_size)
                 {
-                    total_delta -= period_ms;
-                    /// flushing the buffer list
-                    for(auto &buff_entry : buff_list)
-                    {
-                        auto &flag = buff_entry.first;
-                        auto &ccb = buff_entry.second;
-                        size_t cs = chunk_size;
-                        if(ccb.pop([&buff, &ccb](size_t i, size_t s)
-                                   { std::memcpy(buff.data(), ccb.elemAt(i), s); }, cs))
-                        {
-                            buff.resize(cs);
-                            log_(flag, buff);
-                            // buff.resize(0);
-                        }
-                    }
-                }
-
-                if(ccq_.empty())
-                {
+        LOGD("%ld", delta);
                     std::unique_lock<std::mutex> lock(mtx_);
                     /// wait timeout
-                    bool wait_status = pop_wait_.wait_for(lock, std::chrono::milliseconds(period_ms - total_delta), [this] {
-                        return !isRunning() || !this->ccq_.empty();
+                    bool wait_status = pop_wait_.wait_for(lock, std::chrono::milliseconds(period_ms - delta), [this, chunk_size, &delta, &counter] {
+                        delta += counter.elapse().count();
+                    LOGD("%ld: %d", !isRunning() || (this->rb_.size() >= chunk_size));
+                        return !isRunning() || (this->rb_.size() >= chunk_size);
                     });
-                    /// wait timeout or running == false
-                    if( !wait_status || !isRunning())
-                    {
-                        continue;
-                    }
                 }
-                ccq_.pop(onPopBatch, ccq_.capacity());
-                for(auto &entry : buff_list)
+LOGD("%ld", rb_.size());
+                if(delta >= period_ms || rb_.size() >= chunk_size)
                 {
-                    auto &flag = entry.first;
-                    auto &ccb = entry.second;
-                    while(ccb.size() >= chunk_size)
-                    {
-                        buff.resize(chunk_size);
-                        size_t ps = ccb.pop([&ccb, &buff](size_t i, size_t s){std::memcpy(buff.data(), ccb.elemAt(i), s);}, chunk_size);
-                        if(ps > 0)
-                        {
-                            buff.resize(ps);
-                            log_(flag, buff);
-                        }
-                    }
+                    delta -= period_ms;
+                    size_t rs = rb_.pop([&](const char *el, size_t sz){
+                        log_(el, sz);
+                    }, -1);
+                    LOGD("%ld", rs);
                 }
-            }
+            } /// while(isRunning())
 LOGD("");
-            ccq_.pop(onPopBatch, ccq_.capacity());
-
-            for(auto &entry : buff_list)
+            if(!rb_.empty())
             {
-                auto &flag = entry.first;
-                auto &ccb = entry.second;
-                while(!ccb.empty())
-                {
-                    buff.resize(chunk_size);
-                    size_t ps = ccb.pop([&ccb, &buff](size_t i, size_t s){std::memcpy(buff.data(), ccb.elemAt(i), s);}, chunk_size);
-                    if(ps)
-                    {
-                        buff.resize(ps);
-                        log_(flag, buff);
-                    }
-                }
+                size_t rs = rb_.pop([&](const char *el, size_t sz){ log_(el, sz); }, -1);
+                LOGD("%ld", rs);
             }
+            LOGD("");
         });
     }
 
@@ -459,59 +372,56 @@ LOGD("");
         join_wait_.wait(lock, [this] 
         {
             pop_wait_.notify_one();
-            return !isRunning() || ccq_.empty();
+            return !isRunning() || rb_.empty();
         });
     }
 
 private:
 
-    inline void log_(Flag flag, const std::vector<char> &buff) const
+    // inline void log_(Flag flag, const std::vector<char> &buff) const
+    // {
+    //     for(auto &ent_entry : ents_)
+    //     {
+    //         auto &ent = ent_entry.second;
+    //         if(ent.flag == flag)
+    //             ent.log(buff.data(), buff.size());
+    //     }
+    // }
+
+    // inline void log_(Flag flag, const char *buff, size_t size) const
+    // {
+    //     for(auto &ent_entry : ents_)
+    //     {
+    //         auto &ent = ent_entry.second;
+    //         if(ent.flag == flag)
+    //             ent.log(buff, size);
+    //     }
+    // }
+
+    // inline void log_(Type type, const std::string &payload) const
+    // {
+    //     for( auto &entry : ents_)
+    //     {
+    //         auto &ent = entry.second;
+    //         if((uint32_t)ent.flag & (uint32_t)toFlag(type))
+    //         {
+    //             ent.log(payload.data(), payload.size());
+    //         }
+    //     }
+    // }
+
+    inline void log_(const std::string &buff) const
+    {
+        log_(buff.data(), buff.size());
+    }
+
+    inline void log_(const char *buff, size_t size) const
     {
         for(auto &ent_entry : ents_)
         {
             auto &ent = ent_entry.second;
-            if(ent.flag == flag)
-                ent.log(buff.data(), buff.size());
+            ent.log(buff, size);
         }
-    }
-
-    inline void log_(Flag flag, const char *buff, size_t size) const
-    {
-        for(auto &ent_entry : ents_)
-        {
-            auto &ent = ent_entry.second;
-            if(ent.flag == flag)
-                ent.log(buff, size);
-        }
-    }
-
-    inline void log_(Type type, const std::string &payload) const
-    {
-        for( auto &entry : ents_)
-        {
-            auto &ent = entry.second;
-            if((uint32_t)ent.flag & (uint32_t)toFlag(type))
-            {
-                ent.log(payload.data(), payload.size());
-            }
-        }
-    }
-
-    // inline std::unordered_map<Flag, std::vector<char>> init_(uint32_t chunk_size)
-    inline std::unordered_map<Flag, lf::CCFIFO<char>> init_(uint32_t chunk_size)
-    {
-        std::unordered_map<Flag, lf::CCFIFO<char>> buff_list;
-        for(auto &entry : ents_)
-        {
-            auto &ent = entry.second;
-            auto flag = ent.flag;
-            ent.start();
-            if(chunk_size > 0)
-            {
-                buff_list[flag].reserve(chunk_size * 0x400);
-            }
-        }
-        return buff_list;
     }
 
     template <typename ... LogEnts>
@@ -527,9 +437,10 @@ private:
     }
 
     std::atomic<bool> is_running_{false};
-    lf::CCFIFO<Message> ccq_{0x1000};
+    // lf::CCFIFO<Message> ccq_{0x1000};
+    lf::ring_buffer_mpmc<char> rb_{0x100000}; /// 1Mb
     std::unordered_map<std::string, Entity> ents_ = {{"file", Entity{
-                .name = "file", .flag = tll::log::Flag::kAll,
+                .name = "file",
                 [this](void *handle, const char *buff, size_t size)
                 {
                     if(handle == nullptr)
@@ -567,7 +478,7 @@ inline void Manager::log<Mode::kSync>(Message msg)
     /// TODO add pre-format
     std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(int)msg.type], msg.payload);
 
-    log_(msg.type, payload);
+    log_(payload);
 }
 
 template <>
@@ -580,9 +491,10 @@ inline void Manager::log<Mode::kAsync>(Message msg)
     }
     else
     {
-        size_t ps = ccq_.push([this, &msg](size_t index, size_t) {
-            *(ccq_.elemAt(index)) = std::move(msg);
-        });
+        std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(int)msg.type], msg.payload);
+        size_t ps = rb_.push([](char *el, size_t sz, const std::string &msg) {
+            memcpy(el, msg.data(), sz);
+        }, payload.size(), payload);
         assert(ps > 0);
         pop_wait_.notify_one();
     }

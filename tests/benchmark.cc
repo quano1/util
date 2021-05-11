@@ -28,10 +28,10 @@ static char dst[LOOP_COUNT], src[LOOP_COUNT];
 
 #include "../libs/util.h"
 #include "../libs/counter.h"
-#include "../libs/contiguouscircular.h"
+#include "../libs/lffifo.h"
 
 template <int num_of_threads>
-static void mpmc(const std::string &name, const auto &doPush, const auto &doPop, size_t write_count, double *time, size_t *ops, std::vector<std::ofstream> &ofss)
+static void mpmc(const std::string &name, const std::function<bool()> &doPush, const std::function<bool()> &doPop, size_t write_count, double *time, size_t *ops, std::vector<std::ofstream> &ofss)
 {
     // constexpr int kThreadNum = num_of_threads / 2;
     static_assert(num_of_threads > 0);
@@ -150,64 +150,6 @@ static void mpmc(const std::string &name, const auto &doPush, const auto &doPop,
 }
 
 
-template <int num_of_threads>
-static void mpsc(const std::string &name, const auto &doPush, const auto &doPopAll, size_t write_count, double *time, size_t *ops, std::ofstream &ofs)
-{
-    // constexpr int kThreadNum = num_of_threads / 2;
-    static_assert(num_of_threads > 0);
-    std::atomic<size_t> total_push_count{0}, total_pop_count{0};
-    tll::time::Counter<std::chrono::duration<double, std::ratio<1>>> counter; /// seconds
-    std::atomic<int> w_threads{0};
-    // ops[0] = ops[1] = 0;
-    // time[0] = time[1] = 1;
-
-    counter.start();
-    #pragma omp parallel num_threads ( num_of_threads * 2 ) shared(doPush, doPopAll)
-    {
-        int tid = omp_get_thread_num();
-        if(tid > 0)
-        {
-            for(;total_push_count.load(std::memory_order_relaxed) < (write_count*2);)
-            {
-                if(doPush())
-                {
-                    total_push_count.fetch_add(1, std::memory_order_relaxed);
-                }
-                std::this_thread::yield();
-            }
-            w_threads.fetch_add(1, std::memory_order_relaxed);
-        }
-        else
-        {
-            for(;w_threads.load(std::memory_order_relaxed) < (num_of_threads) || 
-                total_push_count.load(std::memory_order_relaxed) > total_pop_count.load(std::memory_order_relaxed);)
-            {
-                auto ret = doPopAll();
-                if(ret > 0)
-                {
-                    total_pop_count.fetch_add(ret, std::memory_order_relaxed);
-                }
-                std::this_thread::yield();
-            }
-        }
-    }
-    counter.elapsed();
-    time[2] = counter.lastElapsed().count();
-    ops[2] = total_push_count.load(std::memory_order_relaxed);
-
-    if(total_push_count.load(std::memory_order_relaxed) != total_pop_count.load(std::memory_order_relaxed))
-    {
-        LOGD(" - w:%ld r:%ld\n", total_push_count.load(std::memory_order_relaxed), total_pop_count.load(std::memory_order_relaxed));
-        abort();
-    }
-
-    // double avg_time[3] = {time[0]*1000/num_of_threads, time[1]*1000/num_of_threads, time[2]*1000/num_of_threads};
-    // double throughput[3] = {ops[0]*0.000001/time[0], ops[1]*0.000001/time[1], ops[2]*0.000001/time[2]};
-    ofs << (time[2]*1000/num_of_threads) << " ";
-    LOGD("%s\t%.3f", name.data(), time[2]*1000/num_of_threads);
-}
-
-
 int benchmark()
 {
     std::vector<std::ofstream> ofss;
@@ -313,7 +255,7 @@ int benchmark()
         }
 
         {
-            tll::lf2::ring_buffer_mpmc<char> fifo{kCount * 2, 0x8000};
+            tll::lf::ring_buffer_mpmc<char> fifo{kCount * 2, 0x8000};
             auto doPush = [&fifo]() -> bool { DUMMY_LOOP(); return fifo.push((char)1); };
             auto doPop = [&fifo]() -> bool { char val; DUMMY_LOOP(); return fifo.pop(val); };
             
@@ -322,7 +264,7 @@ int benchmark()
         }
 
         {
-            tll::lf2::ring_queue_mpmc<char> fifo{kCount * 2, 0x8000};
+            tll::lf::ring_queue_mpmc<char> fifo{kCount * 2, 0x8000};
             auto doPush = [&fifo]() -> bool { DUMMY_LOOP(); return fifo.push((char)1); };
             auto doPop = [&fifo]() -> bool { char val; DUMMY_LOOP(); return fifo.pop(val); };
             
@@ -362,7 +304,7 @@ int benchmark()
 
 
         // {
-        //     tll::lf2::ring_fifo_mpsc<char> fifo{kCount * 2, index_seq.value * 0x2000};
+        //     tll::lf::ring_fifo_mpsc<char> fifo{kCount * 2, index_seq.value * 0x2000};
         //     std::vector<char> store_buff;
         //     store_buff.resize(kCount * 2);
         //     memset(store_buff.data(), 0, store_buff.size());

@@ -17,6 +17,7 @@ PRIVATE
 #     perf_tunnel.cc
     $<$<EQUAL:${HAVE_GTEST},1>:stress_test.cc>
     $<$<EQUAL:${HAVE_GTEST},1>:unittests.cc>
+    $<$<EQUAL:${HAVE_GTEST},1>:logtest.cc>
 )
 
 # print to console
