@@ -29,14 +29,37 @@ TEST_F(LoggerTest, LogSingle)
     LOGD("%f", counter.elapse().count());
 }
 
-
-TEST_F(LoggerTest, Logs)
+TEST_F(LoggerTest, SequenceLog)
 {
     tll::time::Counter<> counter;
     double time = 0;
-    for(int i=0; i<1000000; i++) __asm__("nop");
-    LOGD("%f", counter.elapse().count());
+    counter.start();
+    {
+        for(int i=0; i<1000000; i++)
+        {
+            __asm__("nop");
+            TLL_GLOGD("");
+        }
+    }
+    time = counter.elapse().count();
+    LOGD("%.3f:%f", (1)/(time), time);
 
+    counter.start();
+    {
+        for(int i=0; i<1000000; i++)
+        {
+            TLL_GLOGTF();
+            __asm__("nop");
+        }
+    }
+    time = counter.elapse().count();
+    LOGD("%.3f:%f", (1)/(time), time);
+}
+
+TEST_F(LoggerTest, ConcurrentLog)
+{
+    double time = 0;
+    tll::time::Counter<> counter;
     counter.start();
     #pragma omp parallel num_threads ( NUM_CPU )
     {

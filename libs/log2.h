@@ -11,6 +11,7 @@
 #include <unordered_map>
 
 #include <chrono>
+#include <ctime>
 #include <thread>
 #include <atomic>
 #include <memory>
@@ -136,6 +137,15 @@ private:
     {
         if(handle == nullptr && onStart)
             handle = onStart();
+        /// send first log to notify time_since_epoch
+        auto std_now = std::chrono::steady_clock::now();
+        auto sys_now = std::chrono::system_clock::now();
+        auto sys_time = std::chrono::system_clock::to_time_t(sys_now);
+        auto buff = util::stringFormat("%s{%.9f}{%.9f}\n", 
+                std::ctime(&sys_time),
+                std::chrono::duration_cast< std::chrono::duration<double> >(std_now.time_since_epoch()).count(), 
+                std::chrono::duration_cast< std::chrono::duration<double> >(sys_now.time_since_epoch()).count());
+        onLog(handle, buff.data(), buff.size());
     }
 
     void log(const char *buff, size_t size) const
