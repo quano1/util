@@ -271,19 +271,30 @@ public:
     template <Mode mode, typename... Args>
     void log(Type type, const char *format, Args &&...args)
     {
-        std::string payload = util::stringFormat(format, std::forward<Args>(args)...);
-        log<mode>(Message{type, payload});
+        std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(int)type], util::stringFormat(format, std::forward<Args>(args)...));
+        if(mode == Mode::kAsync && isRunning())
+        {
+            size_t ps = rb_.push([](char *el, size_t sz, const std::string &msg) {
+                memcpy(el, msg.data(), sz);
+            }, payload.size(), payload);
+            assert(ps > 0);
+            pop_wait_.notify_one();
+        }
+        else
+        {
+            log_(payload);
+        }
     }
 
     template <typename... Args>
     void log(Type type, const char *format, Args &&...args)
     {
-        std::string payload = util::stringFormat(format, std::forward<Args>(args)...);
-        log<Mode::kAsync>(Message{type, payload});
+        // std::string payload = util::stringFormat(format, std::forward<Args>(args)...);
+        log<Mode::kAsync>(type, format, args...);
     }
 
-    template <Mode mode>
-    void log(Message);
+    // template <Mode mode>
+    // void log(Message);
 
     inline void start(size_t chunk_size = 0x400 * 16, uint32_t period_ms=1000) /// 16 Kb, 1000 ms
     {
@@ -325,13 +336,14 @@ public:
 
     inline void stop()
     {
-        if(!isRunning()) return;
-        
-        is_running_.store(false); // write release
+        bool running = true;
+        if(!is_running_.compare_exchange_strong(running, false)) return;
+
         {
             std::lock_guard<std::mutex> lock(mtx_);
             pop_wait_.notify_one();
         }
+
         if(broadcast_.joinable()) broadcast_.join();
         for(auto &ent_entry : ents_)
         {
@@ -446,10 +458,13 @@ private:
                 }, 
                 [this](void *&handle)
                 {
-                    static_cast<std::ofstream*>(handle)->flush();
-                    static_cast<std::ofstream*>(handle)->close();
-                    delete static_cast<std::ofstream*>(handle);
-                    handle = nullptr;
+                    if(handle)
+                    {
+                        static_cast<std::ofstream*>(handle)->flush();
+                        static_cast<std::ofstream*>(handle)->close();
+                        delete static_cast<std::ofstream*>(handle);
+                        handle = nullptr;
+                    }
                 }
             }}};
 
@@ -458,33 +473,5 @@ private:
     std::condition_variable pop_wait_, join_wait_;
     std::mutex mtx_;
 };
-
-template <>
-inline void Manager::log<Mode::kSync>(Message msg)
-{
-    /// TODO add pre-format
-    std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(int)msg.type], msg.payload);
-
-    log_(payload);
-}
-
-template <>
-inline void Manager::log<Mode::kAsync>(Message msg)
-{
-    if(!isRunning())
-    {
-        log<Mode::kSync>(msg);
-        /// TODO: force push?
-    }
-    else
-    {
-        std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(int)msg.type], msg.payload);
-        size_t ps = rb_.push([](char *el, size_t sz, const std::string &msg) {
-            memcpy(el, msg.data(), sz);
-        }, payload.size(), payload);
-        assert(ps > 0);
-        pop_wait_.notify_one();
-    }
-}
 
 } /// tll::log
