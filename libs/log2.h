@@ -30,34 +30,34 @@
 
 extern char *__progname;
 
-#define TLL_LOGD(plog, format, ...) (plog)->log((tll::log::Type::kDebug), "{%.9f}{%s}{%d}{%s}{%s}{%d}{" format "}\n", tll::util::timestamp<double>(),\
+#define TLL_LOGD(plog, format, ...) (plog)->log((tll::log2::Type::kDebug), "{%.9f}{%s}{%d}{%s}{%s}{%d}{" format "}\n", tll::util::timestamp<double>(),\
   tll::util::to_string(tll::util::tid()),\
-  tll::log::Context::instance().level(),\
-  tll::log::Context::instance().get(),\
+  tll::log2::Context::instance().level(),\
+  tll::log2::Context::instance().get(),\
   __FUNCTION__, \
   __LINE__, \
   ##__VA_ARGS__)
 
-#define TLL_LOGI(plog, format, ...) (plog)->log((tll::log::Type::kInfo), "{%.9f}{%s}{%d}{%s}{%s}{%d}{" format "}\n", tll::util::timestamp<double>(),\
+#define TLL_LOGI(plog, format, ...) (plog)->log((tll::log2::Type::kInfo), "{%.9f}{%s}{%d}{%s}{%s}{%d}{" format "}\n", tll::util::timestamp<double>(),\
   tll::util::to_string(tll::util::tid()),\
-  tll::log::Context::instance().level(),\
-  tll::log::Context::instance().get(),\
+  tll::log2::Context::instance().level(),\
+  tll::log2::Context::instance().get(),\
   __FUNCTION__, \
   __LINE__, \
   ##__VA_ARGS__)
 
-#define TLL_LOGW(plog, format, ...) (plog)->log((tll::log::Type::kWarn), "{%.9f}{%s}{%d}{%s}{%s}{%d}{" format "}\n", tll::util::timestamp<double>(),\
+#define TLL_LOGW(plog, format, ...) (plog)->log((tll::log2::Type::kWarn), "{%.9f}{%s}{%d}{%s}{%s}{%d}{" format "}\n", tll::util::timestamp<double>(),\
   tll::util::to_string(tll::util::tid()),\
-  tll::log::Context::instance().level(),\
-  tll::log::Context::instance().get(),\
+  tll::log2::Context::instance().level(),\
+  tll::log2::Context::instance().get(),\
   __FUNCTION__, \
   __LINE__, \
   ##__VA_ARGS__)
 
-#define TLL_LOGF(plog, format, ...) (plog)->log((tll::log::Type::kFatal), "{%.9f}{%s}{%d}{%s}{%s}{%d}{" format "}\n", tll::util::timestamp<double>(),\
+#define TLL_LOGF(plog, format, ...) (plog)->log((tll::log2::Type::kFatal), "{%.9f}{%s}{%d}{%s}{%s}{%d}{" format "}\n", tll::util::timestamp<double>(),\
   tll::util::to_string(tll::util::tid()),\
-  tll::log::Context::instance().level(),\
-  tll::log::Context::instance().get(),\
+  tll::log2::Context::instance().level(),\
+  tll::log2::Context::instance().get(),\
   __FUNCTION__, \
   __LINE__, \
   ##__VA_ARGS__)
@@ -65,24 +65,24 @@ extern char *__progname;
 #define LOG_HEADER_ (tll::util::stringFormat("{%.9f}{%s}{%d}{%s}{%s}{%d}",\
   tll::util::timestamp<double>(),\
   tll::util::to_string(tll::util::tid()),\
-  tll::log::Context::instance().level(),\
-  tll::log::Context::instance().get(),\
+  tll::log2::Context::instance().level(),\
+  tll::log2::Context::instance().get(),\
   __FUNCTION__, \
   __LINE__))
 
-#define TLL_LOGT(plog, ID) tll::log::Tracer<> tracer_##ID##__([plog](std::string const &log_msg){(plog)->log((tll::log::Type::kTrace), "%s", log_msg);}, (tll::log::Context::instance().push(__FILE__), LOG_HEADER_), #ID)
+#define TLL_LOGT(plog, ID) tll::log2::Tracer<> tracer_##ID##__([plog](std::string const &log_msg){(plog)->log((tll::log2::Type::kTrace), "%s", log_msg);}, (tll::log2::Context::instance().push(__FILE__), LOG_HEADER_), #ID)
 
-#define TLL_LOGTF(plog) tll::log::Tracer<> tracer__([plog](std::string const &log_msg){(plog)->log((tll::log::Type::kTrace), "%s", log_msg);}, (tll::log::Context::instance().push(__FILE__), LOG_HEADER_), __FUNCTION__)
+#define TLL_LOGTF(plog) tll::log2::Tracer<> tracer__([plog](std::string const &log_msg){(plog)->log((tll::log2::Type::kTrace), "%s", log_msg);}, (tll::log2::Context::instance().push(__FILE__), LOG_HEADER_), __FUNCTION__)
 
-#define TLL_GLOGD(...) TLL_LOGD(&tll::log::Manager::instance(), ##__VA_ARGS__)
-#define TLL_GLOGI(...) TLL_LOGI(&tll::log::Manager::instance(), ##__VA_ARGS__)
-#define TLL_GLOGW(...) TLL_LOGW(&tll::log::Manager::instance(), ##__VA_ARGS__)
-#define TLL_GLOGF(...) TLL_LOGF(&tll::log::Manager::instance(), ##__VA_ARGS__)
-#define TLL_GLOGT(ID) tll::log::Tracer<> tracer_##ID##__([](std::string const &log_msg){tll::log::Manager::instance().log((tll::log::Type::kTrace), "%s", log_msg);}, (tll::log::Context::instance().push(__FILE__), LOG_HEADER_), #ID)
+#define TLL_GLOGD(...) TLL_LOGD(&tll::log2::Manager::instance(), ##__VA_ARGS__)
+#define TLL_GLOGI(...) TLL_LOGI(&tll::log2::Manager::instance(), ##__VA_ARGS__)
+#define TLL_GLOGW(...) TLL_LOGW(&tll::log2::Manager::instance(), ##__VA_ARGS__)
+#define TLL_GLOGF(...) TLL_LOGF(&tll::log2::Manager::instance(), ##__VA_ARGS__)
+#define TLL_GLOGT(ID) tll::log2::Tracer<> tracer_##ID##__([](std::string const &log_msg){tll::log2::Manager::instance().log((tll::log2::Type::kTrace), "%s", log_msg);}, (tll::log2::Context::instance().push(__FILE__), LOG_HEADER_), #ID)
 
-#define TLL_GLOGTF() tll::log::Tracer<> tracer__(std::bind(&tll::log::Manager::log<std::string const &>, &tll::log::Manager::instance(), (tll::log::Type::kTrace), "%s", std::placeholders::_1), (tll::log::Context::instance().push(__FILE__), LOG_HEADER_), __FUNCTION__)
+#define TLL_GLOGTF() tll::log2::Tracer<> tracer__(std::bind(&tll::log2::Manager::log<std::string const &>, &tll::log2::Manager::instance(), (tll::log2::Type::kTrace), "%s", std::placeholders::_1), (tll::log2::Context::instance().push(__FILE__), LOG_HEADER_), __FUNCTION__)
 
-namespace tll{ namespace log{
+namespace tll::log2 {
 
 char const kLogTypeString[]="TDIWF";
 enum class Type
@@ -200,7 +200,7 @@ struct Tracer
                                       LOG_HEADER_,
                                       name,
                                       period));
-            log::Context::instance().pop();
+            log2::Context::instance().pop();
         }
         else if(!name.empty())
             printf(" (%.9f)~%s: %.6f (s)\n", util::timestamp<double, std::ratio<1,1>, clock>(), name.data(), period);
@@ -265,9 +265,10 @@ public:
         bool val = false;
         if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
             return;
+        for(auto &entry : ents_) entry.second.start();
         broadcast_ = std::thread([this, chunk_size, period_ms]()
         {
-            time::Counter<> counter;
+            time::Counter<std::chrono::duration<uint32_t, std::ratio<1, 1000>>> counter;
             uint32_t delta = 0;
             while(isRunning())
             {
@@ -275,32 +276,25 @@ public:
                 counter.start();
                 if(delta < period_ms && rb_.size() < chunk_size)
                 {
-        LOGD("%ld", delta);
                     std::unique_lock<std::mutex> lock(mtx_);
                     /// wait timeout
                     bool wait_status = pop_wait_.wait_for(lock, std::chrono::milliseconds(period_ms - delta), [this, chunk_size, &delta, &counter] {
                         delta += counter.elapse().count();
-                    LOGD("%ld: %d", !isRunning() || (this->rb_.size() >= chunk_size));
                         return !isRunning() || (this->rb_.size() >= chunk_size);
                     });
                 }
-LOGD("%ld", rb_.size());
                 if(delta >= period_ms || rb_.size() >= chunk_size)
                 {
                     delta -= period_ms;
                     size_t rs = rb_.pop([&](const char *el, size_t sz){
                         log_(el, sz);
                     }, -1);
-                    LOGD("%ld", rs);
                 }
             } /// while(isRunning())
-LOGD("");
             if(!rb_.empty())
             {
                 size_t rs = rb_.pop([&](const char *el, size_t sz){ log_(el, sz); }, -1);
-                LOGD("%ld", rs);
             }
-            LOGD("");
         });
     }
 
@@ -500,4 +494,4 @@ inline void Manager::log<Mode::kAsync>(Message msg)
     }
 }
 
-}} /// tll::log
+} /// tll::log2
