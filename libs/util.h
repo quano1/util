@@ -163,6 +163,14 @@ inline std::string to_string(T val)
     return ss.str();
 }
 
+inline std::string str_tid()
+{
+    // static std::atomic<int> __tid__{0};
+    // static const thread_local auto ret = tll::util::to_string(__tid__.fetch_add(1, std::memory_order_relaxed));
+    static const thread_local auto ret=tll::util::to_string(std::this_thread::get_id());
+    return ret;
+}
+
 // static int __tid__=0;
 
 inline std::string str_tidcpu()
@@ -174,21 +182,26 @@ inline std::string str_tidcpu()
     return ret;
 }
 
-
-inline std::string str_tid()
+inline std::string str_tid_nice()
 {
     static std::atomic<int> __tid__{0};
     static const thread_local auto ret = tll::util::to_string(__tid__.fetch_add(1, std::memory_order_relaxed));
     return ret;
 }
 
-template <typename T=double, typename D=std::ratio<1,1>, typename C=std::chrono::steady_clock>
-T timestamp(typename C::time_point &&t = C::now())
+static const auto begin_ = std::chrono::steady_clock::now();
+// static const auto tse = begin_.time_since_epoch();
+
+// template <typename T=double, typename D=std::ratio<1,1>, typename C=std::chrono::steady_clock>
+// template <typename Dur=std::chrono::duration<double, std::ratio<1>>, typename Clk=std::chrono::steady_clock>
+
+template <typename Dur=std::chrono::duration<double, std::ratio<1>>, typename Clk=std::chrono::steady_clock>
+typename Dur::rep timestamp(const typename Clk::time_point &t = Clk::now())
 {
-    static const auto tse = std::forward<typename C::time_point>(t).time_since_epoch();
-    static const auto begin = std::forward<typename C::time_point>(t);
-    // return std::chrono::duration_cast<std::chrono::duration<T,D>>(std::forward<typename C::time_point>(t) - begin).count();
-    return std::chrono::duration_cast<std::chrono::duration<T,D>>(std::forward<typename C::time_point>(t).time_since_epoch()).count();
+    // static const auto tse = typename C::time_point(t.time_since_epoch());
+    return std::chrono::duration_cast< Dur >( (t - begin_) ).count();
+    // return std::chrono::duration_cast< Dur >( (t - begin_) + tse ).count();
+    // return std::chrono::duration_cast< Dur >(t.time_since_epoch()).count();
 }
 
 

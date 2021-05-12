@@ -33,14 +33,31 @@ TEST_F(LoggerTest, LogSingle)
 TEST_F(LoggerTest, Logs)
 {
     tll::time::Counter<> counter;
+    double time = 0;
     for(int i=0; i<1000000; i++) __asm__("nop");
     LOGD("%f", counter.elapse().count());
+
     counter.start();
-    for(int i=0; i<1000000; i++)
+    #pragma omp parallel num_threads ( NUM_CPU )
     {
-        __asm__("nop");
-        TLL_GLOGD("");
+        for(int i=0; i<1000000; i++)
+        {
+            __asm__("nop");
+            TLL_GLOGD("");
+        }
     }
-    double time = counter.elapse().count();
-    LOGD("%f:%f", time/1000000, time);
+    time = counter.elapse().count();
+    LOGD("%.3f:%f", (NUM_CPU)/(time), time);
+
+    counter.start();
+    #pragma omp parallel num_threads ( NUM_CPU )
+    {
+        for(int i=0; i<1000000; i++)
+        {
+            TLL_GLOGTF();
+            __asm__("nop");
+        }
+    }
+    time = counter.elapse().count();
+    LOGD("%.3f:%f", (NUM_CPU)/(time), time);
 }
