@@ -11,6 +11,7 @@
 #include <unordered_map>
 
 #include <chrono>
+#include <ctime>
 #include <thread>
 #include <atomic>
 #include <memory>
@@ -21,7 +22,8 @@
 #include <unistd.h>
 
 #include "util.h"
-#include "timer.h"
+#include "counter.h"
+#include "lffifo.h"
 
 #ifndef TLL_DEFAULT_LOG_PATH
 #define TLL_DEFAULT_LOG_PATH "."
@@ -29,49 +31,60 @@
 
 extern char *__progname;
 
-#ifdef PROF_LOG
-namespace prof {
-int asyncCnt = 0;
-int hdCnt = 0;
-int dologCnt = 0;
-}
-inline std::string getLogHeader();
-#define LOG_HEADER_ getLogHeader()
-#else
-#define LOG_HEADER_ (tll::log::ContextMap::instance()(), tll::util::stringFormat("{%.9f}{%s}{%d}{%s}{%s}",\
-  tll::util::timestamp<double>(),\
-  tll::util::to_string(tll::util::tid()),\
-  tll::log::ContextMap::instance().level(),\
-  tll::log::ContextMap::instance().get<tll::log::ContextMap::Prev>(),\
-  tll::log::ContextMap::instance().get<tll::log::ContextMap::Curr>()))
-#endif
+#define TLL_LOGD(plog, format, ...) (plog)->log((tll::log::Type::kDebug), "{%.9f}{%s}{%d}{%s}{%s}{%d}{" format "}\n", tll::util::timestamp<>(),\
+  tll::util::str_tid_nice(),\
+  tll::log::Context::instance().level(),\
+  tll::log::Context::instance().get(),\
+  __FUNCTION__, \
+  __LINE__, \
+  ##__VA_ARGS__)
 
-#define LOG_DBG_ tll::util::stringFormat("{%s}{%d}",\
-  __FUNCTION__,\
-  __LINE__)
+#define TLL_LOGI(plog, format, ...) (plog)->log((tll::log::Type::kInfo), "{%.9f}{%s}{%d}{%s}{%s}{%d}{" format "}\n", tll::util::timestamp<>(),\
+  tll::util::str_tid_nice(),\
+  tll::log::Context::instance().level(),\
+  tll::log::Context::instance().get(),\
+  __FUNCTION__, \
+  __LINE__, \
+  ##__VA_ARGS__)
 
-#define TLL_LOGD(plog, format, ...) (plog)->log((tll::log::Type::kDebug), "%s{" format "}\n", LOG_HEADER_ + LOG_DBG_ , ##__VA_ARGS__)
+#define TLL_LOGW(plog, format, ...) (plog)->log((tll::log::Type::kWarn), "{%.9f}{%s}{%d}{%s}{%s}{%d}{" format "}\n", tll::util::timestamp<>(),\
+  tll::util::str_tid_nice(),\
+  tll::log::Context::instance().level(),\
+  tll::log::Context::instance().get(),\
+  __FUNCTION__, \
+  __LINE__, \
+  ##__VA_ARGS__)
 
-#define TLL_LOGI(plog, format, ...) (plog)->log((tll::log::Type::kInfo), "%s{" format "}\n", LOG_HEADER_ + LOG_DBG_ , ##__VA_ARGS__)
+#define TLL_LOGF(plog, format, ...) (plog)->log((tll::log::Type::kFatal), "{%.9f}{%s}{%d}{%s}{%s}{%d}{" format "}\n", tll::util::timestamp<>(),\
+  tll::util::str_tid_nice(),\
+  tll::log::Context::instance().level(),\
+  tll::log::Context::instance().get(),\
+  __FUNCTION__, \
+  __LINE__, \
+  ##__VA_ARGS__)
 
-#define TLL_LOGW(plog, format, ...) (plog)->log((tll::log::Type::kWarn), "%s{" format "}\n", LOG_HEADER_ + LOG_DBG_ , ##__VA_ARGS__)
+#define LOG_HEADER_ (tll::util::stringFormat("{%.9f}{%s}{%d}{%s}{%s}{%d}",\
+  tll::util::timestamp<>(),\
+  tll::util::str_tid_nice(),\
+  tll::log::Context::instance().level(),\
+  tll::log::Context::instance().get(),\
+  __FUNCTION__, \
+  __LINE__))
 
-#define TLL_LOGF(plog, format, ...) (plog)->log((tll::log::Type::kFatal), "%s{" format "}\n", LOG_HEADER_ + LOG_DBG_ , ##__VA_ARGS__)
+#define TLL_LOGT(plog, ID) tll::log::Tracer<> tracer_##ID##__([plog](std::string const &log_msg){(plog)->log((tll::log::Type::kTrace), "%s", log_msg);}, (tll::log::Context::instance().push(__FILE__), LOG_HEADER_), #ID)
 
-#define TLL_LOGT(plog, ID) tll::log::Tracer<> tracer_##ID##__([plog](std::string const &log_msg){(plog)->log((tll::log::Type::kTrace), "%s", log_msg);}, (tll::log::ContextMap::instance()().push_back(tll::util::fileName(__FILE__)), LOG_HEADER_ + LOG_DBG_), #ID)
+#define TLL_LOGTF(plog) tll::log::Tracer<> tracer__([plog](std::string const &log_msg){(plog)->log((tll::log::Type::kTrace), "%s", log_msg);}, (tll::log::Context::instance().push(__FILE__), LOG_HEADER_), __FUNCTION__)
 
-#define TLL_LOGTF(plog) tll::log::Tracer<> tracer__([plog](std::string const &log_msg){(plog)->log((tll::log::Type::kTrace), "%s", log_msg);}, (tll::log::ContextMap::instance()().push_back(tll::util::fileName(__FILE__)), LOG_HEADER_ + LOG_DBG_), __FUNCTION__)
+#define TLL_GLOGD(...) TLL_LOGD(&tll::log::Manager::instance(), ##__VA_ARGS__)
+// #define TLL_GLOGD2(...) TLL_LOGD2(&tll::log::Manager::instance(), ##__VA_ARGS__)
+#define TLL_GLOGI(...) TLL_LOGI(&tll::log::Manager::instance(), ##__VA_ARGS__)
+#define TLL_GLOGW(...) TLL_LOGW(&tll::log::Manager::instance(), ##__VA_ARGS__)
+#define TLL_GLOGF(...) TLL_LOGF(&tll::log::Manager::instance(), ##__VA_ARGS__)
+#define TLL_GLOGT(ID) tll::log::Tracer<> tracer_##ID##__([](std::string const &log_msg){tll::log::Manager::instance().log((tll::log::Type::kTrace), "%s", log_msg);}, (tll::log::Context::instance().push(__FILE__), LOG_HEADER_), #ID)
 
-#define TLL_GLOGD(...) TLL_LOGD(&tll::log::Node::instance(), ##__VA_ARGS__)
-#define TLL_GLOGI(...) TLL_LOGI(&tll::log::Node::instance(), ##__VA_ARGS__)
-#define TLL_GLOGW(...) TLL_LOGW(&tll::log::Node::instance(), ##__VA_ARGS__)
-#define TLL_GLOGF(...) TLL_LOGF(&tll::log::Node::instance(), ##__VA_ARGS__)
-#define TLL_GLOGT(ID) tll::log::Tracer<> tracer_##ID##__([](std::string const &log_msg){tll::log::Node::instance().log((tll::log::Type::kTrace), "%s", log_msg);}, (tll::log::ContextMap::instance()().push_back(tll::util::fileName(__FILE__)), LOG_HEADER_ + LOG_DBG_), #ID)
+#define TLL_GLOGTF() tll::log::Tracer<> tracer__(std::bind(&tll::log::Manager::log<std::string const &>, &tll::log::Manager::instance(), (tll::log::Type::kTrace), "%s", std::placeholders::_1), (tll::log::Context::instance().push(__FILE__), __FUNCTION__), __LINE__, __FUNCTION__)
 
-// std::bind(printf, "%.*s", std::placeholders::_3, std::placeholders::_2)
-#define TLL_GLOGTF() tll::log::Tracer<> tracer__(std::bind(&tll::log::Node::log<std::string const &>, &tll::log::Node::instance(), (tll::log::Type::kTrace), "%s", std::placeholders::_1), (tll::log::ContextMap::instance()().push_back(tll::util::fileName(__FILE__)), LOG_HEADER_ + LOG_DBG_), __FUNCTION__)
-
-namespace tll{ namespace log{
+namespace tll::log {
 
 char const kLogTypeString[]="TDIWF";
 enum class Type
@@ -84,32 +97,11 @@ enum class Type
     kMax,
 };
 
-enum class Flag : uint32_t
-{
-    kTrace = (1U << (int)Type::kTrace),
-    kDebug = (1U << (int)Type::kDebug),
-    kInfo = (1U << (int)Type::kInfo),
-    kWarn = (1U << (int)Type::kWarn),
-    kFatal = (1U << (int)Type::kFatal),
-    kAll = kTrace | kDebug | kInfo | kWarn | kFatal,
-};
-
 enum class Mode
 {
     kSync = 0,
     kAsync,
 };
-
-TLL_INLINE constexpr Flag toFlag(Type type)
-{
-    return static_cast<Flag>(1U << static_cast<int>(type));
-}
-
-template <typename... Args>
-constexpr Flag toFlag(Type type, Args ...args)
-{
-    return toFlag(type) | toFlag(args...);
-}
 
 struct Message
 {
@@ -120,7 +112,6 @@ struct Message
 struct Entity
 {
     std::string name;
-    Flag flag;
     std::function<void(void*, const char*, size_t)> onLog;
     std::function<void *()> onStart;
     std::function<void(void *&)> onStop;
@@ -131,6 +122,15 @@ private:
     {
         if(handle == nullptr && onStart)
             handle = onStart();
+        /// send first log to notify time_since_epoch
+        auto std_now = std::chrono::steady_clock::now();
+        auto sys_now = std::chrono::system_clock::now();
+        auto sys_time = std::chrono::system_clock::to_time_t(sys_now);
+        auto buff = util::stringFormat("%s{%.9f}{%.9f}\n", 
+                std::ctime(&sys_time),
+                std::chrono::duration_cast< std::chrono::duration<double> >(std_now.time_since_epoch()).count(), 
+                std::chrono::duration_cast< std::chrono::duration<double> >(sys_now.time_since_epoch()).count());
+        onLog(handle, buff.data(), buff.size());
     }
 
     void log(const char *buff, size_t size) const
@@ -144,258 +144,186 @@ private:
             onStop(handle);
     }
 
-    friend class Node;
+    friend class Manager;
 };
 
-struct ContextMap : public util::SingletonT<ContextMap>
+struct Context
 {
-    enum
+    inline void push(std::string ctx)
     {
-        Prev = 0,
-        Curr,
-    };
-
-    std::vector<std::string> &operator()(const std::thread::id tid = tll::util::tid())
-    {
-        std::lock_guard<std::mutex> lock(mtx_);
-        return map_[tid];
+        ctxs_.push_back(ctx);
     }
 
-    size_t level(const std::thread::id tid = tll::util::tid())
+    inline void pop()
     {
-        std::lock_guard<std::mutex> lock(mtx_);
-        assert(map_.find(tid) != map_.end());
-        return map_.at(tid).size();
+        ctxs_.pop_back();
     }
 
-    template <int pos>
-    std::string get(const std::thread::id tid = tll::util::tid())
+    inline size_t level() const
     {
-        assert(map_.find(tid) != map_.end());
-        std::vector<std::string> *ctx;
+        return ctxs_.size();
+    }
+
+    inline std::string get() const
+    {
+        std::string ret;
+
+        for(int i=ctxs_.size()-1; i>=0; i--)
         {
-            std::lock_guard<std::mutex> lock(mtx_);
-            ctx = &map_[tid];
+            ret += util::stringFormat("%s,", ctxs_[i]);
         }
 
-        if(pos == ContextMap::Prev)
-        {
-            return (ctx->size() < 2) ? "" : ctx->operator[](ctx->size() - 2);
-        }
-        else 
-        {
-            return (ctx->size() == 0) ? "" : ctx->back();
-        }
+        return ret;
+    }
+
+    inline static Context &instance()
+    {
+        static thread_local Context instance;
+        return instance;
     }
 
 private:
-    std::mutex mtx_;
-    std::unordered_map<std::thread::id, std::vector<std::string>> map_;
-}; /// ContextMap
+    std::vector<std::string> ctxs_;
+}; /// Context
 
 template <typename clock=std::chrono::steady_clock>
 struct Tracer
 {
     Tracer() = default;
-    Tracer(std::string id) : name(std::move(id))
+    Tracer(std::string id) : name_(std::move(id))
     {
-        printf(" (%.9f)%s\n", util::timestamp<double, std::ratio<1,1>, clock>(), name.data());
+        printf(" (%.9f)%s\n", util::timestamp<std::chrono::duration<double, std::ratio<1>>, clock>(), name_.data());
     }
 
-    Tracer(std::function<void(std::string const&)> logf, std::string header, std::string id="") : name(std::move(id))
+    Tracer(std::function<void(std::string const&)> logf, 
+           const char *func, int line, std::string id="") : func_(func), line_(line), name_(std::move(id))
     {
         // sig_log.connect(logf);
-        doLog = std::move(logf);
-        doLog(util::stringFormat("%s{%s}\n", header, name));
+        doLog_ = std::move(logf);
+        doLog_(util::stringFormat("{%.9f}{%s}{%d}{%s}{%s}{%d}{%s}\n", 
+                                    tll::util::timestamp<>(),
+                                    tll::util::str_tid_nice(),
+                                    tll::log::Context::instance().level(),
+                                    tll::log::Context::instance().get(),
+                                    func_,
+                                    line_, name_));
     }
 
     ~Tracer()
     {
-        const auto duration = timer().elapse().count();
-        if(doLog)
+        const auto period = counter_.elapse().count();
+        if(doLog_)
         {
-            doLog(util::stringFormat("%s{%s}{%.6f(s)}\n",
-                                      LOG_HEADER_,
-                                      name,
-                                      duration));
-            log::ContextMap::instance()().pop_back();
+            doLog_(util::stringFormat("{%.9f}{%s}{%d}{%s}{%s}{%d}{%s}{%.6f(s)}\n",
+                                    tll::util::timestamp<>(),
+                                    tll::util::str_tid_nice(),
+                                    tll::log::Context::instance().level(),
+                                    tll::log::Context::instance().get(),
+                                    func_,
+                                    line_,
+                                    name_,
+                                    period));
+            log::Context::instance().pop();
         }
-        else if(!name.empty())
-            printf(" (%.9f)~%s: %.6f (s)\n", util::timestamp<double, std::ratio<1,1>, clock>(), name.data(), duration);
+        else if(!name_.empty())
+            printf(" (%.9f)~%s: %.6f (s)\n", util::timestamp<std::chrono::duration<double, std::ratio<1>>, clock>(), name_.data(), period);
     }
 
-    time::Counter<> &operator()(const std::string cnt_id="")
-    {
-        return timer(cnt_id);
-    }
+    const char *func_ = "";
+    int line_ = 0;
+    std::string name_ = "";
+    time::Counter<> counter_;
 
-    const time::Counter<> &operator()(const std::string cnt_id="") const
-    {
-        return timer(cnt_id);
-    }
-
-    std::string name = "";
-    time::Map<> timer;
-
-    std::function<void(std::string const&)> doLog;
+    std::function<void(std::string const&)> doLog_;
 }; /// Tracer
 
-class Node
+class Manager
 {
 public:
-    Node()
+    Manager()
     {
         // start_(0);
         start();
     }
 
-    Node(uint32_t queue_size) :
-        ring_queue_{queue_size}
+    Manager(uint32_t queue_size) :
+        rb_{queue_size}
     {}
 
     template < typename ... LogEnts>
-    Node(uint32_t queue_size,
+    Manager(uint32_t queue_size,
            LogEnts ...ents) :
-        ring_queue_{queue_size}
+        rb_{queue_size}
     {
         add_(ents...);
     }
 
-    ~Node()
+    ~Manager()
     {
         stop();
     }
 
-    Node(const Node&) = delete;
-    Node& operator=(const Node&) = delete;
-    Node(Node&&) = delete;
-    Node& operator=(Node&&) = delete;
+    Manager(const Manager&) = delete;
+    Manager& operator=(const Manager&) = delete;
+    Manager(Manager&&) = delete;
+    Manager& operator=(Manager&&) = delete;
 
     template <Mode mode, typename... Args>
-    TLL_INLINE void log(Type type, const char *format, Args &&...args)
+    void log(Type type, const char *format, Args &&...args)
     {
         std::string payload = util::stringFormat(format, std::forward<Args>(args)...);
         log<mode>(Message{type, payload});
     }
 
     template <typename... Args>
-    TLL_INLINE void log(Type type, const char *format, Args &&...args)
+    void log(Type type, const char *format, Args &&...args)
     {
         std::string payload = util::stringFormat(format, std::forward<Args>(args)...);
         log<Mode::kAsync>(Message{type, payload});
     }
 
     template <Mode mode>
-    TLL_INLINE void log(Message);
+    void log(Message);
 
-    TLL_INLINE void start(size_t chunk_size = 0x400, uint32_t period_ms=1000) /// 1 Kb, 1000 ms
+    inline void start(size_t chunk_size = 0x400 * 16, uint32_t period_ms=1000) /// 16 Kb, 1000 ms
     {
         bool val = false;
         if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
             return;
-
+        for(auto &entry : ents_) entry.second.start();
         broadcast_ = std::thread([this, chunk_size, period_ms]()
         {
-            time::Map<> timer;
-            auto buff_list = init_(chunk_size);
-            uint32_t total_delta = 0;
-            std::vector<char> buff (chunk_size);
-
-            std::function<void(uint32_t, uint32_t, uint32_t)> onPopBatch{[this, &buff_list](uint32_t index, uint32_t elem_num, uint32_t)
-            {
-                for(uint32_t i=0; i<elem_num; i++)
-                {
-                    Message &log_msg = ring_queue_.elemAt(index + i);
-                    for(auto &entry : buff_list)
-                    {
-                        auto &flag = entry.first;
-                        auto &rb = entry.second;
-                        if((uint32_t)flag & (uint32_t)toFlag(log_msg.type))
-                        {
-                            std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(uint32_t)(log_msg.type)], log_msg.payload);
-                            rb.push(payload.data(), payload.size());
-                        }
-                    }
-                }
-            }};
-
+            time::Counter<std::chrono::duration<uint32_t, std::ratio<1, 1000>>> counter;
+            uint32_t delta = 0;
             while(isRunning())
             {
-                uint32_t delta = timer().stop().start().duration().count();
-                total_delta += delta;
-
-                if(total_delta >= period_ms)
-                {
-                    total_delta -= period_ms;
-                    /// flushing the buffer list
-                    for(auto &buff_entry : buff_list)
-                    {
-                        auto &flag = buff_entry.first;
-                        auto &rb = buff_entry.second;
-                        size_t s = chunk_size;
-                        if(rb.pop(buff.data(), s))
-                        {
-                            buff.resize(s);
-                            log_(flag, buff);
-                            // buff.resize(0);
-                        }
-                    }
-                }
-
-                if(ring_queue_.isEmpty())
+                delta += counter.elapse().count();
+                counter.start();
+                if(delta < period_ms && rb_.size() < chunk_size)
                 {
                     std::unique_lock<std::mutex> lock(mtx_);
                     /// wait timeout
-                    bool wait_status = pop_wait_.wait_for(lock, std::chrono::milliseconds(period_ms - total_delta), [this] {
-                        return !isRunning() || !this->ring_queue_.isEmpty();
+                    bool wait_status = pop_wait_.wait_for(lock, std::chrono::milliseconds(period_ms - delta), [this, chunk_size, &delta, &counter] {
+                        delta += counter.elapse().count();
+                        return !isRunning() || (this->rb_.size() >= chunk_size);
                     });
-                    /// wait timeout or running == false
-                    if( !wait_status || !isRunning())
-                    {
-                        continue;
-                    }
                 }
-
-                ring_queue_.popBatch(~0u, onPopBatch);
-
-                for(auto &entry : buff_list)
+                if(delta >= period_ms || rb_.size() >= chunk_size)
                 {
-                    auto &flag = entry.first;
-                    auto &rb = entry.second;
-                    while(rb.size() >= chunk_size)
-                    {
-                        buff.resize(chunk_size);
-                        size_t s = chunk_size;
-                        if(rb.pop(buff.data(), s))
-                        {
-                            buff.resize(s);
-                            log_(flag, buff);
-                        }
-                    }
+                    delta -= period_ms;
+                    size_t rs = rb_.pop([&](const char *el, size_t sz){
+                        log_(el, sz);
+                    }, -1);
                 }
-            }
-
-            ring_queue_.popBatch(~0u, onPopBatch);
-
-            for(auto &entry : buff_list)
+            } /// while(isRunning())
+            if(!rb_.empty())
             {
-                auto &flag = entry.first;
-                auto &rb = entry.second;
-                while(rb.size() > 0)
-                {
-                    buff.resize(chunk_size);
-                    size_t s = chunk_size;
-                    if(rb.pop(buff.data(), s))
-                    {
-                        buff.resize(s);
-                        log_(flag, buff);
-                    }
-                }
+                size_t rs = rb_.pop([&](const char *el, size_t sz){ log_(el, sz); }, -1);
             }
         });
     }
 
-    TLL_INLINE void stop()
+    inline void stop()
     {
         if(!isRunning()) return;
         
@@ -410,10 +338,9 @@ public:
             auto &ent = ent_entry.second;
             ent.stop();
         }
-        LOGD("");
     }
 
-    TLL_INLINE bool isRunning() const 
+    inline bool isRunning() const 
     {
         return is_running_.load(std::memory_order_relaxed);
     }
@@ -434,10 +361,9 @@ public:
         add_(ents...);
     }
 
-    template <uint32_t queue_size=0x1000>
-    static Node &instance()
+    static Manager &instance()
     {
-        static std::atomic<Node*> singleton{nullptr};
+        static std::atomic<Manager*> singleton{nullptr};
         static std::atomic<bool> init{false};
         bool tmp = false;
 
@@ -450,7 +376,7 @@ public:
         }
         else
         {
-            singleton.store(new Node{}, std::memory_order_release);
+            singleton.store(new Manager{}, std::memory_order_release);
             // singleton->init_(0);
         }
 
@@ -458,66 +384,31 @@ public:
     }
 
     /// wait for ring_queue is empty
-    TLL_INLINE void wait()
+    inline void wait()
     {
         std::mutex mtx;
         std::unique_lock<std::mutex> lock(mtx);
         join_wait_.wait(lock, [this] 
         {
             pop_wait_.notify_one();
-            return !isRunning() || ring_queue_.isEmpty();
+            return !isRunning() || rb_.empty();
         });
     }
 
 private:
 
-    TLL_INLINE void log_(Flag flag, const std::vector<char> &buff) const
+    inline void log_(const std::string &buff) const
+    {
+        log_(buff.data(), buff.size());
+    }
+
+    inline void log_(const char *buff, size_t size) const
     {
         for(auto &ent_entry : ents_)
         {
             auto &ent = ent_entry.second;
-            if(ent.flag == flag)
-                ent.log(buff.data(), buff.size());
+            ent.log(buff, size);
         }
-    }
-
-    TLL_INLINE void log_(Flag flag, const char *buff, size_t size) const
-    {
-        for(auto &ent_entry : ents_)
-        {
-            auto &ent = ent_entry.second;
-            if(ent.flag == flag)
-                ent.log(buff, size);
-        }
-    }
-
-    TLL_INLINE void log_(Type type, const std::string &payload) const
-    {
-        for( auto &entry : ents_)
-        {
-            auto &ent = entry.second;
-            if((uint32_t)ent.flag & (uint32_t)toFlag(type))
-            {
-                ent.log(payload.data(), payload.size());
-            }
-        }
-    }
-
-    // TLL_INLINE std::unordered_map<Flag, std::vector<char>> init_(uint32_t chunk_size)
-    TLL_INLINE std::unordered_map<Flag, util::ContiRB> init_(uint32_t chunk_size)
-    {
-        std::unordered_map<Flag, util::ContiRB> buff_list;
-        for(auto &entry : ents_)
-        {
-            auto &ent = entry.second;
-            auto flag = ent.flag;
-            ent.start();
-            if(chunk_size > 0)
-            {
-                buff_list[flag].reserve(chunk_size * 0x400);
-            }
-        }
-        return buff_list;
     }
 
     template <typename ... LogEnts>
@@ -527,21 +418,18 @@ private:
         add_(ents...);
     }
 
-    TLL_INLINE void add_(Entity ent)
+    inline void add_(Entity ent)
     {
         ents_[ent.name] = ent;
     }
 
     std::atomic<bool> is_running_{false};
-    util::LFQueue<Message> ring_queue_{0x10000};
+    // lf::CCFIFO<Message> ccq_{0x1000};
+    lf::ring_buffer_mpmc<char> rb_{0x100000 * 16}; /// 16Mb
     std::unordered_map<std::string, Entity> ents_ = {{"file", Entity{
-                .name = "file", .flag = tll::log::Flag::kAll,
+                .name = "file",
                 [this](void *handle, const char *buff, size_t size)
                 {
-#ifdef PROF_LOG
-                    tll::util::Guard<tll::time::Map<>::CNT> guard(prof::timer("dolog"));
-                    prof::dologCnt++;
-#endif
                     if(handle == nullptr)
                     {
                         printf("%.*s", (int)size, buff);
@@ -551,9 +439,6 @@ private:
                 },
                 [this]()
                 {
-#ifdef PROF_LOG
-                    tll::util::Guard<tll::time::Map<>::CNT> guard(prof::timer("open"));
-#endif
                     auto log_path =std::getenv("TLL_LOG_PATH");
                     auto const &file = util::stringFormat("%s/%s.%d.log", log_path ? log_path : TLL_DEFAULT_LOG_PATH, __progname, getpid());
                     LOGD("%s", file.data());
@@ -561,9 +446,6 @@ private:
                 }, 
                 [this](void *&handle)
                 {
-#ifdef PROF_LOG
-                    tll::util::Guard<tll::time::Map<>::CNT> guard(prof::timer("close"));
-#endif
                     static_cast<std::ofstream*>(handle)->flush();
                     static_cast<std::ofstream*>(handle)->close();
                     delete static_cast<std::ofstream*>(handle);
@@ -578,16 +460,16 @@ private:
 };
 
 template <>
-TLL_INLINE void Node::log<Mode::kSync>(Message msg)
+inline void Manager::log<Mode::kSync>(Message msg)
 {
     /// TODO add pre-format
     std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(int)msg.type], msg.payload);
 
-    log_(msg.type, payload);
+    log_(payload);
 }
 
 template <>
-TLL_INLINE void Node::log<Mode::kAsync>(Message msg)
+inline void Manager::log<Mode::kAsync>(Message msg)
 {
     if(!isRunning())
     {
@@ -596,41 +478,13 @@ TLL_INLINE void Node::log<Mode::kAsync>(Message msg)
     }
     else
     {
-#ifdef PROF_LOG
-        tll::util::Guard<tll::time::Map<>::CNT> guard(prof::timer("node::log::async"));
-        prof::asyncCnt++;
-#endif
-        bool rs = ring_queue_.push([](Message &elem, uint32_t, Message msg) {
-            elem = std::move(msg);
-        }, msg);
-        assert(rs);
+        std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(int)msg.type], msg.payload);
+        size_t ps = rb_.push([](char *el, size_t sz, const std::string &msg) {
+            memcpy(el, msg.data(), sz);
+        }, payload.size(), payload);
+        assert(ps > 0);
         pop_wait_.notify_one();
     }
 }
 
-}} /// tll::log
-
-
-#ifdef PROF_LOG
-std::string getLogHeader() {
-    tll::util::Guard<tll::time::Map<>::CNT> guard(prof::timer("header"));
-    prof::hdCnt++;
-    tll::log::ContextMap::instance()();
-    return tll::util::stringFormat(""
-                                   "{%.9f}"
-                                   "{%s}"
-                                   "{%d}"
-                                   "{%s}"
-                                   "{%s}"
-            ,tll::util::timestamp<>()
-            ,tll::util::to_string(tll::util::tid())
-            ,tll::log::ContextMap::instance().level()
-            ,tll::log::ContextMap::instance().get<tll::log::ContextMap::Prev>()
-            ,tll::log::ContextMap::instance().get<tll::log::ContextMap::Curr>()
-            );
-}
-#endif
-
-// #ifdef STATIC_LIB
-// #include "Node.cc"
-// #endif
+} /// tll::log

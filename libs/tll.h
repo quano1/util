@@ -5,8 +5,5 @@
 
 #include "counter.h"
 #include "util.h"
+#include "lffifo.h"
 #include "log.h"
-#include "contiguouscircular.h"
-
-// #include "lf/ccbuffer.h"
-// #include "mt/ccbuffer.h"
