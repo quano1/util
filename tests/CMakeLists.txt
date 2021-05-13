@@ -18,6 +18,7 @@ PRIVATE
     $<$<EQUAL:${HAVE_GTEST},1>:stress_test.cc>
     $<$<EQUAL:${HAVE_GTEST},1>:unittests.cc>
     $<$<EQUAL:${HAVE_GTEST},1>:logtest.cc>
+    $<$<EQUAL:${HAVE_GTEST},1>:util_test.cc>
 )
 
 # print to console
