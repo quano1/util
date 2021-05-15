@@ -547,6 +547,7 @@ private:
                 if(marker.ref_next_index_list(wrap(exit_id, num_threads_)).compare_exchange_strong(old_next_index, next_index, std::memory_order_relaxed, std::memory_order_relaxed)) break;
                 // if(marker.exit_id_list(wrap(exit_id, num_threads_)).compare_exchange_strong(old_exit_id, new_exit_id, std::memory_order_relaxed, std::memory_order_relaxed)) break;
                 // LOGD(" M%ld:%ld:%ld\t%ld:%ld\t%s", kIdx, curr_exit_id, exit_id, old_next_index, next_index, dump().data());
+                // LOGV((ssize_t)kIdx, (ssize_t)curr_exit_id, (ssize_t)exit_id, (ssize_t)old_next_index, (ssize_t)next_index, dump());
             }
         } /// if(mode == mode::dense)
         else
@@ -669,7 +670,7 @@ public:
                                   "(c/(%ld:%ld) (%ld:%ld)) "
                                   "(wm/%ld:%ld:%ld sz/%ld) "
                                   "(pe/%ld:%ld:%ld) "
-                                  "(ce/%ld:%ld:%ld) ",
+                                  "(ce/%ld:%ld:%ld)",
             wrap(ph), wrap(pt), ph, pt,
             wrap(ch), wrap(ct), ch, ct,
             wrap(wm), wm, wmh, capacity_,

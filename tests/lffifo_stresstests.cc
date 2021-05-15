@@ -1,15 +1,11 @@
 #if (HAVE_OPENMP)
 
-// #else
-
 #include <gtest/gtest.h>
-
 #include <omp.h>
 
+#include <tll.h>
+
 #include "common.h"
-#include "../libs/util.h"
-#include "../libs/counter.h"
-#include "../libs/lffifo.h"
 
 using namespace tll::lf;
 

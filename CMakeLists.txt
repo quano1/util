@@ -96,24 +96,6 @@ set(PRJ_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(
     ${PRJ_ROOT}
     ${PRJ_ROOT}/libs
-    ${PRJ_ROOT}/tests
-    ${PRJ_ROOT}/tests/third-party
-    ${PRJ_ROOT}/tests/third-party/boostorg/lockfree/include
-    ${PRJ_ROOT}/tests/third-party/boostorg/core/include
-    ${PRJ_ROOT}/tests/third-party/boostorg/config/include
-    ${PRJ_ROOT}/tests/third-party/boostorg/parameter/include
-    ${PRJ_ROOT}/tests/third-party/boostorg/mp11/include
-    ${PRJ_ROOT}/tests/third-party/boostorg/assert/include/
-    ${PRJ_ROOT}/tests/third-party/boostorg/static_assert/include/
-    ${PRJ_ROOT}/tests/third-party/boostorg/type_traits/include/
-    ${PRJ_ROOT}/tests/third-party/boostorg/mpl/include/
-    ${PRJ_ROOT}/tests/third-party/boostorg/preprocessor/include/
-    ${PRJ_ROOT}/tests/third-party/boostorg/array/include/
-    ${PRJ_ROOT}/tests/third-party/boostorg/throw_exception/include
-    ${PRJ_ROOT}/tests/third-party/boostorg/align/include
-    ${PRJ_ROOT}/tests/third-party/boostorg/utility/include
-    ${PRJ_ROOT}/tests/third-party/boostorg/predef/include
-
 )
 
 set( CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE} )

@@ -14,11 +14,11 @@ target_sources(tll_tests
 PRIVATE
     tll_tests.cc
     benchmark.cc
-#     perf_tunnel.cc
-    $<$<EQUAL:${HAVE_GTEST},1>:stress_test.cc>
     $<$<EQUAL:${HAVE_GTEST},1>:unittests.cc>
-    $<$<EQUAL:${HAVE_GTEST},1>:logtest.cc>
-    $<$<EQUAL:${HAVE_GTEST},1>:util_test.cc>
+    $<$<EQUAL:${HAVE_GTEST},1>:lffifo_unittests.cc>
+    $<$<EQUAL:${HAVE_GTEST},1>:lffifo_stresstests.cc>
+    $<$<EQUAL:${HAVE_GTEST},1>:log_unittests.cc>
+    $<$<EQUAL:${HAVE_GTEST},1>:util_unittests.cc>
 )
 
 # print to console
@@ -60,7 +60,26 @@ add_definitions(
 # set environments
 # set(PRJ_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 if(HAVE_GTEST)
-	include_directories(${GTest_SOURCE_DIR}/include ${GTest_SOURCE_DIR})
+	include_directories(
+        ${GTest_SOURCE_DIR}/include 
+        ${GTest_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/third-party
+        ${CMAKE_CURRENT_SOURCE_DIR}/third-party/boostorg/lockfree/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/third-party/boostorg/core/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/third-party/boostorg/config/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/third-party/boostorg/parameter/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/third-party/boostorg/mp11/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/third-party/boostorg/assert/include/
+        ${CMAKE_CURRENT_SOURCE_DIR}/third-party/boostorg/static_assert/include/
+        ${CMAKE_CURRENT_SOURCE_DIR}/third-party/boostorg/type_traits/include/
+        ${CMAKE_CURRENT_SOURCE_DIR}/third-party/boostorg/mpl/include/
+        ${CMAKE_CURRENT_SOURCE_DIR}/third-party/boostorg/preprocessor/include/
+        ${CMAKE_CURRENT_SOURCE_DIR}/third-party/boostorg/array/include/
+        ${CMAKE_CURRENT_SOURCE_DIR}/third-party/boostorg/throw_exception/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/third-party/boostorg/align/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/third-party/boostorg/utility/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/third-party/boostorg/predef/include
+    )
 	target_link_libraries(tll_tests gtest)
 endif()
 

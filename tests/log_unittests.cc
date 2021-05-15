@@ -1,11 +1,7 @@
 #include <gtest/gtest.h>
-
 #include <omp.h>
 
-#include "../libs/util.h"
-#include "../libs/counter.h"
-#include "../libs/lffifo.h"
-#include "../libs/log.h"
+#include <tll.h>
 
 using namespace tll::log;
 
