@@ -26,7 +26,7 @@ std::pair<size_t, size_t> fifing(
         const std::function<size_t(int, size_t, size_t, size_t, size_t)> &do_push, /// true == producer
         const std::function<size_t(int, size_t, size_t, size_t, size_t)> &do_pop, /// true == producer
         const std::function<bool(int)> &is_prod, /// true == producer
-        const std::function<void()> &do_rest, /// std::this_thread::yield()
+        const std::function<void()> &do_wait, /// std::this_thread::yield()
         const std::function<void()> &do_dump,
         size_t max_val,
         std::vector<double> &time_lst,
@@ -71,7 +71,7 @@ std::pair<size_t, size_t> fifing(
                     tt_push_size.fetch_add(ret, std::memory_order_relaxed);
                     lc_tt_size+=ret;
                     NOP_LOOP();
-                    do_rest();
+                    do_wait();
                 }
                 loop_num++;
             }
@@ -96,7 +96,7 @@ std::pair<size_t, size_t> fifing(
                     tt_pop_size.fetch_add(ret, std::memory_order_relaxed);
                     lc_tt_size+=ret;
                     NOP_LOOP();
-                    do_rest();
+                    do_wait();
                 }
                 loop_num++;
             }

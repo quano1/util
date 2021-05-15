@@ -16,8 +16,8 @@ static constexpr size_t kWriteCount = 500000;
 #define SEQUENCE_EXTEND 1u
 #define CONCURRENT_EXTEND 0u
 // #define DUMP 3000
-/// Should run with --gtest_filter=ccfifoBufferStressTest.* --gtest_repeat=10000
-struct CCFifoStressTest : public ::testing::Test
+/// Should run with --gtest_filter=LFFIFOBufferStressTest.* --gtest_repeat=10000
+struct LFFIFOStressTest : public ::testing::Test
 {
     void SetUp()
     {
@@ -31,7 +31,7 @@ struct CCFifoStressTest : public ::testing::Test
 
     static void SetUpTestCase()
     {
-        LOGD("Should run with --gtest_filter=CCFifoStressTest.* --gtest_repeat=100000 --gtest_break_on_failure");
+        LOGD("Should run with --gtest_filter=LFFIFOStressTest.* --gtest_repeat=100000 --gtest_break_on_failure");
     }
 
     void plotting()
@@ -271,16 +271,16 @@ struct CCFifoStressTest : public ::testing::Test
     // static constexpr size_t kCapacity = kTotalWriteSize / 4;
     // static constexpr size_t kMaxPkgSize = 0x3;
     // static constexpr size_t kWrap = 16;
-}; /// CCFifoStressTest
+}; /// LFFIFOStressTest
 
-std::vector<std::string> CCFifoStressTest::column_lst;
-std::vector<int> CCFifoStressTest::thread_lst;
-std::vector<double> CCFifoStressTest::time_lst;
-std::vector<size_t> CCFifoStressTest::total_size_lst;
-std::vector<size_t> CCFifoStressTest::total_count_lst;
+std::vector<std::string> LFFIFOStressTest::column_lst;
+std::vector<int> LFFIFOStressTest::thread_lst;
+std::vector<double> LFFIFOStressTest::time_lst;
+std::vector<size_t> LFFIFOStressTest::total_size_lst;
+std::vector<size_t> LFFIFOStressTest::total_count_lst;
 
 
-// TEST_F(CCFifoStressTest, SlowSequence)
+// TEST_F(LFFIFOStressTest, SlowSequence)
 // {
 //     /// prepare headers
 //     auto resting = [](){
@@ -304,7 +304,7 @@ std::vector<size_t> CCFifoStressTest::total_count_lst;
 //     plotting();
 // }
 
-// TEST_F(CCFifoStressTest, RushSequence)
+// TEST_F(LFFIFOStressTest, RushSequence)
 // {
 //     /// prepare headers
 //     auto resting = [](){
@@ -329,7 +329,7 @@ std::vector<size_t> CCFifoStressTest::total_count_lst;
 //     plotting();
 // }
 
-TEST_F(CCFifoStressTest, SequenceTrafficJamDD)
+TEST_F(LFFIFOStressTest, SequenceTrafficJamDD)
 {
     auto resting = [](){
         std::this_thread::sleep_for(std::chrono::nanoseconds(0));
@@ -406,7 +406,7 @@ TEST_F(CCFifoStressTest, SequenceTrafficJamDD)
     plotting();
 } /// SequenceTrafficJamDD
 
-TEST_F(CCFifoStressTest, SequenceRushDD)
+TEST_F(LFFIFOStressTest, SequenceRushDD)
 {
     auto resting = [](){
         std::this_thread::yield();
@@ -485,7 +485,7 @@ TEST_F(CCFifoStressTest, SequenceRushDD)
 } /// SequenceRushDD
 
 
-TEST_F(CCFifoStressTest, SequenceRushMixed)
+TEST_F(LFFIFOStressTest, SequenceRushMixed)
 {
     auto resting = [](){
         std::this_thread::yield();
@@ -540,7 +540,7 @@ TEST_F(CCFifoStressTest, SequenceRushMixed)
 } /// DDRushSequence
 
 
-TEST_F(CCFifoStressTest, DISABLED_DDRushConcurrent)
+TEST_F(LFFIFOStressTest, DISABLED_DDRushConcurrent)
 {
     auto resting = [](){
         std::this_thread::yield();
