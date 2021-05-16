@@ -154,22 +154,27 @@ struct LFFIFOStressTest : public ::testing::Test
         };
 
         size_t rts_push = tll::test::fifing<num_of_threads>(do_push, nullptr, [](int tid){return true;}, resting, [&]{LOGD("%s",fifo.dump().data());}, total_write_size, time_lst, total_count_lst).first;
+        if(fifo.isProfilingEnabled())
+        {
+            auto stats = fifo.statistics();
+            fifo.dumpStat(time_lst.back() * num_of_threads, 1);
+            // LOGD("%ld\t%s", rts_push, fifo.dump().data());
+        }
         /// push >= kTotalWriteSize
         ASSERT_GE(rts_push, total_write_size);
+
         size_t rts_pop = tll::test::fifing<num_of_threads>(nullptr, do_pop, [](int tid){return false;}, resting, [&]{LOGD("%s",fifo.dump().data());}, rts_push, time_lst, total_count_lst).second;
+        if(fifo.isProfilingEnabled())
+        {
+            auto stats = fifo.statistics();
+            fifo.dumpStat(time_lst.back() * num_of_threads, 2, false);
+        }
+
         size_t tc_push = total_count_lst[total_count_lst.size() - 2];
         size_t tc_pop = total_count_lst.back();
         /// push == pop
         ASSERT_EQ(rts_push, rts_pop);
         ASSERT_EQ(tc_push, tc_pop);
-
-        if(fifo.isProfilingEnabled())
-        {
-            auto stats = fifo.statistics();
-            fifo.dumpStat(time_lst.back(), 1);
-            // LOGD("%ld\t%s", rts_push, fifo.dump().data());
-        }
-        // LOGD("Total time: %f (s)", time_lst.back());
 
         if(verification)
             for(int i=0; i<num_of_threads; i++)
@@ -181,19 +186,8 @@ struct LFFIFOStressTest : public ::testing::Test
                 }
             }
 
-        if(fifo.isProfilingEnabled())
-        {
-            auto stats = fifo.statistics();
-            fifo.dumpStat(time_lst.back(), 2);
-            // LOGD("%ld\t%s", rts_push, fifo.dump().data());
-        }
-        // LOGD("Total time: %f (s)", time_lst.back());
+        
 
-        // total_size_lst[total_size_lst.size() - 1] /= index_seq.value;
-        // total_size_lst[total_size_lst.size() - 2] /= index_seq.value;
-        // time_lst[time_lst.size() - 1] /= index_seq.value;
-        // time_lst[time_lst.size() - 2] /= index_seq.value;
-        // for(auto &val : total_size_lst) printf("%ld ", val); printf("\n");
         total_size_lst.push_back(rts_push);
     }
 
@@ -239,7 +233,7 @@ struct LFFIFOStressTest : public ::testing::Test
         if(fifo.isProfilingEnabled())
         {
             auto stats = fifo.statistics();
-            fifo.dumpStat(time_lst.back());
+            fifo.dumpStat(time_lst.back() * num_of_threads);
             // LOGD("%ld\t%s", rts_push, fifo.dump().data());
         }
 
@@ -347,52 +341,39 @@ TEST_F(LFFIFOStressTest, SequenceTrafficJamDD)
         LOGD("=====================================================");
         LOGD("Number of threads: %ld\tpkg_size: %ld:%ld:%ld", index_seq.value, kPkgSize, total_write_size, total_write_size / kPkgSize);
         {
-            ring_buffer_dd<char, PROFILING> fifo{capacity, 0x400};
-            SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
-            // stat_lst.push_back(fifo.statistics());
-        }
-        LOGD("-----------------------------------------");
-
-        {
-            ring_buffer_dd<char, PROFILING> fifo{capacity, 0x800};
-            SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
-            // stat_lst.push_back(fifo.statistics());
-        }
-        LOGD("-----------------------------------------");
-
-        {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x1000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             // stat_lst.push_back(fifo.statistics());
+            LOGD("-----------------------------------------");
         }
-        LOGD("-----------------------------------------");
 
         {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x2000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             // stat_lst.push_back(fifo.statistics());
+            LOGD("-----------------------------------------");
         }
 
         {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x4000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             // stat_lst.push_back(fifo.statistics());
+            LOGD("-----------------------------------------");
         }
-        LOGD("-----------------------------------------");
 
         {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x8000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             // stat_lst.push_back(fifo.statistics());
+            LOGD("-----------------------------------------");
         }
-        LOGD("-----------------------------------------");
 
         {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x10000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             // stat_lst.push_back(fifo.statistics());
+            LOGD("-----------------------------------------");
         }
-        LOGD("-----------------------------------------");
     });
     column_lst = {
         "W 0x400", "R 0x400",
@@ -406,7 +387,7 @@ TEST_F(LFFIFOStressTest, SequenceTrafficJamDD)
     plotting();
 } /// SequenceTrafficJamDD
 
-TEST_F(LFFIFOStressTest, SequenceRushDD)
+TEST_F(LFFIFOStressTest, SequenceYieldDD)
 {
     auto resting = [](){
         std::this_thread::yield();
@@ -423,57 +404,43 @@ TEST_F(LFFIFOStressTest, SequenceRushDD)
         size_t capacity = total_write_size * 2;
         LOGD("=====================================================");
         LOGD("Number of threads: %ld\tpkg_size: %ld:%ld:%ld", index_seq.value, kPkgSize, total_write_size, total_write_size / kPkgSize);
-        {
-            ring_buffer_dd<char, PROFILING> fifo{capacity, 0x400};
-            SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
-            stat_lst.push_back(fifo.statistics());
-        }
-        LOGD("-----------------------------------------");
-
-        {
-            ring_buffer_dd<char, PROFILING> fifo{capacity, 0x800};
-            SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
-            stat_lst.push_back(fifo.statistics());
-        }
-        LOGD("-----------------------------------------");
 
         {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x1000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             stat_lst.push_back(fifo.statistics());
+            LOGD("-----------------------------------------");
         }
-        LOGD("-----------------------------------------");
 
         {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x2000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             stat_lst.push_back(fifo.statistics());
+            LOGD("-----------------------------------------");
         }
 
         {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x4000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             stat_lst.push_back(fifo.statistics());
+            LOGD("-----------------------------------------");
         }
-        LOGD("-----------------------------------------");
 
         {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x8000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             stat_lst.push_back(fifo.statistics());
+            LOGD("-----------------------------------------");
         }
-        LOGD("-----------------------------------------");
 
         {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x10000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             stat_lst.push_back(fifo.statistics());
+            LOGD("-----------------------------------------");
         }
-        LOGD("-----------------------------------------");
     });
     column_lst = {
-        "W 0x400", "R 0x400",
-        "W 0x800", "R 0x800",
         "W 0x1000", "R 0x1000",
         "W 0x2000", "R 0x2000",
         "W 0x4000", "R 0x4000",
@@ -482,10 +449,10 @@ TEST_F(LFFIFOStressTest, SequenceRushDD)
     };
     plotting();
     plotting(stat_lst);
-} /// SequenceRushDD
+} /// SequenceYieldDD
 
 
-TEST_F(LFFIFOStressTest, SequenceRushMixed)
+TEST_F(LFFIFOStressTest, SequenceYieldMixed)
 {
     auto resting = [](){
         std::this_thread::yield();
@@ -513,8 +480,8 @@ TEST_F(LFFIFOStressTest, SequenceRushMixed)
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x10000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting, false);
             // stat_lst.push_back(fifo.statistics());
+            LOGD("-----------------------------------------");
         }
-        LOGD("-----------------------------------------");
 
         // {
         //     ring_queue_ss<char, PROFILING> fifo{capacity};
@@ -527,8 +494,8 @@ TEST_F(LFFIFOStressTest, SequenceRushMixed)
             ring_queue_dd<char, PROFILING> fifo{capacity, 0x10000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting, false);
             // stat_lst.push_back(fifo.statistics());
+            LOGD("-----------------------------------------");
         }
-        LOGD("-----------------------------------------");
     });
     column_lst = {
         // "buffer ss", "buffer ss",
@@ -563,27 +530,28 @@ TEST_F(LFFIFOStressTest, DISABLED_DDRushConcurrent)
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x400};
             ConcurrentFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             // stat_lst.push_back(fifo.statistics());
+            LOGD("-----------------------------------------");
         }
-        LOGD("-----------------------------------------");
 
         {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x800};
             ConcurrentFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             // stat_lst.push_back(fifo.statistics());
+            LOGD("-----------------------------------------");
         }
-        LOGD("-----------------------------------------");
 
         {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x1000};
             ConcurrentFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             // stat_lst.push_back(fifo.statistics());
+            LOGD("-----------------------------------------");
         }
-        LOGD("-----------------------------------------");
 
         {
             ring_buffer_dd<char, PROFILING> fifo{capacity, 0x2000};
             ConcurrentFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             // stat_lst.push_back(fifo.statistics());
+            LOGD("-----------------------------------------");
         }
     });
     plotting();

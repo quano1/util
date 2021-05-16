@@ -574,11 +574,11 @@ public:
     }
 
     // template <uint8_t type = 3>
-    inline void dumpStat(double real_total_time, int type=3) const
+    inline void dumpStat(double real_total_time, int type=3, bool title=true) const
     {
         if(!profiling) return;
         using namespace std::chrono;
-        if(type) printf("        count(K) |err(%%) | miss(%%) t:c |try(%%) |comp(%%)| cb(%%) | all(%%)| Mbs   | cb try comp (min:max:avg) (nano sec)\n");
+        if(title) printf("        count(K) |err(%%) | miss(%%)tr:co|try(%%) |comp(%%)| cb(%%) | all(%%)| Mbs    | cb try comp (min:max:avg) (nano sec)\n");
         auto stats = statistics();
         /// producer
         if(type & 1)
@@ -602,7 +602,7 @@ public:
             double comp_miss_rate = (st.comp_miss_count*100.f)/st.try_count;
 
             // double opss = st.total_size * .001f / real_total_time;
-            double speed = st.total_size * 1.f / 0x100000 / real_total_time;
+            double speed = (st.total_size * 1.f / 0x100000) / real_total_time;
 
 
             printf(" push: %9.3f | %5.2f | %5.2f:%5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %.3f | (%ld:%ld:%ld) (%ld:%ld:%ld) (%ld:%ld:%ld)\n",
@@ -636,8 +636,8 @@ public:
             double comp_miss_rate = (st.comp_miss_count*100.f)/st.try_count;
 
             // double opss = st.total_size * .001f / real_total_time;
-            double speed = st.total_size * 1.f / 0x100000 / real_total_time;
-
+            double speed = (st.total_size * 1.f / 0x100000) / real_total_time;
+            // LOGV(st.total_size, real_total_time, st.total_size * 1.f / 0x100000);
             printf(" pop : %9.3f | %5.2f | %5.2f:%5.2f | %5.2f | %5.2f | %5.2f | %5.2f | %.3f | (%ld:%ld:%ld) (%ld:%ld:%ld) (%ld:%ld:%ld)\n",
                    try_count, error_rate, try_miss_rate, comp_miss_rate
                    , time_try_rate, time_complete_rate, time_callback_rate, time_real_rate

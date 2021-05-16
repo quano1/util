@@ -13,13 +13,15 @@
 #include <tll.h>
 #include "common.h"
 
+constexpr size_t kExtend = 5u;
+
 void benchmark_yield()
 {
     std::vector<int> thread_lst;
-    std::vector<double> time_lst;
+    std::vector<double> time_lst, throughputs;
     std::vector<size_t> total_size_lst, total_count_lst;
 
-    tll::util::CallFuncInSeq<NUM_CPU, 5>( [&](auto index_seq)
+    tll::util::CallFuncInSeq<NUM_CPU, kExtend>( [&](auto index_seq)
     {
         thread_lst.push_back(index_seq.value);
         constexpr size_t num_of_threads = index_seq.value;
@@ -36,9 +38,11 @@ void benchmark_yield()
             auto do_push = [&](int, size_t, size_t, size_t, size_t) -> size_t { return fifo.push((char)1);};
             auto do_pop = [&](int, size_t, size_t, size_t, size_t) -> size_t { char val; return fifo.pop(val);};
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            size_t rts_push = tll::test::fifing<num_of_threads>(do_push, nullptr, [](int tid){return true;}, do_wait, nullptr, total_write_size, time_lst, total_count_lst).first;
+            size_t rts = tll::test::fifing<num_of_threads>(do_push, nullptr, [](int tid){return true;}, do_wait, nullptr, total_write_size, time_lst, total_count_lst).first;
+            throughputs.push_back(rts/(time_lst.back() * num_of_threads));
 
-            tll::test::fifing<num_of_threads>(nullptr, do_pop, [](int tid){return false;}, do_wait, nullptr, rts_push, time_lst, total_count_lst);
+            rts = tll::test::fifing<num_of_threads>(nullptr, do_pop, [](int tid){return false;}, do_wait, nullptr, rts, time_lst, total_count_lst).second;
+            throughputs.push_back(rts/(time_lst.back() * num_of_threads));
         }
 
         {
@@ -46,9 +50,11 @@ void benchmark_yield()
             auto do_push = [&](int, size_t, size_t, size_t, size_t) -> size_t { return fifo.enqueue((char)1);};
             auto do_pop = [&](int, size_t, size_t, size_t, size_t) -> size_t { char val; return fifo.try_dequeue(val);};
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            size_t rts_push = tll::test::fifing<num_of_threads>(do_push, nullptr, [](int tid){return true;}, do_wait, nullptr, total_write_size, time_lst, total_count_lst).first;
-            
-            tll::test::fifing<num_of_threads>(nullptr, do_pop, [](int tid){return false;}, do_wait, nullptr, rts_push, time_lst, total_count_lst);
+            size_t rts = tll::test::fifing<num_of_threads>(do_push, nullptr, [](int tid){return true;}, do_wait, nullptr, total_write_size, time_lst, total_count_lst).first;
+            throughputs.push_back(rts/(time_lst.back() * num_of_threads));
+
+            rts = tll::test::fifing<num_of_threads>(nullptr, do_pop, [](int tid){return false;}, do_wait, nullptr, rts, time_lst, total_count_lst).second;
+            throughputs.push_back(rts/(time_lst.back() * num_of_threads));
         }
 
         {
@@ -56,9 +62,11 @@ void benchmark_yield()
             auto do_push = [&](int, size_t, size_t, size_t, size_t) -> size_t { return fifo.push((char)1);};
             auto do_pop = [&](int, size_t, size_t, size_t, size_t) -> size_t { char val; return fifo.pop(val);};
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            size_t rts_push = tll::test::fifing<num_of_threads>(do_push, nullptr, [](int tid){return true;}, do_wait, nullptr, total_write_size, time_lst, total_count_lst).first;
+            size_t rts = tll::test::fifing<num_of_threads>(do_push, nullptr, [](int tid){return true;}, do_wait, nullptr, total_write_size, time_lst, total_count_lst).first;
+            throughputs.push_back(rts/(time_lst.back() * num_of_threads));
 
-            tll::test::fifing<num_of_threads>(nullptr, do_pop, [](int tid){return false;}, do_wait, nullptr, rts_push, time_lst, total_count_lst);
+            rts = tll::test::fifing<num_of_threads>(nullptr, do_pop, [](int tid){return false;}, do_wait, nullptr, rts, time_lst, total_count_lst).second;
+            throughputs.push_back(rts/(time_lst.back() * num_of_threads));
         }
 
         {
@@ -66,30 +74,36 @@ void benchmark_yield()
             auto do_push = [&](int, size_t, size_t, size_t, size_t) -> size_t { return fifo.push((char)1);};
             auto do_pop = [&](int, size_t, size_t, size_t, size_t) -> size_t { char val; return fifo.pop(val);};
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            size_t rts_push = tll::test::fifing<num_of_threads>(do_push, nullptr, [](int tid){return true;}, do_wait, nullptr, total_write_size, time_lst, total_count_lst).first;
+            size_t rts = tll::test::fifing<num_of_threads>(do_push, nullptr, [](int tid){return true;}, do_wait, nullptr, total_write_size, time_lst, total_count_lst).first;
+            throughputs.push_back(rts/(time_lst.back() * num_of_threads));
 
-            tll::test::fifing<num_of_threads>(nullptr, do_pop, [](int tid){return false;}, do_wait, nullptr, rts_push, time_lst, total_count_lst);
+            rts = tll::test::fifing<num_of_threads>(nullptr, do_pop, [](int tid){return false;}, do_wait, nullptr, rts, time_lst, total_count_lst).second;
+            throughputs.push_back(rts/(time_lst.back() * num_of_threads));
         }
 
     });
 
     std::vector<std::string> cols {"boost W", "boost R", "moody W", "moody R", "tllbuffer W", "tllbuffer R", "tllqueue W", "tllqueue R"};
-    tll::test::plot_data("benchmark_yield.dat", tll::util::stringFormat("Lower better (CPU: %d)", NUM_CPU), "Relative completing time in seconds",
+    tll::test::plot_data("benchmark_yield_time.dat", tll::util::stringFormat("Lower better (CPU: %d)", NUM_CPU), "Relative completing time in seconds",
                   cols,
                   thread_lst,
                   time_lst
                   );
-
+    tll::test::plot_data("benchmark_yield_throughput.dat", tll::util::stringFormat("Higher better (CPU: %d)", NUM_CPU), "Number of operations in second",
+                  cols,
+                  thread_lst,
+                  throughputs
+                  );
 }
 
 
 void benchmark_sleep()
 {
     std::vector<int> thread_lst;
-    std::vector<double> time_lst;
+    std::vector<double> time_lst, throughputs;
     std::vector<size_t> total_size_lst, total_count_lst;
 
-    tll::util::CallFuncInSeq<NUM_CPU, 5>( [&](auto index_seq)
+    tll::util::CallFuncInSeq<NUM_CPU, kExtend>( [&](auto index_seq)
     {
         thread_lst.push_back(index_seq.value);
         constexpr size_t num_of_threads = index_seq.value;
@@ -106,9 +120,11 @@ void benchmark_sleep()
             auto do_push = [&](int, size_t, size_t, size_t, size_t) -> size_t { return fifo.push((char)1);};
             auto do_pop = [&](int, size_t, size_t, size_t, size_t) -> size_t { char val; return fifo.pop(val);};
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            size_t rts_push = tll::test::fifing<num_of_threads>(do_push, nullptr, [](int tid){return true;}, do_wait, nullptr, total_write_size, time_lst, total_count_lst).first;
+            size_t rts = tll::test::fifing<num_of_threads>(do_push, nullptr, [](int tid){return true;}, do_wait, nullptr, total_write_size, time_lst, total_count_lst).first;
+            throughputs.push_back(rts/(time_lst.back() * num_of_threads));
 
-            tll::test::fifing<num_of_threads>(nullptr, do_pop, [](int tid){return false;}, do_wait, nullptr, rts_push, time_lst, total_count_lst);
+            rts = tll::test::fifing<num_of_threads>(nullptr, do_pop, [](int tid){return false;}, do_wait, nullptr, rts, time_lst, total_count_lst).second;
+            throughputs.push_back(rts/(time_lst.back() * num_of_threads));
         }
 
         {
@@ -116,9 +132,11 @@ void benchmark_sleep()
             auto do_push = [&](int, size_t, size_t, size_t, size_t) -> size_t { return fifo.enqueue((char)1);};
             auto do_pop = [&](int, size_t, size_t, size_t, size_t) -> size_t { char val; return fifo.try_dequeue(val);};
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            size_t rts_push = tll::test::fifing<num_of_threads>(do_push, nullptr, [](int tid){return true;}, do_wait, nullptr, total_write_size, time_lst, total_count_lst).first;
-            
-            tll::test::fifing<num_of_threads>(nullptr, do_pop, [](int tid){return false;}, do_wait, nullptr, rts_push, time_lst, total_count_lst);
+            size_t rts = tll::test::fifing<num_of_threads>(do_push, nullptr, [](int tid){return true;}, do_wait, nullptr, total_write_size, time_lst, total_count_lst).first;
+            throughputs.push_back(rts/(time_lst.back() * num_of_threads));
+
+            rts = tll::test::fifing<num_of_threads>(nullptr, do_pop, [](int tid){return false;}, do_wait, nullptr, rts, time_lst, total_count_lst).second;
+            throughputs.push_back(rts/(time_lst.back() * num_of_threads));
         }
 
         {
@@ -126,9 +144,11 @@ void benchmark_sleep()
             auto do_push = [&](int, size_t, size_t, size_t, size_t) -> size_t { return fifo.push((char)1);};
             auto do_pop = [&](int, size_t, size_t, size_t, size_t) -> size_t { char val; return fifo.pop(val);};
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            size_t rts_push = tll::test::fifing<num_of_threads>(do_push, nullptr, [](int tid){return true;}, do_wait, nullptr, total_write_size, time_lst, total_count_lst).first;
+            size_t rts = tll::test::fifing<num_of_threads>(do_push, nullptr, [](int tid){return true;}, do_wait, nullptr, total_write_size, time_lst, total_count_lst).first;
+            throughputs.push_back(rts/(time_lst.back() * num_of_threads));
 
-            tll::test::fifing<num_of_threads>(nullptr, do_pop, [](int tid){return false;}, do_wait, nullptr, rts_push, time_lst, total_count_lst);
+            rts = tll::test::fifing<num_of_threads>(nullptr, do_pop, [](int tid){return false;}, do_wait, nullptr, rts, time_lst, total_count_lst).second;
+            throughputs.push_back(rts/(time_lst.back() * num_of_threads));
         }
 
         {
@@ -136,20 +156,27 @@ void benchmark_sleep()
             auto do_push = [&](int, size_t, size_t, size_t, size_t) -> size_t { return fifo.push((char)1);};
             auto do_pop = [&](int, size_t, size_t, size_t, size_t) -> size_t { char val; return fifo.pop(val);};
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            size_t rts_push = tll::test::fifing<num_of_threads>(do_push, nullptr, [](int tid){return true;}, do_wait, nullptr, total_write_size, time_lst, total_count_lst).first;
+            size_t rts = tll::test::fifing<num_of_threads>(do_push, nullptr, [](int tid){return true;}, do_wait, nullptr, total_write_size, time_lst, total_count_lst).first;
+            throughputs.push_back(rts/(time_lst.back() * num_of_threads));
 
-            tll::test::fifing<num_of_threads>(nullptr, do_pop, [](int tid){return false;}, do_wait, nullptr, rts_push, time_lst, total_count_lst);
+            rts = tll::test::fifing<num_of_threads>(nullptr, do_pop, [](int tid){return false;}, do_wait, nullptr, rts, time_lst, total_count_lst).second;
+            throughputs.push_back(rts/(time_lst.back() * num_of_threads));
         }
 
     });
 
     std::vector<std::string> cols {"boost W", "boost R", "moody W", "moody R", "tllbuffer W", "tllbuffer R", "tllqueue W", "tllqueue R"};
-    tll::test::plot_data("benchmark_sleep.dat", tll::util::stringFormat("Lower better (CPU: %d)", NUM_CPU), "Relative completing time in seconds",
+    tll::test::plot_data("benchmark_sleep_time.dat", tll::util::stringFormat("Lower better (CPU: %d)", NUM_CPU), "Relative completing time in seconds",
                   cols,
                   thread_lst,
                   time_lst
                   );
 
+    tll::test::plot_data("benchmark_sleep_throughput.dat", tll::util::stringFormat("Higher better (CPU: %d)", NUM_CPU), "Number of operations in second",
+                  cols,
+                  thread_lst,
+                  throughputs
+                  );
 }
 
 

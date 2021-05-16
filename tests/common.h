@@ -29,6 +29,8 @@ std::pair<size_t, size_t> fifing(
         const std::function<void()> &do_wait, /// std::this_thread::yield()
         const std::function<void()> &do_dump,
         size_t max_val,
+        // std::vector<double> &speed_lst,
+        // std::vector<double> &throughputs,
         std::vector<double> &time_lst,
         std::vector<size_t> &tt_count_lst,
         bool scale=true)
@@ -70,7 +72,7 @@ std::pair<size_t, size_t> fifing(
                     tt_push_count.fetch_add(1, std::memory_order_relaxed);
                     tt_push_size.fetch_add(ret, std::memory_order_relaxed);
                     lc_tt_size+=ret;
-                    NOP_LOOP();
+                    // NOP_LOOP();
                     do_wait();
                 }
                 loop_num++;
@@ -95,7 +97,7 @@ std::pair<size_t, size_t> fifing(
                     tt_pop_count.fetch_add(1, std::memory_order_relaxed);
                     tt_pop_size.fetch_add(ret, std::memory_order_relaxed);
                     lc_tt_size+=ret;
-                    NOP_LOOP();
+                    // NOP_LOOP();
                     do_wait();
                 }
                 loop_num++;
@@ -105,14 +107,24 @@ std::pair<size_t, size_t> fifing(
 
     }
     double tt_time = counter.elapsed().count();
+    if(do_push)
+    {
+        tt_count_lst.push_back(tt_push_count.load());
+        // speed_lst.push_back(tt_push_size.load() / tt_time);
+        // throughputs.push_back(tt_push_count.load() / tt_time);
+    }
+    if(do_pop)
+    {
+        tt_count_lst.push_back(tt_pop_count.load());
+        // speed_lst.push_back(tt_pop_size.load() / tt_time);
+        // throughputs.push_back(tt_push_count.load() / tt_time);
+    }
     if(scale) tt_time /= num_of_threads;
     time_lst.push_back(tt_time);
     // LOGD("%f", tt_time);
     is_done.store(true);
     cv.notify_all();
     dumpt.join();
-    if(do_push) tt_count_lst.push_back(tt_push_count.load());
-    if(do_pop) tt_count_lst.push_back(tt_pop_count.load());
     return {tt_push_size.load(), tt_pop_size.load()};
 }
 
