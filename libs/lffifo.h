@@ -156,7 +156,7 @@ namespace mode
 
 /// Contiguous Circular Index
 // template <size_t num_threads=0x400>
-template <typename T, Mode prod_mode=Mode::kDense, Mode cons_mode=Mode::kSparse, bool contiguous=true, bool profiling=false>
+template <typename T, Mode kProdMode=Mode::kDense, Mode kConsMode=Mode::kSparse, bool kContiguous=true, bool kProfiling=false>
 struct Fifo
 {
 public:
@@ -166,23 +166,23 @@ private:
     Marker consumer_;
     std::atomic<size_t> water_mark_{0}, water_mark_head_{0};
     size_t capacity_{0}, num_threads_{0};
-    std::vector<T> buffer_;
+    std::vector<elem_t> buffer_;
 
     void profTimerReset()
     {
-        if(profiling)
+        if(kProfiling)
             st::counter.reset();
     }
 
     void profTimerStart()
     {
-        if(profiling)
+        if(kProfiling)
             st::counter.start();
     }
 
     size_t profTimerElapse(std::atomic<size_t> &atomic)
     {
-        if(profiling) 
+        if(kProfiling) 
         {
             size_t diff = st::counter.elapse().count();
             atomic.fetch_add(diff, std::memory_order_relaxed);
@@ -193,7 +193,7 @@ private:
 
     size_t profTimerAbsElapse(std::atomic<size_t> &atomic)
     {
-        if(profiling)
+        if(kProfiling)
         {
             size_t diff = st::counter.absElapse().count();
             atomic.fetch_add(diff, std::memory_order_relaxed);
@@ -205,14 +205,14 @@ private:
     template <typename U>
     size_t profAdd(std::atomic<size_t> &atomic, const U &val)
     {
-        if(profiling)
+        if(kProfiling)
             return atomic.fetch_add(val, std::memory_order_relaxed);
         return 0;
     }
 
     inline void updateMinMax(Marker &mk, size_t time_cb, size_t time_try, size_t time_comp)
     {
-        if(profiling)
+        if(kProfiling)
         {
             size_t time_min_cb = mk.time_min_cb.load(std::memory_order_relaxed);
             while(time_min_cb > time_cb) mk.time_min_cb.compare_exchange_weak(time_min_cb, time_cb, std::memory_order_relaxed, std::memory_order_relaxed);
@@ -242,24 +242,24 @@ private:
 
 
 private:
-    template <bool is_producer, typename F, typename ...Args>
+    template <bool kIsProducer, typename F, typename ...Args>
     size_t doFifing(F &&callback, size_t size, Args &&...args)
     {
-        auto &marker = is_producer ? producer_ : consumer_;
+        auto &marker = kIsProducer ? producer_ : consumer_;
         size_t id, index;
         size_t time_cb{0}, time_try{0}, time_comp{0};
         profTimerReset();
-        size_t next = is_producer ? tryPush(id, index, size) : tryPop(id, index, size);
+        size_t next = kIsProducer ? tryPush(id, index, size) : tryPop(id, index, size);
         time_try = profTimerElapse(marker.time_try);
         profTimerStart();
         if(size)
         {
-            if(is_producer)
+            if(kIsProducer)
             {
                 std::atomic_thread_fence(std::memory_order_acquire);
             }
 
-            if(contiguous)
+            if(kContiguous)
             {
                 callback(elemAt(next), size, std::forward<Args>(args)...);
             }
@@ -269,7 +269,7 @@ private:
                     callback(elemAt(next+i), size - i - 1, std::forward<Args>(args)...);
             }
 
-            if(!is_producer)
+            if(!kIsProducer)
             {
                 std::atomic_thread_fence(std::memory_order_release);
                 // LOGD("%ld", size);
@@ -278,7 +278,7 @@ private:
             time_cb = profTimerElapse(marker.time_cb);
             profTimerStart();
             
-            complete<is_producer>(id, index, next, size);
+            complete<kIsProducer>(id, index, next, size);
             
             time_comp = profTimerElapse(marker.time_comp);
             profTimerAbsElapse(marker.time_total);
@@ -305,7 +305,7 @@ private:
         {
             next_size = size;
             size_t prod_index = producer_.get_index_tail();
-            if(cons_mode == mode::dense)
+            if(kConsMode == mode::dense)
             {
                 while(entry_id_head != marker.get_entry_id_tail())
                     entry_id_head = marker.get_entry_id_head();
@@ -317,7 +317,7 @@ private:
             size_t wmark = water_mark_.load(std::memory_order_relaxed);
             if(cons_next_index < prod_index)
             {
-                if(contiguous)
+                if(kContiguous)
                 {
                     if(cons_next_index == wmark)
                     {
@@ -351,7 +351,7 @@ private:
                             next_size = prod_index - cons_next_index;
                         }
                     }
-                } /// if(contiguous)
+                } /// if(kContiguous)
                 else
                 {
                     if(size > prod_index - cons_index_head)
@@ -360,7 +360,7 @@ private:
                     }
                 }
 
-                if(cons_mode == mode::dense)
+                if(kConsMode == mode::dense)
                 {
                     if(!marker.ref_entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
                     {
@@ -403,7 +403,7 @@ private:
         for(;;profAdd(marker.try_miss_count, 1))
         {
             size_t cons_index = consumer_.get_index_tail();
-            if(prod_mode == mode::dense)
+            if(kProdMode == mode::dense)
             {
                 while(entry_id_head != marker.get_entry_id_tail())
                     entry_id_head = marker.get_entry_id_head();
@@ -415,7 +415,7 @@ private:
 
             if(prod_next_index + size <= capacity() + cons_index)
             {
-                if(contiguous)
+                if(kContiguous)
                 {
                     /// prod leads
                     if(wrap(prod_next_index) >= wrap(cons_index))
@@ -445,9 +445,9 @@ private:
                             break;
                         }
                     }
-                } /// if(contiguous)
+                } /// if(kContiguous)
 
-                if(prod_mode == mode::dense)
+                if(kProdMode == mode::dense)
                 {
                     if(!marker.ref_entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
                     {
@@ -460,7 +460,7 @@ private:
                         entry_id = entry_id_head;
                         break;
                     }
-                } /// prod_mode == mode::dense
+                } /// kProdMode == mode::dense
                 else
                 {
                     if(!marker.ref_index_head().compare_exchange_weak(prod_index_head, prod_next_index + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
@@ -477,11 +477,11 @@ private:
         return prod_next_index;
     } /// tryPush
 
-    template <bool is_producer>
+    template <bool kIsProducer>
     void complete(size_t exit_id, size_t curr_index, size_t next_index, size_t size)
     {
-        auto &marker = is_producer ? producer_ : consumer_;
-        constexpr Mode mode = is_producer ? prod_mode : cons_mode;
+        auto &marker = kIsProducer ? producer_ : consumer_;
+        constexpr Mode mode = kIsProducer ? kProdMode : kConsMode;
         if(mode == mode::dense)
         {
             while(exit_id >= (marker.get_exit_id() + num_threads_)){};
@@ -490,8 +490,8 @@ private:
             // size_t old_exit_id = marker.exit_id_list(wrap(kIdx, num_threads_)).load(std::memory_order_relaxed);
             // size_t new_exit_id=exit_id + 1;
 
-            // LOGD("%d:%ld\t%ld:%ld", is_producer, kIdx, next_index, this->next(curr_index));
-            if(contiguous && is_producer && next_index >= this->next(curr_index))
+            // LOGD("%d:%ld\t%ld:%ld", kIsProducer, kIdx, next_index, this->next(curr_index));
+            if(kContiguous && kIsProducer && next_index >= this->next(curr_index))
             {
                 water_mark_head_.store(curr_index, std::memory_order_relaxed);
             }
@@ -525,7 +525,7 @@ private:
 
                     // next_index = marker.ref_next_index_list(wrap(new_exit_id - 1, num_threads_)).load(std::memory_order_relaxed);
 
-                    if(contiguous && is_producer)
+                    if(kContiguous && kIsProducer)
                     {
                         size_t wmh = water_mark_head_.load(std::memory_order_relaxed);
                         if((water_mark_.load(std::memory_order_relaxed) < wmh) 
@@ -553,7 +553,7 @@ private:
         else
         {
             for(;marker.get_index_tail() != curr_index;){}
-            if(contiguous && is_producer && next_index >= this->next(curr_index))
+            if(kContiguous && kIsProducer && next_index >= this->next(curr_index))
             {
                 water_mark_.store(curr_index, std::memory_order_relaxed);
             }
@@ -576,7 +576,7 @@ public:
     // template <uint8_t type = 3>
     inline void dumpStat(double real_total_time, int type=3, bool title=true) const
     {
-        if(!profiling) return;
+        if(!kProfiling) return;
         using namespace std::chrono;
         if(title) printf("        count(K) |err(%%) | miss(%%)tr:co|try(%%) |comp(%%)| cb(%%) | all(%%)| Mbs    | cb try comp (min:max:avg) (nano sec)\n");
         auto stats = statistics();
@@ -713,7 +713,7 @@ public:
     template<typename U>
     size_t push(U &&val)
     {
-        return push([&val](T *el, size_t){ *el = std::forward<U>(val); }, 1);
+        return push([&val](elem_t *el, size_t){ *el = std::forward<U>(val); }, 1);
     }
 
     template <typename F, typename ...Args>
@@ -722,9 +722,9 @@ public:
         return doFifing<false>(std::forward<F>(callback), size, std::forward<Args>(args)...);
     }
 
-    size_t pop(T &val)
+    size_t pop(elem_t &val)
     {
-        return pop([&val](T *el, size_t){ val = std::move(*el); }, 1);
+        return pop([&val](elem_t *el, size_t){ val = std::move(*el); }, 1);
     }
 
 /// utility functions
@@ -773,24 +773,24 @@ public:
     inline size_t ct() const {return consumer_.get_index_tail();}
     inline size_t wm() const {return water_mark_.load(std::memory_order_relaxed);}
 
-    inline T *elemAt(size_t id)
+    inline elem_t *elemAt(size_t id)
     {
         return &buffer_[wrap(id)];
     }
 
-    inline T &operator[](size_t id)
+    inline elem_t &operator[](size_t id)
     {
         return buffer_[wrap(id)];
     }
 
-    inline const T &operator[](size_t id) const
+    inline const elem_t &operator[](size_t id) const
     {
         return buffer_[wrap(id)];
     }
 
     inline bool isProfilingEnabled() const
     {
-        return profiling;
+        return kProfiling;
     }
 }; /// Fifo
 

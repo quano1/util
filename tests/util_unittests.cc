@@ -16,6 +16,10 @@ struct UtilTest : public ::testing::Test
     }
 };
 
+#define S1(x) #x
+#define S2(x) S1(x)
+#define LOCATION __FILE__ " : " S2(__LINE__)
+
 TEST_F(UtilTest, VAR_STR)
 {
     char var_char='h';
@@ -36,5 +40,41 @@ TEST_F(UtilTest, VAR_STR)
     LOGV(var_std_string);
     LOGV(var_std_vector_int, var_std_vector_float, var_std_vector_double);
     LOGV(var_atomic_int);
+    // const char *file_func = __FUNCTION__ __FILE__;
+    LOGV(std::string(LOCATION));
+    std::string empty;
+    LOGV(empty);
 }
 
+TEST_F(UtilTest, Counter)
+{
+    using namespace tll::time;
+
+    Counter counter;
+
+    {
+        struct timespec ts;
+        counter.start();
+        for(int i=0; i<1e6; i++)
+        {
+            // tp = rdtsc();
+            clock_gettime(CLOCK_MONOTONIC, &ts);
+        }
+        double elapse = counter.elapse().count();
+        LOGD("%.9f", elapse * 1e-6);
+        LOGV(elapse);
+    }
+
+    {
+        std::chrono::steady_clock::time_point tp;
+        counter.start();
+        for(int i=0; i<1e6; i++)
+        {
+            tp = std::chrono::steady_clock::now();
+        }
+        double elapse = counter.elapse().count();
+        LOGD("%.9f", elapse * 1e-6);
+        LOGV(elapse);
+    }
+
+}

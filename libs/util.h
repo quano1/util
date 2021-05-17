@@ -357,7 +357,7 @@ std::string toString(std::vector<T> const &val)
 template <typename T>
 std::string varStr(const char *name, const T &val)
 {
-     return stringFormat("%s (%s)", name, toString(val).data());
+     return stringFormat("(%s: %s)", name, toString(val).data());
 }
 
 template <typename T, typename ... Args>

@@ -102,3 +102,19 @@ TEST_F(LoggerTest, ConcurrentLog)
     time = counter.elapse().count();
     LOGD("%.3f:%f", (NUM_CPU)/(time), time);
 }
+
+void logfunction(char *dst, char src)
+{
+    memcpy(dst, &src, 1);
+}
+
+TEST_F(LoggerTest, NanoLog)
+{
+    char val = 0;
+    // constexpr char src = 0xFF;
+    tll::time::Counter<> counter;
+    for(int i=0; i<100000; i++) logfunction(&val, 0xFF);
+
+    LOGD("%.9f: %1x", counter.elapse().count(), val);
+    // LOGV(counter.elapse().count(), (uint8_t)val);
+}

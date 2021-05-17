@@ -1,6 +1,6 @@
 #include <tests/third-party/cxxopts/include/cxxopts.hpp>
 
-int __attribute__((weak)) benchmark()
+int __attribute__((weak)) benchmark(int argc, char **argv)
 {
     printf("benchmark is disabled!\n");
     return 0;
@@ -12,7 +12,7 @@ int __attribute__((weak)) unittests(int argc, char **argv)
     return 0;
 }
 
-int main(int argc, char *argv[])
+int main(int argc, char **argv)
 {
     cxxopts::Options options(argv[0]);
 
@@ -36,7 +36,7 @@ int main(int argc, char *argv[])
     // std::string bar;
     if (result.count("benchmark"))
     {
-        benchmark();
+        benchmark(argc, argv);
     }
 
     if (result.count("unittests"))
