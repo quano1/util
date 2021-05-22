@@ -75,13 +75,20 @@ extern char *__progname;
 #define TLL_LOGTF(plog) tll::log::Tracer<> tracer__([plog](std::string const &log_msg){(plog)->log((tll::log::Type::kTrace), "%s", log_msg);}, (tll::log::Context::instance().push(__FILE__), LOG_HEADER_), __FUNCTION__)
 
 #define TLL_GLOGD(...) TLL_LOGD(&tll::log::Manager::instance(), ##__VA_ARGS__)
-// #define TLL_GLOGD2(...) TLL_LOGD2(&tll::log::Manager::instance(), ##__VA_ARGS__)
 #define TLL_GLOGI(...) TLL_LOGI(&tll::log::Manager::instance(), ##__VA_ARGS__)
 #define TLL_GLOGW(...) TLL_LOGW(&tll::log::Manager::instance(), ##__VA_ARGS__)
 #define TLL_GLOGF(...) TLL_LOGF(&tll::log::Manager::instance(), ##__VA_ARGS__)
 #define TLL_GLOGT(ID) tll::log::Tracer<> tracer_##ID##__([](std::string const &log_msg){tll::log::Manager::instance().log((tll::log::Type::kTrace), "%s", log_msg);}, (tll::log::Context::instance().push(__FILE__), LOG_HEADER_), #ID)
 
 #define TLL_GLOGTF() tll::log::Tracer<> tracer__(std::bind(&tll::log::Manager::log<std::string const &>, &tll::log::Manager::instance(), (tll::log::Type::kTrace), "%s", std::placeholders::_1), (tll::log::Context::instance().push(__FILE__), __FUNCTION__), __LINE__, __FUNCTION__)
+
+
+#define TLL_LOGD2(plog, ...) (plog)->log2<Mode::kAsync>((tll::log::Type::kDebug), \
+  __FILE__,\
+  __FUNCTION__, \
+  __LINE__, \
+  ##__VA_ARGS__)
+#define TLL_GLOGD2(...) TLL_LOGD2(&tll::log::Manager::instance(), ##__VA_ARGS__)
 
 namespace tll::log {
 
@@ -240,16 +247,50 @@ public:
     Manager& operator=(Manager&&) = delete;
 
     template <Mode mode, typename... Args>
-    void log(Type type, const char *format, Args &&...args)
+    void log2(Type type, const char *file, const char *function, int line, const char *format, Args ...args)
+    {
+        const auto timestamp = std::chrono::steady_clock::now();
+        const auto tid = tll::util::str_tid_nice();
+        const auto level = tll::log::Context::instance().level();
+        // std::string payload = util::stringFormat(format, std::forward<Args>(args)...);
+        if(mode == Mode::kAsync && isRunning())
+        {
+            // tll::util::timestamp<>();
+            
+            // const auto context = tll::log::Context::instance().get();
+            size_t ps = task_queue_.push( [=]() -> std::string {
+                    return util::stringFormat("{%c}{%.9f}{%s}{%d}{%s}{%s}{%d}{%s}\n",
+                            kLogTypeString[(int)type],
+                            util::timestamp(timestamp), tid, level,
+                            file, function, line, 
+                            util::stringFormat(format, (args)...));
+                        // + util::stringFormat("{%s}\n",util::stringFormat(format, (args)...));
+                });
+        }
+        else
+        {
+            log_(util::stringFormat("{%c}{%.9f}{%s}{%d}{%s}{%s}{%d}{%s}\n",
+                            kLogTypeString[(int)type],
+                            util::timestamp(timestamp), tid, level,
+                            file, function, line, 
+                            util::stringFormat(format, (args)...)));
+        }
+    }
+            
+
+    template <Mode mode, typename... Args>
+    void log(Type type, const char *format, Args ...args)
     {
         std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(int)type], util::stringFormat(format, std::forward<Args>(args)...));
+
         if(mode == Mode::kAsync && isRunning())
         {
             size_t ps = rb_.push([](char *el, size_t sz, const std::string &msg) {
                 memcpy(el, msg.data(), sz);
             }, payload.size(), payload);
+
             assert(ps > 0);
-            pop_wait_.notify_one();
+            pop_wait_.notify_all();
         }
         else
         {
@@ -258,7 +299,7 @@ public:
     }
 
     template <typename... Args>
-    void log(Type type, const char *format, Args &&...args)
+    void log(Type type, const char *format, Args ...args)
     {
         // std::string payload = util::stringFormat(format, std::forward<Args>(args)...);
         log<Mode::kAsync>(type, format, args...);
@@ -389,30 +430,61 @@ public:
         {
             util::Counter<std::chrono::duration<uint32_t, std::ratio<1, 1000>>> counter;
             uint32_t delta = 0;
+            // while(isRunning())
+            // {
+            //     delta += counter.elapse().count();
+            //     counter.start();
+            //     if(delta < period_ms && rb_.size() < chunk_size)
+            //     {
+            //         std::unique_lock<std::mutex> lock(mtx_);
+            //         /// wait timeout
+            //         bool wait_status = pop_wait_.wait_for(lock, std::chrono::milliseconds(period_ms - delta), [this, chunk_size, &delta, &counter] {
+            //             delta += counter.elapse().count();
+            //             return !isRunning() || (this->rb_.size() >= chunk_size);
+            //         });
+            //     }
+            //     if(delta >= period_ms || rb_.size() >= chunk_size)
+            //     {
+            //         delta -= period_ms;
+            //         size_t rs = rb_.pop([&](const char *el, size_t sz){
+            //             log_(el, sz);
+            //         }, -1);
+            //     }
+            // } /// while(isRunning())
+
+            // if(!rb_.empty())
+            // {
+            //     size_t rs = rb_.pop([&](const char *el, size_t sz){ log_(el, sz); }, -1);
+            // }
+
             while(isRunning())
             {
                 delta += counter.elapse().count();
                 counter.start();
-                if(delta < period_ms && rb_.size() < chunk_size)
+                if(delta < period_ms && task_queue_.empty())
                 {
                     std::unique_lock<std::mutex> lock(mtx_);
                     /// wait timeout
                     bool wait_status = pop_wait_.wait_for(lock, std::chrono::milliseconds(period_ms - delta), [this, chunk_size, &delta, &counter] {
                         delta += counter.elapse().count();
-                        return !isRunning() || (this->rb_.size() >= chunk_size);
+                        return !isRunning() || !task_queue_.empty();
                     });
                 }
-                if(delta >= period_ms || rb_.size() >= chunk_size)
+
+                if(delta >= period_ms || !task_queue_.empty())
                 {
                     delta -= period_ms;
-                    size_t rs = rb_.pop([&](const char *el, size_t sz){
-                        log_(el, sz);
+                    size_t rs = task_queue_.pop([&](std::function<std::string()> *el, size_t sz){
+                        log_((*el)());
                     }, -1);
                 }
             } /// while(isRunning())
+            
             if(!rb_.empty())
             {
-                size_t rs = rb_.pop([&](const char *el, size_t sz){ log_(el, sz); }, -1);
+                size_t rs = task_queue_.pop([&](std::function<std::string()> *el, size_t sz){
+                        log_((*el)());
+                    }, -1);
             }
         });
     }
@@ -424,7 +496,7 @@ public:
 
         {
             std::lock_guard<std::mutex> lock(mtx_);
-            pop_wait_.notify_one();
+            pop_wait_.notify_all();
         }
 
         if(broadcast_.joinable()) broadcast_.join();
@@ -486,7 +558,7 @@ public:
         std::unique_lock<std::mutex> lock(mtx);
         join_wait_.wait(lock, [this] 
         {
-            pop_wait_.notify_one();
+            pop_wait_.notify_all();
             return !isRunning() || rb_.empty();
         });
     }
@@ -521,7 +593,9 @@ private:
 
     std::atomic<bool> is_running_{false};
     // lf::CCFIFO<Message> ccq_{0x1000};
-    lf::ring_buffer_mpmc<char> rb_{0x100000 * 16}; /// 16Mb
+    lf::ring_queue_mpsc<std::function<std::string()>> task_queue_{1000000};
+
+    lf::ring_buffer_mpsc<char> rb_{0x100000 * 16}; /// 16Mb
     std::unordered_map<std::string, Entity> ents_ = {{"file", Entity{
                 .name = "file",
                 [this](void *handle, const char *buff, size_t size)

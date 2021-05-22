@@ -121,3 +121,19 @@ TEST_F(LoggerTest, NanoLog)
     LOGD("%.9f: %1x", counter.elapse().count(), val);
     // LOGV(counter.elapse().count(), (uint8_t)val);
 }
+
+
+TEST_F(LoggerTest, Log2)
+{
+    tll::util::Counter<> counter;
+    counter.start();
+    #pragma omp parallel num_threads ( NUM_CPU )
+    {
+        for(int i=0;i<1000000;i++)
+            TLL_GLOGD2("%f", counter.elapse().count());
+    }
+    LOGD("%.9f", counter.elapse().count() * 1e-6 / NUM_CPU);
+    // tll::log::Manager::instance().log2<Mode::kAsync>((tll::log::Type::kDebug), __FILE__, __FUNCTION__, __LINE__, "");
+
+    tll::log::Manager::instance().stop();
+}
