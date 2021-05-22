@@ -1,5 +1,8 @@
 #pragma once
 
+/// MIT License
+/// Copyright (c) 2021 Thanh Long Le (longlt00502@gmail.com)
+
 #if (HAVE_OPENMP)
 
 #include <functional>
@@ -15,8 +18,7 @@
 #include <string>
 
 #include <omp.h>
-#include "../libs/util.h"
-#include "../libs/counter.h"
+#include <tll.h>
 
 #define NOP_LOOP() for(int i__=0; i__<0x100; i__++) __asm__("nop")
 namespace tll::test {
@@ -39,7 +41,7 @@ std::pair<size_t, size_t> fifing(
     std::atomic<size_t> running_prod{0}, 
         tt_push_count{0}, tt_pop_count{0},
         tt_push_size{0}, tt_pop_size{0};
-    tll::time::Counter<std::chrono::duration<double, std::ratio<1, 1>>> counter; /// second
+    tll::util::Counter<std::chrono::duration<double, std::ratio<1, 1>>> counter; /// second
     // double tt_time;
     std::atomic<bool> is_done{false};
     std::condition_variable cv;

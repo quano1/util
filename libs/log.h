@@ -1,7 +1,7 @@
+#pragma once
+
 /// MIT License
 /// Copyright (c) 2021 Thanh Long Le (longlt00502@gmail.com)
-
-#pragma once
 
 #include <string>
 #include <cassert>
@@ -22,7 +22,6 @@
 #include <unistd.h>
 
 #include "util.h"
-#include "counter.h"
 #include "lffifo.h"
 
 #ifndef TLL_DEFAULT_LOG_PATH
@@ -116,35 +115,7 @@ struct Entity
     std::function<void *()> onStart;
     std::function<void(void *&)> onStop;
     void *handle;
-
-private:
-    void start()
-    {
-        if(handle == nullptr && onStart)
-            handle = onStart();
-        /// send first log to notify time_since_epoch
-        auto std_now = std::chrono::steady_clock::now();
-        auto sys_now = std::chrono::system_clock::now();
-        auto sys_time = std::chrono::system_clock::to_time_t(sys_now);
-        auto buff = util::stringFormat("%s{%.9f}{%.9f}\n", 
-                std::ctime(&sys_time),
-                std::chrono::duration_cast< std::chrono::duration<double> >(std_now.time_since_epoch()).count(), 
-                std::chrono::duration_cast< std::chrono::duration<double> >(sys_now.time_since_epoch()).count());
-        onLog(handle, buff.data(), buff.size());
-    }
-
-    void log(const char *buff, size_t size) const
-    {
-        onLog(handle, buff, size);
-    }
-
-    void stop()
-    {
-        if(onStop)
-            onStop(handle);
-    }
-
-    friend class Manager;
+    // friend class Manager;
 };
 
 struct Context
@@ -232,7 +203,7 @@ struct Tracer
     const char *func_ = "";
     int line_ = 0;
     std::string name_ = "";
-    time::Counter<> counter_;
+    util::Counter<> counter_;
 
     std::function<void(std::string const&)> doLog_;
 }; /// Tracer
@@ -293,6 +264,102 @@ public:
         log<Mode::kAsync>(type, format, args...);
     }
 
+
+
+// LOG("%d %x", arg, arg);
+// log({file,function,line,format}, arg...)
+
+// std::unordered_map<styd::string, StaticLogInfo> s_info;
+
+// file, function, line, format, ...
+
+// uintptr_t getStaticLogId(const StaticLogInfo &info)
+// {
+//     s_info[{info.file, line}] = info;
+//     return &s_info[{info.file, line}]
+// }
+// static StaticLogInfo local_info{file, function, format, line};
+// static StaticLogInfo *local_log_obj = &local_info;
+// s_info[{info.file, line}] = info;
+// static size_t log_id = (size_t)&s_info[{info.file, line}];
+
+// static uintptr_t log_id = getStaticLogId({file, function, format, line});
+
+// struct StreamBuffer {
+//     StreamBuffer(size_t reserve=0x400) {buff_.reserve(0x400);}
+//     ~StreamBuffer()=default;
+
+//     template <typename T>
+//     StreamBuffer &operator<< (T val)
+//     {
+//         uint8_t *crr_pos = buff_.data() + buff_.size();
+//         buff_.resize(sizeof(T) + 2);
+//         *(uint16_t*)crr_pos = 1; /// primitive id
+//         crr_pos += 2;
+//         *(val*)crr_pos = val;
+//     }
+
+//     template <>
+//     StreamBuffer &operator<< <const char *>(const char *val)
+//     {
+//         uint8_t *crr_pos = buff_.data() + buff_.size();
+//         auto str_len = strlen(val);
+//         uff_.resize(str_len + 4);
+
+//         *(uint16_t*)crr_pos = 2; /// string id
+//         crr_pos += 2;
+
+//         *(uint16_t*)crr_pos = str_len;
+//         crr_pos +=2;
+
+//         memcpy(crr_pos, val, str_len);
+//         crr_pos += str_len;
+//     }
+
+//     auto giveUp()
+//     {
+//         return std::move(buff_);
+//     }
+
+//     std::vector<uint8_t> buff_;
+// };
+
+//     template <typename First, typename... Args>
+//     auto getArgs_(StreamBuffer &sb, First first, Args ...args)
+//     {
+//         sb << first;
+//         getArgs_(buff, args...);
+//     }
+
+//     template <typename First, typename... Args>
+//     auto getArgs(First first, Args ...args)
+//     {
+//         StreamBuffer sb;
+//         getArgs_(sb, first, args...);
+//         return sb.giveUp();
+//     }
+
+    // /// log pack/params
+    // template <Mode mode, size_t N, typename... Args>
+    // size_t logP(Type type, const char *file, const char *function, int line,
+    //             const char (&format)[N], Args &&...args)
+    // {
+    //     /// {id|len|payload}
+    //     /// int|uint32_t|
+    //     /// prod:extract params -> pack -> push
+    //     /// cons:pop -> compress -> doLog
+    //     // static log_id = s_info[info];
+    //     static StaticLogInfo s_info = {
+    //         .file = file, 
+    //         .function = function, 
+    //         .format = format,
+    //         .line = line, 
+    //         .severity = (int)type
+    //     };
+
+    //     return 0;
+    // }
+
     // template <Mode mode>
     // void log(Message);
 
@@ -301,10 +368,26 @@ public:
         bool val = false;
         if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
             return;
-        for(auto &entry : ents_) entry.second.start();
+        for(auto &entry : ents_)
+        {
+            // entry.second.start();
+            auto &ent = entry.second;
+            if(ent.handle == nullptr && ent.onStart)
+                ent.handle = ent.onStart();
+            /// send first log to notify time_since_epoch
+            auto std_now = std::chrono::steady_clock::now();
+            auto sys_now = std::chrono::system_clock::now();
+            auto sys_time = std::chrono::system_clock::to_time_t(sys_now);
+            auto buff = util::stringFormat("%s{%.9f}{%.9f}\n", 
+                std::ctime(&sys_time),
+                std::chrono::duration_cast< std::chrono::duration<double> >(std_now.time_since_epoch()).count(), 
+                std::chrono::duration_cast< std::chrono::duration<double> >(sys_now.time_since_epoch()).count());
+            ent.onLog(ent.handle, buff.data(), buff.size());
+        }
+
         broadcast_ = std::thread([this, chunk_size, period_ms]()
         {
-            time::Counter<std::chrono::duration<uint32_t, std::ratio<1, 1000>>> counter;
+            util::Counter<std::chrono::duration<uint32_t, std::ratio<1, 1000>>> counter;
             uint32_t delta = 0;
             while(isRunning())
             {
@@ -348,7 +431,8 @@ public:
         for(auto &ent_entry : ents_)
         {
             auto &ent = ent_entry.second;
-            ent.stop();
+            if(ent.onStop)
+                ent.onStop(ent.handle);
         }
     }
 
@@ -419,7 +503,7 @@ private:
         for(auto &ent_entry : ents_)
         {
             auto &ent = ent_entry.second;
-            ent.log(buff, size);
+            ent.onLog(ent.handle, buff, size);
         }
     }
 

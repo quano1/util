@@ -1,3 +1,6 @@
+/// MIT License
+/// Copyright (c) 2021 Thanh Long Le (longlt00502@gmail.com)
+
 #include <gtest/gtest.h>
 #include <omp.h>
 
@@ -20,7 +23,7 @@ struct LoggerTest : public ::testing::Test
 
 TEST_F(LoggerTest, Simple)
 {
-    tll::time::Counter<> counter;
+    tll::util::Counter<> counter;
     TLL_GLOGD("");
     LOGD("%f", counter.elapse().count());
     Manager::instance().stop();
@@ -49,7 +52,7 @@ TEST_F(LoggerTest, Simple)
 
 TEST_F(LoggerTest, SequenceLog)
 {
-    tll::time::Counter<> counter;
+    tll::util::Counter<> counter;
     double time = 0;
     counter.start();
     {
@@ -77,7 +80,7 @@ TEST_F(LoggerTest, SequenceLog)
 TEST_F(LoggerTest, ConcurrentLog)
 {
     double time = 0;
-    tll::time::Counter<> counter;
+    tll::util::Counter<> counter;
     counter.start();
     #pragma omp parallel num_threads ( NUM_CPU )
     {
@@ -112,7 +115,7 @@ TEST_F(LoggerTest, NanoLog)
 {
     char val = 0;
     // constexpr char src = 0xFF;
-    tll::time::Counter<> counter;
+    tll::util::Counter<> counter;
     for(int i=0; i<100000; i++) logfunction(&val, 0xFF);
 
     LOGD("%.9f: %1x", counter.elapse().count(), val);

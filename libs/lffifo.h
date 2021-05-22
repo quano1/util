@@ -1,7 +1,7 @@
+#pragma once
+
 /// MIT License
 /// Copyright (c) 2021 Thanh Long Le (longlt00502@gmail.com)
-
-#pragma once
 
 #include <mutex>
 #include <thread>
@@ -9,7 +9,6 @@
 #include <mutex>
 #include <bitset>
 
-#include "counter.h"
 #include "util.h"
 
 typedef std::chrono::steady_clock StatClock;
@@ -21,8 +20,8 @@ template <typename T>
 using Callback = std::function<void(const T *o, size_t s)>;
 
 
-namespace st {
-static thread_local tll::time::Counter<StatDuration, StatClock> counter;
+namespace internal {
+static thread_local tll::util::Counter<StatDuration, StatClock> counter;
 }
 
 struct Statistic {
@@ -171,20 +170,20 @@ private:
     void profTimerReset()
     {
         if(kProfiling)
-            st::counter.reset();
+            internal::counter.reset();
     }
 
     void profTimerStart()
     {
         if(kProfiling)
-            st::counter.start();
+            internal::counter.start();
     }
 
     size_t profTimerElapse(std::atomic<size_t> &atomic)
     {
         if(kProfiling) 
         {
-            size_t diff = st::counter.elapse().count();
+            size_t diff = internal::counter.elapse().count();
             atomic.fetch_add(diff, std::memory_order_relaxed);
             return diff;
         }
@@ -195,7 +194,7 @@ private:
     {
         if(kProfiling)
         {
-            size_t diff = st::counter.absElapse().count();
+            size_t diff = internal::counter.absElapse().count();
             atomic.fetch_add(diff, std::memory_order_relaxed);
             return diff;
         }

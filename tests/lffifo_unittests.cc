@@ -1,5 +1,9 @@
-#include <gtest/gtest.h>
+/// MIT License
+/// Copyright (c) 2021 Thanh Long Le (longlt00502@gmail.com)
 
+#include <gtest/gtest.h>
+// #include <tests/third-party/boostorg/lockfree/include/boost/lockfree/queue.hpp>
+#include <tests/third-party/concurrentqueue/concurrentqueue.h>
 #include <omp.h>
 
 #include <tll.h>
@@ -309,6 +313,48 @@ TEST_F(RingQueueTest, RWWrapped)
     RWWrapped<ring_queue_sd<int8_t>>();
 }
 
+void *testlocalstatic()
+{
+    static std::function<void ()> cb = [](){LOGD("");};
+    return (void*)&cb;
+}
+
+TEST_F(RingQueueTest, TaskQueue)
+{
+    using namespace tll::lf;
+    typedef std::function<void (std::chrono::steady_clock::time_point, const char *, const char *, int)> Callback;
+    Callback cb = [](std::chrono::steady_clock::time_point, const char *, const char *, int){};
+    ring_queue_ss<Callback> task_queue{1000000};
+    tll::util::Counter<> counter;
+    std::chrono::steady_clock::time_point now;
+    counter.start();
+    for(int i=0; i<1000000; i++) {
+        now = std::chrono::steady_clock::now();
+        task_queue.push(cb);
+    }
+    LOGD("%.9f", counter.elapse().count() * 1e-6);
+
+    ring_buffer_ss<char> rb{1000000};
+    counter.start();
+    for(int i=0; i<1000000; i++) {
+        now = std::chrono::steady_clock::now();
+        // tll::util::StreamBuffer sb;
+        // sb << (int8_t)1;
+        // sb << (uint8_t)1;
+        // sb << (uint16_t)1;
+        // sb << (uint16_t)1;
+        // sb << (uint32_t)1;
+        // sb << (uint32_t)1;
+        // sb << (uint64_t)1;
+        // sb << (uint64_t)1;
+        // sb << (double)1;
+        // sb << (float)1;
+        rb.push(1);
+    }
+    LOGD("%.9f", counter.elapse().count() * 1e-6);
+}
+
+
 #if (HAVE_OPENMP)
 
 /// Should run with --gtest_filter=RingBufferConcurrentTest.* --gtest_repeat=10000
@@ -347,7 +393,7 @@ struct RingBufferConcurrentTest : public ::testing::Test
             }
             std::atomic<int> prod_completed{0};
             std::atomic<size_t> total_push_size{0}, total_pop_size{0};
-            tll::time::Counter<> counter;
+            tll::util::Counter<> counter;
             #pragma omp parallel num_threads ( kNumOfThreads ) shared(fifo, store_buff)
             {
                 const int kTid = omp_get_thread_num();

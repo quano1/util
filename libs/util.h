@@ -1,7 +1,7 @@
+#pragma once
 /// MIT License
 /// Copyright (c) 2021 Thanh Long Le (longlt00502@gmail.com)
 
-#pragma once
 
 #include <cstring>
 #include <cassert>
@@ -21,8 +21,6 @@
 #include <list>
 #include <array>
 
-// #include "timer.h"
-
 #ifdef __ANDROID__
 #include <android/log.h>
 #define PRINTF(...) __android_log_print(ANDROID_LOG_DEBUG, "TLL", __VA_ARGS__)
@@ -41,8 +39,8 @@
 #define ASSERTM(exp, msg) assert(((void)msg, exp))
 
 
-#define NUM_ARGS_(_13, _12, _11, _10, _9, _8, _7, _6, _5, _4, _3, _2, _1, N, ...) N
-#define NUM_ARGS(...) NUM_ARGS_(__VA_ARGS__, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+#define NUM_ARGS_(_12, _11, _10, _9, _8, _7, _6, _5, _4, _3, _2, _1, N, ...) N
+#define NUM_ARGS(...) NUM_ARGS_(__VA_ARGS__, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
 
 #define FOREACH(MACRO, ...) FOREACH_(NUM_ARGS(__VA_ARGS__), MACRO, __VA_ARGS__)
 #define FOREACH_(N, M, ...) FOREACH__(N, M, __VA_ARGS__)
@@ -59,7 +57,6 @@
 #define FOREACH_10(M, A, ...) M(A), A, FOREACH_9(M, __VA_ARGS__)
 #define FOREACH_11(M, A, ...) M(A), A, FOREACH_10(M, __VA_ARGS__)
 #define FOREACH_12(M, A, ...) M(A), A, FOREACH_11(M, __VA_ARGS__)
-#define FOREACH_13(M, A, ...) M(A), A, FOREACH_12(M, __VA_ARGS__)
 
 #define STRINGIFY_(X) #X
 #define STRINGIFY(X) STRINGIFY_(X)
@@ -357,7 +354,7 @@ std::string toString(std::vector<T> const &val)
 template <typename T>
 std::string varStr(const char *name, const T &val)
 {
-     return stringFormat("(%s: %s)", name, toString(val).data());
+     return stringFormat("%s={%s}", name, toString(val).data());
 }
 
 template <typename T, typename ... Args>
@@ -365,6 +362,187 @@ std::string varStr(const char *name, const T &val, const Args& ... args)
 {
     return varStr(name, val) + " | " + varStr(args...);
 }
+
+
+////////////////////////////////////////////////////////////////////////////////
+/// StreamBuffer
+
+struct StaticLogInfo
+{
+    std::string file;
+    std::string function;
+    std::string format;
+    int line=0;
+    int severity=0;
+    
+    // stringFormat(T const * const format, Args const & ... args)
+
+    // std::vector<std::string> subformats;
+
+    // StaticLogInfo()
+    // {
+    //     std::size_t h_file = std::hash<std::string>{}(s.first_name);
+    //     std::size_t h_function = std::hash<std::string>{}(s.first_name);
+    //     id = h_file ^ (h_function << 1);
+    // }
+}; /// StaticLogInfo
+
+struct DynamicLogInfo {
+    StaticLogInfo *s_log_info;
+    size_t timestamp;
+    int tid;
+    std::vector<uint8_t> args;
+};
+
+struct StreamBuffer {
+    StreamBuffer(size_t reserve=0x400) {buff_.reserve(0x400);}
+    ~StreamBuffer()=default;
+
+    template <typename T>
+    uint16_t getId();
+    template <typename T>
+    StreamBuffer &operator<< (const T *val);
+
+    template <typename T>
+    StreamBuffer &operator<< (T val)
+    {
+        // LOGPD("");
+        uint8_t *crr_pos = buff_.data() + buff_.size();
+        buff_.resize(buff_.size() + sizeof(T) + 2);
+        *(uint16_t*)crr_pos = getId<T>(); /// primitive id
+        crr_pos += 2;
+        *(T*)crr_pos = val;
+
+        return *this;
+    }
+
+    template <typename T>
+    StreamBuffer &operator>> (T &val)
+    {
+        uint8_t *crr_pos = buff_.data() + buff_.size();
+        crr_pos -= sizeof(T);
+        val = *(T*)crr_pos;
+        buff_.resize(buff_.size() - sizeof(T) - 2);
+        return *this;
+    }
+    
+    inline auto giveUp()
+    {
+        return std::move(buff_);
+    }
+
+    std::vector<uint8_t> buff_;
+};
+
+enum class TypeId : uint16_t {
+    kInt8,
+    kUint8,
+    kInt16,
+    kUint16,
+    kInt32,
+    kUint32,
+    kInt64,
+    kUint64,
+    kFloat,
+    kDouble,
+
+    kCharPtr,
+};
+
+template <> inline uint16_t StreamBuffer::getId<int8_t>() {return (uint16_t)TypeId::kInt8;}
+template <> inline uint16_t StreamBuffer::getId<uint8_t>() {return (uint16_t)TypeId::kUint8;}
+template <> inline uint16_t StreamBuffer::getId<int16_t>() {return (uint16_t)TypeId::kInt16;}
+template <> inline uint16_t StreamBuffer::getId<uint16_t>() {return (uint16_t)TypeId::kUint16;}
+template <> inline uint16_t StreamBuffer::getId<int32_t>() {return (uint16_t)TypeId::kInt32;}
+template <> inline uint16_t StreamBuffer::getId<uint32_t>() {return (uint16_t)TypeId::kUint32;}
+template <> inline uint16_t StreamBuffer::getId<int64_t>() {return (uint16_t)TypeId::kInt64;}
+template <> inline uint16_t StreamBuffer::getId<uint64_t>() {return (uint16_t)TypeId::kUint64;}
+template <> inline uint16_t StreamBuffer::getId<float>() {return (uint16_t)TypeId::kFloat;}
+template <> inline uint16_t StreamBuffer::getId<double>() {return (uint16_t)TypeId::kDouble;}
+template <> inline uint16_t StreamBuffer::getId<const char*>() {return (uint16_t)TypeId::kCharPtr;}
+
+template <>
+inline StreamBuffer &StreamBuffer::operator<< <char>(const char *val)
+{
+    uint8_t *crr_pos = buff_.data() + buff_.size();
+    auto str_len = strlen(val);
+    buff_.resize(buff_.size() + str_len + 4);
+
+    *(uint16_t*)crr_pos = getId<const char *>(); /// string id
+    crr_pos += 2;
+
+    *(uint16_t*)crr_pos = str_len;
+    crr_pos +=2;
+
+    memcpy(crr_pos, val, str_len);
+    crr_pos += str_len;
+
+    return *this;
+}
+
+template <typename D=std::chrono::duration<double, std::ratio<1>>, typename C=std::chrono::steady_clock>
+class Counter
+{
+public:
+    using Clock = C;
+    using Duration = D;
+    using Type = typename Duration::rep;
+    using Ratio = typename Duration::period;
+    using Tp = std::chrono::time_point<C,D>;
+private:
+    Tp begin_=std::chrono::time_point_cast<D>(Clock::now());
+    Tp abs_begin_=begin_;
+
+    Duration total_elapsed_{0}, last_elapsed_{0};
+public:
+    Counter() = default;
+    ~Counter() = default;
+
+    auto &start(Tp tp=std::chrono::time_point_cast<D>(Clock::now()))
+    {
+        begin_ = tp;
+        return *this;
+    }
+
+    void reset(Tp tp=std::chrono::time_point_cast<D>(Clock::now()))
+    {
+        begin_ = tp;
+        abs_begin_ = begin_;
+        total_elapsed_ = Duration::zero();
+    }
+
+    Duration elapse() const
+    {
+        return std::chrono::time_point_cast<D>(Clock::now()) - begin_;
+    }
+
+    auto elapsed()
+    {
+        last_elapsed_ = elapse();
+        total_elapsed_ += last_elapsed_;
+        return last_elapsed_;
+    }
+
+    const Tp &absBegin() const
+    {
+        return abs_begin_;
+    }
+
+    Duration lastElapsed() const
+    {
+        return last_elapsed_;
+    }
+
+    Duration totalElapsed() const
+    {
+        return total_elapsed_;
+    }
+
+    Duration absElapse() const
+    {
+        return std::chrono::time_point_cast<D>(Clock::now()) - abs_begin_;
+    }
+}; /// Counter
 
 
 }} /// tll::util

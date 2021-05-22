@@ -1,3 +1,6 @@
+/// MIT License
+/// Copyright (c) 2021 Thanh Long Le (longlt00502@gmail.com)
+
 #include <gtest/gtest.h>
 #include <omp.h>
 
@@ -48,8 +51,6 @@ TEST_F(UtilTest, VAR_STR)
 
 TEST_F(UtilTest, Counter)
 {
-    using namespace tll::time;
-
     Counter counter;
 
     {
@@ -76,5 +77,30 @@ TEST_F(UtilTest, Counter)
         LOGD("%.9f", elapse * 1e-6);
         LOGV(elapse);
     }
+
+}
+
+
+TEST_F(UtilTest, StreamBuffer)
+{
+    tll::util::Counter<> counter;
+    std::chrono::steady_clock::time_point now;
+    // int8_t val;
+    counter.start();
+    for(int i=0; i<1000; i++) {
+        now = std::chrono::steady_clock::now();
+        StreamBuffer sb;
+        sb << (int8_t)1;
+        sb << (uint8_t)1;
+        sb << (uint16_t)1;
+        sb << (uint16_t)1;
+        sb << (uint32_t)1;
+        sb << (uint32_t)1;
+        sb << (uint64_t)1;
+        sb << (uint64_t)1;
+        sb << (double)1;
+        sb << (float)1;
+    }
+    LOGD("%.9f", counter.elapse().count() * 1e-6);
 
 }
