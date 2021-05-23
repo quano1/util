@@ -14,6 +14,9 @@
 #define UT_LOGD(...)
 #endif
 
+using namespace tll::lf;
+
+
 struct RingBufferTest : public ::testing::Test
 {
     template <typename FIFO>
@@ -313,38 +316,89 @@ TEST_F(RingQueueTest, RWWrapped)
     RWWrapped<ring_queue_sd<int8_t>>();
 }
 
-void *testlocalstatic()
+auto nonlocalstatic(const char* file, const char* function, int line)
 {
-    static std::function<void ()> cb = [](){LOGD("");};
-    return (void*)&cb;
+    using namespace tll::util;
+    return std::function<void()>([=](){LOGD("{%s}{%s}{%d}", file, function, line);});
+}
+
+auto localstatic(const char *file, const char *function, int line)
+{
+    using namespace tll::util;
+    static const char *sfile = file;
+    static const char *sfunction = function;
+    static const int sline = line;
+    return std::function<void()>([=](){LOGD("{%s}{%s}{%d}", sfile, sfunction, sline);});
+}
+
+template <typename... Args>
+auto log2(int type, const char *file, const char *function, int line, const char *format, Args ...args)
+{
+    const auto timestamp = std::chrono::steady_clock::now();
+    // const std::chrono::steady_clock::time_point timestamp;
+    const auto tid = tll::util::tid_nice();
+    // const int tid = 0;
+    const int level = tll::log::Context::instance().level();
+    // const int level = 1;
+    // LOGV(tid, level);
+
+    static const int stype = type;
+    static const std::string sffl = tll::util::stringFormat("{%s}{%s}{%d}", file, function, line);
+    static const char *sformat = format;
+
+    static auto preprocess = [timestamp, tid, level, args...]() -> std::string {
+        return tll::util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
+                    tll::log::kLogTypeString[(int)stype],
+                    tll::util::timestamp(timestamp), tid, level,
+                    sffl,
+                    tll::util::stringFormat(sformat, (args)...));
+    };
+
+    return preprocess;
 }
 
 TEST_F(RingQueueTest, TaskQueue)
 {
-    using namespace tll::lf;
-    typedef std::function<void (std::chrono::steady_clock::time_point, const char *, const char *, int)> Callback;
-    Callback cb = [](std::chrono::steady_clock::time_point, const char *, const char *, int){};
+    typedef std::function<std::string ()> Callback;
+    // Callback cb = [](){LOGD("");};
     tll::util::Counter<> counter;
     std::chrono::steady_clock::time_point now;
+
+    // {
+    //     ring_queue_ds<Callback> task_queue{1000000};
+    //     counter.start();
+    //     for(int i=0; i<1000000; i++) {
+    //         now = std::chrono::steady_clock::now();
+    //         task_queue.push(nonlocalstatic(__FILE__, __FUNCTION__, __LINE__));
+    //     }
+    //     LOGD("%.9f", counter.elapse().count() * 1e-6);
+    // }
+
+    // {
+    //     ring_queue_ds<Callback> task_queue{1000000};
+    //     counter.start();
+    //     for(int i=0; i<1000000; i++) {
+    //         now = std::chrono::steady_clock::now();
+    //         task_queue.push(localstatic(__FILE__, __FUNCTION__, __LINE__));
+    //     }
+    //     LOGD("%.9f", counter.elapse().count() * 1e-6);
+    // }
+
     {
+            static auto &ins = tll::log::Manager::instance();
         ring_queue_ds<Callback> task_queue{1000000};
         counter.start();
         for(int i=0; i<1000000; i++) {
-            now = std::chrono::steady_clock::now();
-            task_queue.push(cb);
+            // now = std::chrono::steady_clock::now();
+            // static const char *sfile = __FILE__;
+            // static const char *sfunction = __FUNCTION__;
+            // static const int sline = __LINE__;
+            tll::log::Manager::instance();
+            task_queue.push(log2(1, __FILE__, __FUNCTION__, __LINE__, ""));
         }
         LOGD("%.9f", counter.elapse().count() * 1e-6);
     }
 
-    {
-        ring_queue_ss<Callback> task_queue{1000000};
-        counter.start();
-        for(int i=0; i<1000000; i++) {
-            now = std::chrono::steady_clock::now();
-            task_queue.push(cb);
-        }
-        LOGD("%.9f", counter.elapse().count() * 1e-6);
-    }
 }
 
 

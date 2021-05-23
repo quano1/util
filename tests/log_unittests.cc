@@ -125,15 +125,25 @@ TEST_F(LoggerTest, NanoLog)
 
 TEST_F(LoggerTest, Log2)
 {
+    static auto &ins = tll::log::Manager::instance();
     tll::util::Counter<> counter;
     counter.start();
-    #pragma omp parallel num_threads ( NUM_CPU )
     {
         for(int i=0;i<1000000;i++)
             TLL_GLOGD2("%f", counter.elapse().count());
     }
-    LOGD("%.9f", counter.elapse().count() * 1e-6 / NUM_CPU);
-    // tll::log::Manager::instance().log2<Mode::kAsync>((tll::log::Type::kDebug), __FILE__, __FUNCTION__, __LINE__, "");
-
+    LOGD("%.9f", counter.elapse().count() * 1e-6);
     tll::log::Manager::instance().stop();
+
+    // tll::log::Manager::instance().start();
+    // counter.start();
+    // #pragma omp parallel num_threads ( NUM_CPU )
+    // {
+    //     for(int i=0;i<1000000;i++)
+    //         TLL_GLOGD2("%f", counter.elapse().count());
+    // }
+    // LOGD("%.9f", counter.elapse().count() * 1e-6 / NUM_CPU);
+    // // tll::log::Manager::instance().log2<Mode::kAsync>((tll::log::Type::kDebug), __FILE__, __FUNCTION__, __LINE__, "");
+
+    // tll::log::Manager::instance().stop();
 }

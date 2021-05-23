@@ -26,6 +26,8 @@ struct UtilTest : public ::testing::Test
 TEST_F(UtilTest, VAR_STR)
 {
     char var_char='h';
+    unsigned char var_uchar = 'b';
+    int8_t var_int8_t=2;
     uint8_t var_uint8_t=2;
     int16_t var_int16_t=3;
     uint16_t var_uint16_t=4;
@@ -39,7 +41,9 @@ TEST_F(UtilTest, VAR_STR)
     std::vector<float> var_std_vector_float(3);
     std::vector<double> var_std_vector_double(3);
     std::atomic<int> var_atomic_int{0x100};
-    LOGV(var_char, var_uint8_t, var_int16_t, var_uint16_t, var_int32_t, var_uint32_t, var_int64_t, var_uint64_t, (size_t)var_void_ptr);
+    LOGV(var_char, var_uchar);
+    LOGV(var_int8_t, var_uint8_t);
+    LOGV(var_int16_t, var_uint16_t, var_int32_t, var_uint32_t, var_int64_t, var_uint64_t, (size_t)var_void_ptr);
     LOGV(var_std_string);
     LOGV(var_std_vector_int, var_std_vector_float, var_std_vector_double);
     LOGV(var_atomic_int);

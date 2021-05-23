@@ -137,9 +137,9 @@ struct Context
         ctxs_.pop_back();
     }
 
-    inline size_t level() const
+    inline int level() const
     {
-        return ctxs_.size();
+        return (int)ctxs_.size();
     }
 
     inline std::string get() const
@@ -250,30 +250,58 @@ public:
     void log2(Type type, const char *file, const char *function, int line, const char *format, Args ...args)
     {
         const auto timestamp = std::chrono::steady_clock::now();
-        const auto tid = tll::util::str_tid_nice();
-        const auto level = tll::log::Context::instance().level();
+        // const std::chrono::steady_clock::time_point timestamp;
+        const int tid = tll::util::tid_nice();
+        // const int tid = 0;
+        const int level = tll::log::Context::instance().level();
+        // const int level = 1;
+
+        static const Type stype = type;
+        static const std::string sffl = util::stringFormat("{%s}{%s}{%d}", file, function, line);
+        static const char *sformat = format;
+
+        // static auto preprocess = [timestamp, tid, level, args...]() -> std::string {
+        //             return util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
+        //                     kLogTypeString[(int)stype],
+        //                     util::timestamp(timestamp), tid, level,
+        //                     sffl,
+        //                     util::stringFormat(sformat, (args)...));
+        //         };
+
+        // static auto preprocess = [timestamp, tid, level]() -> std::string {
+        //             return util::stringFormat("{%c}{%.9f}{%d}{%d}%s\n",
+        //                     kLogTypeString[(int)stype],
+        //                     util::timestamp(timestamp), tid, level,
+        //                     sffl);
+        //         };
+
+        static auto preprocess = [](static DynamicLogInfo &info) -> std::string {
+                    return util::stringFormat("{%c}{%.9f}{%d}{%d}%s\n",
+                            kLogTypeString[(int)stype],
+                            util::timestamp(info.ts), info.tid, info.level,
+                            sffl);
+                };
+
+        // static const char *sfile = file;
+        // static const char *sfunction = function;
+        // static const int sline = line;
+
         // std::string payload = util::stringFormat(format, std::forward<Args>(args)...);
-        if(mode == Mode::kAsync && isRunning())
+        if(mode == Mode::kAsync)
         {
             // tll::util::timestamp<>();
             
             // const auto context = tll::log::Context::instance().get();
-            size_t ps = task_queue_.push( [=]() -> std::string {
-                    return util::stringFormat("{%c}{%.9f}{%s}{%d}{%s}{%s}{%d}{%s}\n",
-                            kLogTypeString[(int)type],
-                            util::timestamp(timestamp), tid, level,
-                            file, function, line, 
-                            util::stringFormat(format, (args)...));
-                        // + util::stringFormat("{%s}\n",util::stringFormat(format, (args)...));
-                });
+            task_queue_.push( preprocess );
+            // assert(ps > 0);
         }
         else
         {
-            log_(util::stringFormat("{%c}{%.9f}{%s}{%d}{%s}{%s}{%d}{%s}\n",
-                            kLogTypeString[(int)type],
+            log_(util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
+                            kLogTypeString[(int)stype],
                             util::timestamp(timestamp), tid, level,
-                            file, function, line, 
-                            util::stringFormat(format, (args)...)));
+                            sffl, 
+                            util::stringFormat(sformat, (args)...)));
         }
     }
             
@@ -471,19 +499,24 @@ public:
                     });
                 }
 
-                if(delta >= period_ms || !task_queue_.empty())
+                if(!task_queue_.empty())
+                {
+                    size_t rs = task_queue_.pop([this](std::function<std::string()> *el, size_t sz){
+                        this->log_((*el)());
+                    }, -1);
+                    if(rs) delta = 0;
+                }
+
+                if(delta >= period_ms)
                 {
                     delta -= period_ms;
-                    size_t rs = task_queue_.pop([&](std::function<std::string()> *el, size_t sz){
-                        log_((*el)());
-                    }, -1);
                 }
             } /// while(isRunning())
-            
-            if(!rb_.empty())
+
+            if(!task_queue_.empty())
             {
-                size_t rs = task_queue_.pop([&](std::function<std::string()> *el, size_t sz){
-                        log_((*el)());
+                size_t rs = task_queue_.pop([this](std::function<std::string()> *el, size_t sz){
+                        this->log_((*el)());
                     }, -1);
             }
         });
@@ -593,7 +626,7 @@ private:
 
     std::atomic<bool> is_running_{false};
     // lf::CCFIFO<Message> ccq_{0x1000};
-    lf::ring_queue_mpsc<std::function<std::string()>> task_queue_{1000000};
+    lf::ring_queue_ds<std::function<std::string()>> task_queue_{1000000};
 
     lf::ring_buffer_mpsc<char> rb_{0x100000 * 16}; /// 16Mb
     std::unordered_map<std::string, Entity> ents_ = {{"file", Entity{

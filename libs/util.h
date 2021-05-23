@@ -171,7 +171,13 @@ inline std::thread::id tid()
 {
     static const thread_local auto tid=std::this_thread::get_id();
     return tid;
-    // return std::this_thread::get_id();
+}
+
+inline int tid_nice()
+{
+    static std::atomic<int> __tid__{0};
+    static const thread_local auto ret = __tid__.fetch_add(1, std::memory_order_relaxed);
+    return ret;
 }
 
 inline std::string fileName(const std::string &path)
@@ -192,7 +198,7 @@ inline std::string to_string(T val)
 
 inline std::string str_tid()
 {
-    static const thread_local auto ret=tll::util::to_string(std::this_thread::get_id());
+    static const thread_local auto ret=tll::util::to_string(tid());
     return ret;
 }
 
@@ -205,8 +211,7 @@ inline std::string str_tidcpu()
 
 inline std::string str_tid_nice()
 {
-    static std::atomic<int> __tid__{0};
-    static const thread_local auto ret = tll::util::to_string(__tid__.fetch_add(1, std::memory_order_relaxed));
+    static const thread_local auto ret = tll::util::to_string(tid_nice());
     return ret;
 }
 
@@ -307,7 +312,7 @@ static T &instance()
     static std::atomic<bool> init{false};
 
     if (singleton.load(std::memory_order_relaxed))
-        return *singleton.load(std::memory_order_acquire);
+        return *singleton.load(std::memory_order_relaxed);
 
     if(init.exchange(true))
     {
@@ -326,17 +331,18 @@ static T &instance()
 
 template <typename T> std::string toString(const T&);
 
-template <> inline std::string toString<bool>(const bool &val) {return val ? "true" : "false";}
-template <> inline std::string toString<char>(const char &val) {return stringFormat("%c", val);}
-template <> inline std::string toString<uint8_t>(const uint8_t &val) {return stringFormat("0x%x", val);}
-template <> inline std::string toString<int16_t>(const int16_t &val) {return stringFormat("%d", val);}
-template <> inline std::string toString<uint16_t>(const uint16_t &val) {return stringFormat("0x%x", val);}
-template <> inline std::string toString<int32_t>(const int32_t &val) {return stringFormat("%d", val);}
-template <> inline std::string toString<uint32_t>(const uint32_t &val) {return stringFormat("0x%x", val);}
-template <> inline std::string toString<int64_t>(const int64_t &val) {return stringFormat("%ld", val);}
-template <> inline std::string toString<uint64_t>(const uint64_t &val) {return stringFormat("0x%lx", val);}
-template <> inline std::string toString<float>(const float &val) {return stringFormat("%f", val);}
-template <> inline std::string toString<double>(const double &val) {return stringFormat("%f", val);}
+template <> inline std::string toString<bool>(const bool &val) {return val ? "(bool)true" : "(bool)false";}
+template <> inline std::string toString<char>(const char &val) {return stringFormat("(char)%c", val);}
+template <> inline std::string toString<int8_t>(const int8_t &val) {return stringFormat("(int8)%d", val);}
+template <> inline std::string toString<uint8_t>(const uint8_t &val) {return stringFormat("(uint8)0x%x", val);}
+template <> inline std::string toString<int16_t>(const int16_t &val) {return stringFormat("(int16)%d", val);}
+template <> inline std::string toString<uint16_t>(const uint16_t &val) {return stringFormat("(uint16)0x%x", val);}
+template <> inline std::string toString<int32_t>(const int32_t &val) {return stringFormat("(int32)%d", val);}
+template <> inline std::string toString<uint32_t>(const uint32_t &val) {return stringFormat("(uint32)0x%x", val);}
+template <> inline std::string toString<int64_t>(const int64_t &val) {return stringFormat("(int64)%ld", val);}
+template <> inline std::string toString<uint64_t>(const uint64_t &val) {return stringFormat("(uint64)0x%lx", val);}
+template <> inline std::string toString<float>(const float &val) {return stringFormat("(float)%f", val);}
+template <> inline std::string toString<double>(const double &val) {return stringFormat("(double)%f", val);}
 template <> inline std::string toString<std::string>(const std::string &val) {return val;}
 
 template <typename T>
