@@ -297,15 +297,16 @@ private:
     {
         auto &marker = consumer_;
         size_t cons_next_index;
-        size_t entry_id_head = marker.get_entry_id_head();
+        size_t entry_id_head;
         cons_index_head = marker.get_index_head();
         size_t next_size = size;
         for(;;profAdd(marker.try_miss_count, 1))
         {
             next_size = size;
             size_t prod_index = producer_.get_index_tail();
-            if(kConsMode == mode::dense)
+            if(kContiguous && kConsMode == mode::dense)
             {
+                entry_id_head = marker.get_entry_id_head();
                 while(entry_id_head != marker.get_entry_id_tail())
                     entry_id_head = marker.get_entry_id_head();
 
@@ -359,7 +360,7 @@ private:
                     }
                 }
 
-                if(kConsMode == mode::dense)
+                if(kContiguous && kConsMode == mode::dense)
                 {
                     if(!marker.ref_entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
                     {
@@ -376,7 +377,11 @@ private:
                 else
                 {
                     if(!marker.ref_index_head().compare_exchange_weak(cons_index_head, cons_next_index + next_size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
-                    else break;
+                    else
+                    {
+                        entry_id = cons_index_head;
+                        break;
+                    }
                 }
             } /// if(cons_next_index < prod_index)
             else
@@ -396,14 +401,15 @@ private:
     {
         size_t prod_next_index;
         auto &marker = producer_;
-        size_t entry_id_head = marker.get_entry_id_head();
+        size_t entry_id_head;
         prod_index_head = marker.get_index_head();
 
         for(;;profAdd(marker.try_miss_count, 1))
         {
             size_t cons_index = consumer_.get_index_tail();
-            if(kProdMode == mode::dense)
+            if(kContiguous && kProdMode == mode::dense)
             {
+                entry_id_head = marker.get_entry_id_head();
                 while(entry_id_head != marker.get_entry_id_tail())
                     entry_id_head = marker.get_entry_id_head();
 
@@ -446,7 +452,7 @@ private:
                     }
                 } /// if(kContiguous)
 
-                if(kProdMode == mode::dense)
+                if(kContiguous && kProdMode == mode::dense)
                 {
                     if(!marker.ref_entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
                     {
@@ -463,7 +469,11 @@ private:
                 else
                 {
                     if(!marker.ref_index_head().compare_exchange_weak(prod_index_head, prod_next_index + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
-                    else break;
+                    else
+                    {
+                        entry_id = prod_index_head;
+                        break;
+                    }
                 }
             }
             else
@@ -495,12 +505,12 @@ private:
                 water_mark_head_.store(curr_index, std::memory_order_relaxed);
             }
 
-            next_index+=size;
+            next_index += size;
             // LOGD("%ld/%ld %ld/%ld %s", curr_index, next_index, old_exit_id, exit_id, dump().data());
             size_t old_next_index = marker.ref_next_index_list(wrap(exit_id, num_threads_)).load(std::memory_order_relaxed);
             // marker.ref_next_index_list(wrap(exit_id, num_threads_)).store(next_index);
 
-            size_t new_exit_id=exit_id + 1;
+            size_t new_exit_id = exit_id + (kContiguous? 1 : size);
             for(;;marker.comp_miss_count.fetch_add(1, std::memory_order_relaxed))
             {
                 size_t curr_exit_id = marker.get_exit_id();
@@ -514,7 +524,10 @@ private:
 
                         if(old_next_index > next_index)
                         {
-                            new_exit_id++;
+                            if(kContiguous)
+                                new_exit_id++;
+                            else
+                                new_exit_id = old_next_index;
                             next_index = old_next_index;
                             // new_exit_id = old_exit_id;
                         }

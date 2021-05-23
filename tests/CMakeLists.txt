@@ -16,7 +16,7 @@ PRIVATE
 #     benchmark.cc
     $<$<EQUAL:${HAVE_GTEST},1>:unittests.cc>
     $<$<EQUAL:${HAVE_GTEST},1>:lffifo_unittests.cc>
-#     $<$<EQUAL:${HAVE_GTEST},1>:lffifo_stresstests.cc>
+    $<$<EQUAL:${HAVE_GTEST},1>:lffifo_stresstests.cc>
     $<$<EQUAL:${HAVE_GTEST},1>:log_unittests.cc>
 #     $<$<EQUAL:${HAVE_GTEST},1>:util_unittests.cc>
 )

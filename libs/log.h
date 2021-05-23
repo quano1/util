@@ -260,13 +260,13 @@ public:
         static const std::string sffl = util::stringFormat("{%s}{%s}{%d}", file, function, line);
         static const char *sformat = format;
 
-        // static auto preprocess = [timestamp, tid, level, args...]() -> std::string {
-        //             return util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
-        //                     kLogTypeString[(int)stype],
-        //                     util::timestamp(timestamp), tid, level,
-        //                     sffl,
-        //                     util::stringFormat(sformat, (args)...));
-        //         };
+        static auto preprocess = [timestamp, tid, level, args...]() -> std::string {
+                    return util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
+                            kLogTypeString[(int)stype],
+                            util::timestamp(timestamp), tid, level,
+                            sffl,
+                            util::stringFormat(sformat, (args)...));
+                };
 
         // static auto preprocess = [timestamp, tid, level]() -> std::string {
         //             return util::stringFormat("{%c}{%.9f}{%d}{%d}%s\n",
@@ -275,12 +275,12 @@ public:
         //                     sffl);
         //         };
 
-        static auto preprocess = [](static DynamicLogInfo &info) -> std::string {
-                    return util::stringFormat("{%c}{%.9f}{%d}{%d}%s\n",
-                            kLogTypeString[(int)stype],
-                            util::timestamp(info.ts), info.tid, info.level,
-                            sffl);
-                };
+        // static auto preprocess = [](static DynamicLogInfo &info) -> std::string {
+        //             return util::stringFormat("{%c}{%.9f}{%d}{%d}%s\n",
+        //                     kLogTypeString[(int)stype],
+        //                     util::timestamp(info.ts), info.tid, info.level,
+        //                     sffl);
+        //         };
 
         // static const char *sfile = file;
         // static const char *sfunction = function;
