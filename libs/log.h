@@ -84,11 +84,13 @@ extern char *__progname;
 
 
 #define TLL_LOGD2(plog, ...) (plog)->log2<Mode::kAsync>((tll::log::Type::kDebug), \
-  __FILE__,\
-  __FUNCTION__, \
-  __LINE__, \
+  __FILE__, __FUNCTION__, __LINE__, \
   ##__VA_ARGS__)
 #define TLL_GLOGD2(...) TLL_LOGD2(&tll::log::Manager::instance(), ##__VA_ARGS__)
+
+#define TLL_LOG(severity, format, ...) do { \
+\
+} while (0)
 
 namespace tll::log {
 
@@ -225,13 +227,13 @@ public:
     }
 
     Manager(uint32_t queue_size) :
-        rb_{queue_size}
+        ring_buffer_{queue_size}
     {}
 
     template < typename ... LogEnts>
     Manager(uint32_t queue_size,
            LogEnts ...ents) :
-        rb_{queue_size}
+        ring_buffer_{queue_size}
     {
         add_(ents...);
     }
@@ -247,73 +249,13 @@ public:
     Manager& operator=(Manager&&) = delete;
 
     template <Mode mode, typename... Args>
-    void log2(Type type, const char *file, const char *function, int line, const char *format, Args ...args)
-    {
-        const auto timestamp = std::chrono::steady_clock::now();
-        // const std::chrono::steady_clock::time_point timestamp;
-        const int tid = tll::util::tid_nice();
-        // const int tid = 0;
-        const int level = tll::log::Context::instance().level();
-        // const int level = 1;
-
-        static const Type stype = type;
-        static const std::string sffl = util::stringFormat("{%s}{%s}{%d}", file, function, line);
-        static const char *sformat = format;
-
-        static auto preprocess = [timestamp, tid, level, args...]() -> std::string {
-                    return util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
-                            kLogTypeString[(int)stype],
-                            util::timestamp(timestamp), tid, level,
-                            sffl,
-                            util::stringFormat(sformat, (args)...));
-                };
-
-        // static auto preprocess = [timestamp, tid, level]() -> std::string {
-        //             return util::stringFormat("{%c}{%.9f}{%d}{%d}%s\n",
-        //                     kLogTypeString[(int)stype],
-        //                     util::timestamp(timestamp), tid, level,
-        //                     sffl);
-        //         };
-
-        // static auto preprocess = [](static DynamicLogInfo &info) -> std::string {
-        //             return util::stringFormat("{%c}{%.9f}{%d}{%d}%s\n",
-        //                     kLogTypeString[(int)stype],
-        //                     util::timestamp(info.ts), info.tid, info.level,
-        //                     sffl);
-        //         };
-
-        // static const char *sfile = file;
-        // static const char *sfunction = function;
-        // static const int sline = line;
-
-        // std::string payload = util::stringFormat(format, std::forward<Args>(args)...);
-        if(mode == Mode::kAsync)
-        {
-            // tll::util::timestamp<>();
-            
-            // const auto context = tll::log::Context::instance().get();
-            task_queue_.push( preprocess );
-            // assert(ps > 0);
-        }
-        else
-        {
-            log_(util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
-                            kLogTypeString[(int)stype],
-                            util::timestamp(timestamp), tid, level,
-                            sffl, 
-                            util::stringFormat(sformat, (args)...)));
-        }
-    }
-            
-
-    template <Mode mode, typename... Args>
     void log(Type type, const char *format, Args ...args)
     {
         std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(int)type], util::stringFormat(format, std::forward<Args>(args)...));
 
         if(mode == Mode::kAsync && isRunning())
         {
-            size_t ps = rb_.push([](char *el, size_t sz, const std::string &msg) {
+            size_t ps = ring_buffer_.push([](char *el, size_t sz, const std::string &msg) {
                 memcpy(el, msg.data(), sz);
             }, payload.size(), payload);
 
@@ -334,6 +276,73 @@ public:
     }
 
 
+    template <Mode mode, typename... Args>
+    void log2(Type type, const char *file, const char *function, int line, const char *format, Args ...args)
+    {
+        const auto timestamp = std::chrono::steady_clock::now();
+        const int tid = tll::util::tid_nice();
+        const int level = tll::log::Context::instance().level();
+
+        const Type stype = type;
+        // const std::string sffl = util::stringFormat("{%s}{%s}{%d}", file, function, line);
+        const char *sformat = format;
+
+
+        if(mode == Mode::kAsync)
+        {
+            auto preprocess = [=]() -> std::string {
+                    return util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
+                            kLogTypeString[(int)stype],
+                            util::timestamp(timestamp), tid, level,
+                            util::stringFormat("{%s}{%s}{%d}", file, function, line),
+                            util::stringFormat(sformat, (args)...));
+                };
+            while(task_queue_.push( preprocess ) == 0);
+            // assert(ps > 0);
+        }
+        else
+        {
+            log_(util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
+                            kLogTypeString[(int)stype],
+                            util::timestamp(timestamp), tid, level,
+                            util::stringFormat("{%s}{%s}{%d}", file, function, line), 
+                            util::stringFormat(sformat, (args)...)));
+        }
+    }
+
+    // template <Mode mode, typename... Args>
+    // void log3(Type type, const char *file, const char *function, int line, const char *format, Args ...args)
+    // {
+    //     const auto timestamp = std::chrono::steady_clock::now();
+    //     const int tid = tll::util::tid_nice();
+    //     const int level = tll::log::Context::instance().level();
+
+    //     static const Type stype = type;
+    //     static const std::string sffl = util::stringFormat("{%s}{%s}{%d}", file, function, line);
+    //     static const char *sformat = format;
+
+    //     static auto preprocess = [](const StaticLogInfo &sinfo, const DynamicLogInfo &dinfo) -> std::string {
+    //                 return util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
+    //                         kLogTypeString[(int)sinfo.stype],
+    //                         util::timestamp(dinfo.ts), dinfo.tid, dinfo.level,
+    //                         sffl,
+    //                         util::stringFormat(sinfo.sformat, (args)...));
+    //             };
+
+    //     if(mode == Mode::kAsync)
+    //     {
+    //         task_queue_.push( preprocess );
+    //         // assert(ps > 0);
+    //     }
+    //     else
+    //     {
+    //         // log_(util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
+    //         //                 kLogTypeString[(int)stype],
+    //         //                 util::timestamp(timestamp), tid, level,
+    //         //                 sffl, 
+    //         //                 util::stringFormat(sformat, (args)...)));
+    //     }
+    // }
 
 // LOG("%d %x", arg, arg);
 // log({file,function,line,format}, arg...)
@@ -432,7 +441,7 @@ public:
     // template <Mode mode>
     // void log(Message);
 
-    inline void start(size_t chunk_size = 0x400 * 16, uint32_t period_ms=1000) /// 16 Kb, 1000 ms
+    inline void start(size_t chunk_size = 0x400 * 16, uint32_t period_us=10) /// 16 Kb, 1000 ms
     {
         bool val = false;
         if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
@@ -442,58 +451,60 @@ public:
             // entry.second.start();
             auto &ent = entry.second;
             if(ent.handle == nullptr && ent.onStart)
+            {
                 ent.handle = ent.onStart();
-            /// send first log to notify time_since_epoch
-            auto std_now = std::chrono::steady_clock::now();
-            auto sys_now = std::chrono::system_clock::now();
-            auto sys_time = std::chrono::system_clock::to_time_t(sys_now);
-            auto buff = util::stringFormat("%s{%.9f}{%.9f}\n", 
+                /// send first log to notify time_since_epoch
+                auto std_now = std::chrono::steady_clock::now();
+                auto sys_now = std::chrono::system_clock::now();
+                auto sys_time = std::chrono::system_clock::to_time_t(sys_now);
+                auto buff = util::stringFormat("%s{%.9f}{%.9f}\n", 
                 std::ctime(&sys_time),
                 std::chrono::duration_cast< std::chrono::duration<double> >(std_now.time_since_epoch()).count(), 
                 std::chrono::duration_cast< std::chrono::duration<double> >(sys_now.time_since_epoch()).count());
-            ent.onLog(ent.handle, buff.data(), buff.size());
+                ent.onLog(ent.handle, buff.data(), buff.size());
+            }
         }
 
-        broadcast_ = std::thread([this, chunk_size, period_ms]()
+        broadcast_ = std::thread([this, chunk_size, period_us]()
         {
-            util::Counter<std::chrono::duration<uint32_t, std::ratio<1, 1000>>> counter;
+            util::Counter<std::chrono::duration<uint32_t, std::ratio<1, 1000000>>> counter;
             uint32_t delta = 0;
             // while(isRunning())
             // {
             //     delta += counter.elapse().count();
             //     counter.start();
-            //     if(delta < period_ms && rb_.size() < chunk_size)
+            //     if(delta < period_us && ring_buffer_.size() < chunk_size)
             //     {
             //         std::unique_lock<std::mutex> lock(mtx_);
             //         /// wait timeout
-            //         bool wait_status = pop_wait_.wait_for(lock, std::chrono::milliseconds(period_ms - delta), [this, chunk_size, &delta, &counter] {
+            //         bool wait_status = pop_wait_.wait_for(lock, std::chrono::milliseconds(period_us - delta), [this, chunk_size, &delta, &counter] {
             //             delta += counter.elapse().count();
-            //             return !isRunning() || (this->rb_.size() >= chunk_size);
+            //             return !isRunning() || (this->ring_buffer_.size() >= chunk_size);
             //         });
             //     }
-            //     if(delta >= period_ms || rb_.size() >= chunk_size)
+            //     if(delta >= period_us || ring_buffer_.size() >= chunk_size)
             //     {
-            //         delta -= period_ms;
-            //         size_t rs = rb_.pop([&](const char *el, size_t sz){
+            //         delta -= period_us;
+            //         size_t rs = ring_buffer_.pop([&](const char *el, size_t sz){
             //             log_(el, sz);
             //         }, -1);
             //     }
             // } /// while(isRunning())
 
-            // if(!rb_.empty())
+            // if(!ring_buffer_.empty())
             // {
-            //     size_t rs = rb_.pop([&](const char *el, size_t sz){ log_(el, sz); }, -1);
+            //     size_t rs = ring_buffer_.pop([&](const char *el, size_t sz){ log_(el, sz); }, -1);
             // }
 
             while(isRunning())
             {
                 delta += counter.elapse().count();
                 counter.start();
-                if(delta < period_ms && task_queue_.empty())
+                if(delta < period_us && task_queue_.empty())
                 {
                     std::unique_lock<std::mutex> lock(mtx_);
                     /// wait timeout
-                    bool wait_status = pop_wait_.wait_for(lock, std::chrono::milliseconds(period_ms - delta), [this, chunk_size, &delta, &counter] {
+                    bool wait_status = pop_wait_.wait_for(lock, std::chrono::milliseconds(period_us - delta), [this, chunk_size, &delta, &counter] {
                         delta += counter.elapse().count();
                         return !isRunning() || !task_queue_.empty();
                     });
@@ -507,9 +518,9 @@ public:
                     if(rs) delta = 0;
                 }
 
-                if(delta >= period_ms)
+                if(delta >= period_us)
                 {
-                    delta -= period_ms;
+                    delta -= period_us;
                 }
             } /// while(isRunning())
 
@@ -585,14 +596,14 @@ public:
     }
 
     /// wait for ring_queue is empty
-    inline void wait()
+    inline void flush()
     {
         std::mutex mtx;
         std::unique_lock<std::mutex> lock(mtx);
         join_wait_.wait(lock, [this] 
         {
             pop_wait_.notify_all();
-            return !isRunning() || rb_.empty();
+            return !isRunning() || ring_buffer_.empty();
         });
     }
 
@@ -626,9 +637,9 @@ private:
 
     std::atomic<bool> is_running_{false};
     // lf::CCFIFO<Message> ccq_{0x1000};
-    lf::ring_queue_ds<std::function<std::string()>> task_queue_{1000000};
+    lf::ring_queue_ds<std::function<std::string()>> task_queue_{10000000};
 
-    lf::ring_buffer_mpsc<char> rb_{0x100000 * 16}; /// 16Mb
+    lf::ring_buffer_mpsc<char> ring_buffer_{0x100000 * 16}; /// 16Mb
     std::unordered_map<std::string, Entity> ents_ = {{"file", Entity{
                 .name = "file",
                 [this](void *handle, const char *buff, size_t size)

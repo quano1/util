@@ -129,10 +129,13 @@ TEST_F(LoggerTest, Log2)
     tll::util::Counter<> counter;
     counter.start();
     {
-        for(int i=0;i<1000000;i++)
-            TLL_GLOGD2("%f", counter.elapse().count());
+        for(int i=0;i<(int)1e7;i++)
+        {
+            TLL_GLOGD2("%.9f", counter.elapse().count());
+        }
     }
-    LOGD("%.9f", counter.elapse().count() * 1e-6);
+    LOGD("%.9f", counter.elapse().count() * 1e-7);
+    LOGD("%d %d %f %f", (int)1e6, (int)2e6, 1e-6, 2e-6);
     tll::log::Manager::instance().stop();
 
     // tll::log::Manager::instance().start();

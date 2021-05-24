@@ -253,7 +253,7 @@ private:
         profTimerStart();
         if(size)
         {
-            if(kIsProducer)
+            if(!kIsProducer)
             {
                 std::atomic_thread_fence(std::memory_order_acquire);
             }
@@ -268,7 +268,7 @@ private:
                     callback(elemAt(next+i), size - i - 1, std::forward<Args>(args)...);
             }
 
-            if(!kIsProducer)
+            if(kIsProducer)
             {
                 std::atomic_thread_fence(std::memory_order_release);
                 // LOGD("%ld", size);
