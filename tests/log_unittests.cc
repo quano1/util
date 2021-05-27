@@ -69,7 +69,7 @@ TEST_F(LoggerTest, SequenceLog)
     {
         for(int i=0; i<1000000; i++)
         {
-            TLL_GLOGTF();
+            // TLL_GLOGTF();
             __asm__("nop");
         }
     }
@@ -98,7 +98,7 @@ TEST_F(LoggerTest, ConcurrentLog)
     {
         for(int i=0; i<1000000; i++)
         {
-            TLL_GLOGTF();
+            // TLL_GLOGTF();
             __asm__("nop");
         }
     }
@@ -127,16 +127,44 @@ TEST_F(LoggerTest, Log2)
 {
     static auto &ins = tll::log::Manager::instance();
     tll::util::Counter<> counter;
-    counter.start();
+    double finish_log_time, total_log_time;
+
     {
-        for(int i=0;i<(int)1e7;i++)
+        ins.total_size = 0;
+        ins.start();
+        counter.start();
+        for(int i=0;i<(int)1e5;i++)
         {
-            TLL_GLOGD2("%.9f", counter.elapse().count());
+            // TLL_GLOGD2("%.9f", counter.elapse().count());
+            // TLL_GLOGD2("");
+            // TLL_GLOGI2("");
+            // TLL_GLOGW2("");
+            // TLL_GLOGF2("");
+            TLL_GLOGTF2();
+            // TLL_GLOG(1, "%.9f", counter.elapse().count());
+            // std::this_thread::yield();
+            // std::this_thread::sleep_for(std::chrono::nanoseconds(1));
         }
+        finish_log_time = counter.elapse().count();
+        ins.stop();
+        total_log_time = counter.elapse().count();
+        LOGD("%d\t%.9f\t%.9f", ins.total_count, finish_log_time, finish_log_time / ins.total_count);
+        LOGD("In:Out speed: %.3f / %.3f Mbs", ins.total_size / finish_log_time / 0x100000, ins.total_size / total_log_time / 0x100000);
     }
-    LOGD("%.9f", counter.elapse().count() * 1e-7);
-    LOGD("%d %d %f %f", (int)1e6, (int)2e6, 1e-6, 2e-6);
-    tll::log::Manager::instance().stop();
+
+    // {
+    //     ins.total_size = 0;
+    //     ins.start();
+    //     counter.start();
+    //     for(int i=0;i<(int)1e6;i++)
+    //     {
+    //         // TLL_GLOGD2("%.9f", counter.elapse().count());
+    //         TLL_GLOG(1, "%.9f", counter.elapse().count());
+    //     }
+    //     LOGD("%.9f", counter.elapse().count() * 1e-6);
+    //     ins.stop();
+    // }
+    // LOGD("Out speed: %.3f Mbs", ins.total_size / counter.elapse().count() / 0x100000);
 
     // tll::log::Manager::instance().start();
     // counter.start();

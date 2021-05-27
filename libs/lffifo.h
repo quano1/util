@@ -276,9 +276,9 @@ private:
 
             time_cb = profTimerElapse(marker.time_cb);
             profTimerStart();
-            
+
             complete<kIsProducer>(id, index, next, size);
-            
+
             time_comp = profTimerElapse(marker.time_comp);
             profTimerAbsElapse(marker.time_total);
             profAdd(marker.total_size, size);

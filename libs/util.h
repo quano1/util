@@ -373,32 +373,14 @@ std::string varStr(const char *name, const T &val, const Args& ... args)
 ////////////////////////////////////////////////////////////////////////////////
 /// StreamBuffer
 
-struct StaticLogInfo
-{
-    std::string file;
-    std::string function;
-    std::string format;
-    int line=0;
-    int severity=0;
-    
-    // stringFormat(T const * const format, Args const & ... args)
 
-    // std::vector<std::string> subformats;
 
-    // StaticLogInfo()
-    // {
-    //     std::size_t h_file = std::hash<std::string>{}(s.first_name);
-    //     std::size_t h_function = std::hash<std::string>{}(s.first_name);
-    //     id = h_file ^ (h_function << 1);
-    // }
-}; /// StaticLogInfo
-
-struct DynamicLogInfo {
-    StaticLogInfo *s_log_info;
-    size_t timestamp;
-    int tid;
-    std::vector<uint8_t> args;
-};
+// struct DynamicLogInfo {
+//     StaticLogInfo *s_log_info;
+//     size_t timestamp;
+//     int tid;
+//     std::vector<uint8_t> args;
+// };
 
 struct StreamBuffer {
     StreamBuffer(size_t reserve=0x400) {buff_.reserve(0x400);}
