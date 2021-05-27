@@ -24,13 +24,13 @@ struct LoggerTest : public ::testing::Test
 TEST_F(LoggerTest, Simple)
 {
     tll::util::Counter<> counter;
-    TLL_GLOGD("");
+    TLL_GLOGD2("");
     LOGD("%f", counter.elapse().count());
     Manager::instance().stop();
 
     Manager::instance().start(1);
     counter.start();
-    TLL_GLOGD("");
+    TLL_GLOGD2("");
     LOGD("%f", counter.elapse().count());
     Manager::instance().stop();
 
@@ -44,7 +44,7 @@ TEST_F(LoggerTest, Simple)
             });
     Manager::instance().start();
     counter.start();
-    TLL_GLOGD("");
+    TLL_GLOGD2("");
     std::this_thread::sleep_for(std::chrono::seconds(1));
     LOGD("%f", counter.elapse().count());
     Manager::instance().stop();
@@ -59,7 +59,7 @@ TEST_F(LoggerTest, SequenceLog)
         for(int i=0; i<1000000; i++)
         {
             __asm__("nop");
-            TLL_GLOGD("");
+            TLL_GLOGD2("");
         }
     }
     time = counter.elapse().count();
@@ -87,7 +87,7 @@ TEST_F(LoggerTest, ConcurrentLog)
         for(int i=0; i<1000000; i++)
         {
             __asm__("nop");
-            TLL_GLOGD("");
+            TLL_GLOGD2("");
         }
     }
     time = counter.elapse().count();
@@ -132,6 +132,8 @@ TEST_F(LoggerTest, Log2)
     {
         ins.total_size = 0;
         ins.start();
+        std::this_thread::sleep_for(std::chrono::nanoseconds(0));
+        // std::this_thread::yield();
         counter.start();
         for(int i=0;i<(int)1e5;i++)
         {
@@ -142,11 +144,10 @@ TEST_F(LoggerTest, Log2)
             // TLL_GLOGF2("");
             TLL_GLOGTF2();
             // TLL_GLOG(1, "%.9f", counter.elapse().count());
-            // std::this_thread::yield();
-            // std::this_thread::sleep_for(std::chrono::nanoseconds(1));
         }
         finish_log_time = counter.elapse().count();
-        ins.stop();
+        std::this_thread::sleep_for(std::chrono::seconds(10));
+        // ins.stop();
         total_log_time = counter.elapse().count();
         LOGD("%d\t%.9f\t%.9f", ins.total_count, finish_log_time, finish_log_time / ins.total_count);
         LOGD("In:Out speed: %.3f / %.3f Mbs", ins.total_size / finish_log_time / 0x100000, ins.total_size / total_log_time / 0x100000);
