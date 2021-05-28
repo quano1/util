@@ -30,27 +30,30 @@
 
 extern char *__progname;
 
-#define TLL_LOG(plog, severity, ...) (plog)->log2<Mode::kAsync>((tll::log::Type)severity, \
-  __FILE__, __FUNCTION__, __LINE__, \
-  ##__VA_ARGS__)
+#define TLL_LOG(plog, severity, ...) \
+    (plog)->log2<Mode::kAsync>((tll::log::Severity)severity, \
+                                __FILE__, __FUNCTION__, __LINE__, \
+                                ##__VA_ARGS__)
 
 #define TLL_GLOG(severity, ...) TLL_LOG(&tll::log::Manager::instance(), severity, ##__VA_ARGS__)
 
 
-#define TLL_GLOGD2(...) TLL_GLOG((tll::log::Type::kDebug), ##__VA_ARGS__)
-#define TLL_GLOGI2(...) TLL_GLOG((tll::log::Type::kInfo), ##__VA_ARGS__)
-#define TLL_GLOGW2(...) TLL_GLOG((tll::log::Type::kWarn), ##__VA_ARGS__)
-#define TLL_GLOGF2(...) TLL_GLOG((tll::log::Type::kFatal), ##__VA_ARGS__)
+#define TLL_GLOGD2(...) TLL_GLOG((tll::log::Severity::kDebug), ##__VA_ARGS__)
+#define TLL_GLOGI2(...) TLL_GLOG((tll::log::Severity::kInfo), ##__VA_ARGS__)
+#define TLL_GLOGW2(...) TLL_GLOG((tll::log::Severity::kWarn), ##__VA_ARGS__)
+#define TLL_GLOGF2(...) TLL_GLOG((tll::log::Severity::kFatal), ##__VA_ARGS__)
 #define TLL_GLOGT2(ID) \
-    tll::log::Tracer tracer__((tll::log::context::level++, ID), \
-    std::bind(&tll::log::Manager::log2<Mode::kAsync, Tracer *, const std::string &, double>, &tll::log::Manager::instance(), (tll::log::Type::kTrace), __FILE__, __FUNCTION__, __LINE__, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4))
+    tll::log::Tracer tracer_##ID##__(#ID, \
+    std::bind(&tll::log::Manager::log2<Mode::kAsync, Tracer *, const std::string &, double>, &tll::log::Manager::instance(), (tll::log::Severity::kTrace), __FILE__, __FUNCTION__, __LINE__, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4))
 
-#define TLL_GLOGTF2() TLL_GLOGT2 ( __FUNCTION__ )
+#define TLL_GLOGTF2() \
+    tll::log::Tracer tracer__(__FUNCTION__, \
+    std::bind(&tll::log::Manager::log2<Mode::kAsync, Tracer *, const std::string &, double>, &tll::log::Manager::instance(), (tll::log::Severity::kTrace), __FILE__, __FUNCTION__, __LINE__, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4))
 
 namespace tll::log {
 
-char const kLogTypeString[]="TDIWF";
-enum class Type
+char const kLogSeverityString[]="TDIWF";
+enum class Severity
 {
     kTrace = 0,
     kDebug,
@@ -68,14 +71,14 @@ enum class Mode
 
 struct Message
 {
-    Type type;
+    Severity severity;
     std::string payload;
 };
 
 struct Entity
 {
     std::string name;
-    std::function<void(void*, const char*, size_t)> onLog;
+    std::function<void(void*, bool, const char*, size_t)> onLog;
     std::function<void *()> onStart;
     std::function<void(void *&)> onStop;
     void *handle;
@@ -93,12 +96,13 @@ struct Tracer
     Tracer(const std::string &name, LogCallback &&doLog) : name_(name), doLog_(std::move(doLog))
     {
         doLog_("+%p:%s", this, name_, 0);
+        context::level++;
     }
 
     ~Tracer()
     {
-        doLog_("-%p:%s %.9f(s)", this, name_, counter_.elapse().count());
         context::level--;
+        doLog_("-%p:%s %.9f(s)", this, name_, counter_.elapse().count());
     }
 
     std::string name_;
@@ -127,14 +131,18 @@ private:
 
     std::unordered_map<std::string, Entity> ents_ = {{"file", Entity{
                 .name = "file",
-                [this](void *handle, const char *buff, size_t size)
+                [this](void *handle, bool flush_req, const char *buff, size_t size)
                 {
                     if(handle == nullptr)
                     {
                         printf("%.*s", (int)size, buff);
-                        return;
                     }
-                    static_cast<std::ofstream*>(handle)->write((const char *)buff, size);
+                    else 
+                    {
+                        auto ofs = static_cast<std::ofstream*>(handle);
+                        ofs->write((const char *)buff, size);
+                        if(flush_req) ofs->flush();
+                    }
                 },
                 [this]()
                 {
@@ -190,9 +198,9 @@ public:
     Manager& operator=(Manager&&) = delete;
 
     template <Mode mode, typename... Args>
-    void log(Type type, const char *format, Args ...args)
+    void log(Severity severity, const char *format, Args ...args)
     {
-        std::string payload = util::stringFormat("{%c}%s", kLogTypeString[(int)type], util::stringFormat(format, std::forward<Args>(args)...));
+        std::string payload = util::stringFormat("{%c}%s", kLogSeverityString[(int)severity], util::stringFormat(format, std::forward<Args>(args)...));
 
         if(mode == Mode::kAsync && isRunning())
         {
@@ -210,32 +218,28 @@ public:
     }
 
     template <typename... Args>
-    void log(Type type, const char *format, Args ...args)
+    void log(Severity severity, const char *format, Args ...args)
     {
         // std::string payload = util::stringFormat(format, std::forward<Args>(args)...);
-        log<Mode::kAsync>(type, format, args...);
+        log<Mode::kAsync>(severity, format, args...);
     }
 
 
     template <Mode mode, typename... Args>
-    void log2(Type type, const char *file, const char *function, int line, const char *format, Args ...args)
+    void log2(Severity severity, const char *file, const char *function, int line, const char *format, Args ...args)
     {
-        const auto timestamp = std::chrono::steady_clock::now();
+        const auto ts = std::chrono::steady_clock::now();
         const int tid = tll::util::tid_nice();
         const int level = tll::log::context::level;
-
-        const Type stype = type;
-        // const std::string sffl = util::stringFormat("{%s}{%s}{%d}", file, function, line);
-        const char *sformat = format;
 
         if(mode == Mode::kAsync)
         {
             auto preprocess = [=]() -> std::string {
                     return util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
-                            kLogTypeString[(int)stype],
-                            util::timestamp(timestamp), tid, level,
+                            kLogSeverityString[(int)severity],
+                            util::timestamp(ts), tid, level,
                             util::stringFormat("{%s}{%s}{%d}", file, function, line),
-                            util::stringFormat(sformat, (args)...));
+                            util::stringFormat(format, (args)...));
                 };
             while(task_queue_.push( std::move(preprocess) ) == 0);
             // assert(ps > 0);
@@ -243,41 +247,41 @@ public:
         else
         {
             log_(util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
-                            kLogTypeString[(int)stype],
-                            util::timestamp(timestamp), tid, level,
+                            kLogSeverityString[(int)severity],
+                            util::timestamp(ts), tid, level,
                             util::stringFormat("{%s}{%s}{%d}", file, function, line), 
-                            util::stringFormat(sformat, (args)...)));
+                            util::stringFormat(format, (args)...)));
         }
     }
 
-    template <Mode mode, typename... Args>
-    void log3(const StaticLogInfo &info, Args ...args)
-    {
-        const auto timestamp = std::chrono::steady_clock::now();
-        const int tid = tll::util::tid_nice();
-        const int level = tll::log::context::level;
+    // template <Mode mode, typename... Args>
+    // void log3(const StaticLogInfo &info, Args ...args)
+    // {
+    //     const auto timestamp = std::chrono::steady_clock::now();
+    //     const int tid = tll::util::tid_nice();
+    //     const int level = tll::log::context::level;
 
-        if(mode == Mode::kAsync)
-        {
-            auto preprocess = [=, &info]() -> std::string {
-                    return util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
-                            kLogTypeString[(int)info.severity],
-                            util::timestamp(timestamp), tid, level,
-                            util::stringFormat("{%s}{%s}{%d}", info.file, info.function, info.line),
-                            util::stringFormat(info.format.data(), (args)...));
-                };
-            while(task_queue_.push( std::move(preprocess) ) == 0);
-            // assert(ps > 0);
-        }
-        else
-        {
-            log_(util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
-                            kLogTypeString[(int)info.severity],
-                            util::timestamp(timestamp), tid, level,
-                            util::stringFormat("{%s}{%s}{%d}", info.file, info.function, info.line), 
-                            util::stringFormat(info.format.data(), (args)...)));
-        }
-    }
+    //     if(mode == Mode::kAsync)
+    //     {
+    //         auto preprocess = [=, &info]() -> std::string {
+    //                 return util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
+    //                         kLogSeverityString[(int)info.severity],
+    //                         util::timestamp(timestamp), tid, level,
+    //                         util::stringFormat("{%s}{%s}{%d}", info.file, info.function, info.line),
+    //                         util::stringFormat(info.format.data(), (args)...));
+    //             };
+    //         while(task_queue_.push( std::move(preprocess) ) == 0);
+    //         // assert(ps > 0);
+    //     }
+    //     else
+    //     {
+    //         log_(util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
+    //                         kLogSeverityString[(int)info.severity],
+    //                         util::timestamp(timestamp), tid, level,
+    //                         util::stringFormat("{%s}{%s}{%d}", info.file, info.function, info.line), 
+    //                         util::stringFormat(info.format.data(), (args)...)));
+    //     }
+    // }
 
     inline void start(size_t chunk_size = 0x400 * 16, uint32_t period_us=(uint32_t)1e6) /// 16 Kb
     {
@@ -296,10 +300,10 @@ public:
                 auto sys_now = std::chrono::system_clock::now();
                 auto sys_time = std::chrono::system_clock::to_time_t(sys_now);
                 auto buff = util::stringFormat("%s{%.9f}{%.9f}\n", 
-                std::ctime(&sys_time),
-                std::chrono::duration_cast< std::chrono::duration<double> >(std_now.time_since_epoch()).count(), 
-                std::chrono::duration_cast< std::chrono::duration<double> >(sys_now.time_since_epoch()).count());
-                ent.onLog(ent.handle, buff.data(), buff.size());
+                    std::ctime(&sys_time),
+                    std::chrono::duration_cast< std::chrono::duration<double> >(std_now.time_since_epoch()).count(), 
+                    std::chrono::duration_cast< std::chrono::duration<double> >(sys_now.time_since_epoch()).count());
+                ent.onLog(ent.handle, false, buff.data(), buff.size());
             }
         }
 
@@ -352,7 +356,8 @@ public:
                 if(!task_queue_.empty())
                 {
                     size_t rs = task_queue_.pop([this](std::function<std::string()> *el, size_t sz){
-                        this->log_((*el)());
+                        std::string payload = (*el)();
+                        this->log_(payload);
                     }, -1);
 
                     delta = 0;
@@ -443,7 +448,7 @@ public:
     /// wait for ring_queue is empty
     inline void flush()
     {
-        flush_request_.store(true, std::memory_order_release);
+        flush_request_.store(true, std::memory_order_relaxed);
     }
 
 private:
@@ -456,10 +461,11 @@ private:
     inline void log_(const char *buff, size_t size)
     {
         total_size += size;
+        bool flush_request = flush_request_.exchange(false, std::memory_order_relaxed);
         for(auto &ent_entry : ents_)
         {
             auto &ent = ent_entry.second;
-            ent.onLog(ent.handle, buff, size);
+            ent.onLog(ent.handle, flush_request, buff, size);
         }
     }
 

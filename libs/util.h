@@ -69,17 +69,15 @@
 
 
 #define LOGV(...)   LOGD("%s", VAR_STR(__VA_ARGS__).data())
-// #define LOGV(var) tll::util::Write(PRINTF, "%\t%\t%:%:%\t" #var ":{%}\n", tll::util::timestamp(), tll::util::str_tidcpu().data(), tll::util::fileName(__FILE__).data(), __FUNCTION__, __LINE__, var)
 
 #define TRACE(ID) tll::log::Tracer<> tracer_##ID##__(#ID)
 #define TRACEF() tll::log::Tracer<> tracer__(std::string(__FUNCTION__) + ":" + std::to_string(__LINE__) + "(" + tll::util::to_string(tll::util::tid()) + ")")
 
 namespace tll{ namespace util{
-// #define THIS_THREAD_ID_ std::this_thread::get_id()
-// using this_tid std::this_thread::get_id();
+
 template <class T> class Guard;
-template <typename T, typename ... Args>
-std::basic_string<T> stringFormat(T const * const format, Args const & ... args);
+template <typename ... Args>
+std::string stringFormat(const char *format, Args const & ... args);
 
 template <typename T=size_t>
 constexpr T nextPowerOf2(T val)
@@ -223,7 +221,6 @@ typename Dur::rep timestamp(const typename Clk::time_point &t = Clk::now())
     return std::chrono::duration_cast< Dur >( (t - begin_) ).count();
 }
 
-
 /// format
 template <typename T>
 T argument(T value) noexcept
@@ -231,57 +228,38 @@ T argument(T value) noexcept
     return value;
 }
 
-template <typename T>
-T const * argument(std::basic_string<T> const & value) noexcept
+inline const char *argument(const std::string &value) noexcept
 {
     return value.data();
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-security"
 template <typename ... Args>
-int stringPrint(char * const buffer,
-                size_t const bufferCount,
-                char const * const format,
-                Args const & ... args) noexcept
-{
-    int const result = snprintf(buffer,
-                                bufferCount,
-                                format,
-                                argument(args) ...);
-    return result;
-}
-
-template <typename T, typename ... Args>
-std::basic_string<T> stringFormat(
-    size_t size,
-    T const * const format,
-    Args const & ... args)
-{
-    std::basic_string<T> buffer;
-    buffer.resize(size);
-    int len = stringPrint(&buffer[0], buffer.size(), format, args ...);
-    buffer.resize(len);
-    return buffer;
-}
-
-template <typename T, typename ... Args>
-std::basic_string<T> stringFormat(
-    T const * const format,
+std::string stringFormat(
+    const char *format,
     Args const & ... args)
 {
     constexpr size_t kLogSize = 0x1000;
-    // std::basic_string<T> buffer;
-    // size_t const size = stringPrint(&buffer[0], 0, format, args ...);
-    // if (size > 0)
-    // {
-    //     buffer.resize(size + 1); /// extra for null
-    //     stringPrint(&buffer[0], buffer.size(), format, args ...);
-    // }
-    std::basic_string<T> buffer;
-    buffer.resize(kLogSize);
-    int len = stringPrint(&buffer[0], kLogSize, format, args ...);
-    buffer.resize(len);
-    return buffer;
+    constexpr std::size_t kArgSize = sizeof...(Args);
+
+    if(kArgSize)
+    {
+        std::string buffer;
+        buffer.resize(kLogSize);
+        int len = snprintf(&buffer[0],
+                                buffer.size(),
+                                format,
+                                argument(args) ...);
+        buffer.resize(len);
+        return buffer;
+    }
+    else
+    {
+        return format;
+    }
 }
+#pragma GCC diagnostic pop
 
 template <class T>
 class Guard
