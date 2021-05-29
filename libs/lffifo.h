@@ -365,7 +365,7 @@ private:
 
                 if(kContiguous && kConsMode == mode::dense)
                 {
-                    if(!marker.ref_entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+                    if(!marker.ref_entry_id_head().compare_exchange_strong(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
                     {
                         continue;
                     }
@@ -379,7 +379,7 @@ private:
                 }
                 else
                 {
-                    if(!marker.ref_index_head().compare_exchange_weak(cons_index_head, cons_next_index + next_size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                    if(!marker.ref_index_head().compare_exchange_strong(cons_index_head, cons_next_index + next_size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
                     else
                     {
                         entry_id = cons_index_head;
@@ -457,7 +457,7 @@ private:
 
                 if(kContiguous && kProdMode == mode::dense)
                 {
-                    if(!marker.ref_entry_id_head().compare_exchange_weak(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+                    if(!marker.ref_entry_id_head().compare_exchange_strong(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
                     {
                         continue;
                     }
@@ -471,7 +471,7 @@ private:
                 } /// kProdMode == mode::dense
                 else
                 {
-                    if(!marker.ref_index_head().compare_exchange_weak(prod_index_head, prod_next_index + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                    if(!marker.ref_index_head().compare_exchange_strong(prod_index_head, prod_next_index + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
                     else
                     {
                         entry_id = prod_index_head;
