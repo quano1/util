@@ -241,7 +241,7 @@ public:
                             util::stringFormat("{%s}{%s}{%d}", file, function, line),
                             util::stringFormat(format, (args)...));
                 };
-            while(task_queue_.push( std::move(preprocess) ) == 0);
+            while(task_queue_.push( std::move(preprocess) ) == 0) pop_wait_.notify_all();
             // assert(ps > 0);
         }
         else
@@ -252,6 +252,8 @@ public:
                             util::stringFormat("{%s}{%s}{%d}", file, function, line), 
                             util::stringFormat(format, (args)...)));
         }
+
+        pop_wait_.notify_all();
     }
 
     // template <Mode mode, typename... Args>
@@ -340,6 +342,7 @@ public:
 
             while(isRunning())
             {
+                size_t rs = 0;
                 counter_us.start();
                 if(delta < period_us && task_queue_.empty())
                 {
@@ -353,9 +356,9 @@ public:
                         });
                 }
 
-                if(!task_queue_.empty())
+                while(!task_queue_.empty())
                 {
-                    size_t rs = task_queue_.pop([this](std::function<std::string()> *el, size_t sz){
+                    rs = task_queue_.pop([this](std::function<std::string()> *el, size_t sz){
                         std::string payload = (*el)();
                         this->log_(payload);
                     }, -1);
@@ -364,7 +367,8 @@ public:
                     total_count += rs;
                     counter_us.start();
                 }
-                else if(delta > period_us)
+
+                if(delta > period_us)
                 {
                     delta -= period_us;
                 }
@@ -446,9 +450,10 @@ public:
     }
 
     /// wait for ring_queue is empty
-    inline void flush()
+    inline bool flush()
     {
-        flush_request_.store(true, std::memory_order_relaxed);
+        // flush_request_.store(true, std::memory_order_relaxed);
+        return flush_request_.exchange(true, std::memory_order_relaxed);
     }
 
 private:
