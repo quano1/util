@@ -49,10 +49,12 @@ struct RingBufferTest : public ::testing::Test
         UT_LOGD("%s", fifo.dump().data());
         UT_LOGD("fill");
         fifo.reset();
+        std::vector<elem_t> buff(fifo.capacity(), 0);
         for(size_t i=0; i < fifo.capacity(); i++)
-        {
-            fifo.push((elem_t)i);
-        }
+            buff[i] = i;
+
+        fifo.push(buff.data(), buff.size());
+
         UT_LOGD("%s", fifo.dump().data());
         UT_LOGD("overrun");
         EXPECT_FALSE(fifo.empty());
@@ -60,7 +62,7 @@ struct RingBufferTest : public ::testing::Test
         EXPECT_EQ(ret, 0);
         UT_LOGD("%s", fifo.dump().data());
         UT_LOGD("pop all");
-        ret = fifo.pop(do_nothing, -1);
+        ret = fifo.pop_cb(do_nothing, -1);
         EXPECT_EQ(ret, fifo.capacity());
         UT_LOGD("%s", fifo.dump().data());
         UT_LOGD("underrun");
@@ -72,14 +74,18 @@ struct RingBufferTest : public ::testing::Test
         constexpr size_t kPushSize = 3;
         for(size_t i=0; i < fifo.capacity()*loop; i++)
         {
-            ret = fifo.push(pushCb, kPushSize, (elem_t)i);
+            // ret = fifo.push_cb(pushCb, kPushSize, (elem_t)i);
+            std::vector<elem_t> outbuff(kPushSize, 0);
+            ret = fifo.push(buff.data(), kPushSize);
             EXPECT_EQ(ret, kPushSize);
 
-            ret = fifo.pop([&](const elem_t *el, size_t sz){
-                ASSERT_EQ(sz, kPushSize);
-                EXPECT_EQ(*(el), (elem_t)i);
-                EXPECT_EQ(memcmp(el, el + 1, (sz - 1) * sizeof(elem_t)), 0);
-            }, -1);
+            // ret = fifo.pop_cb([&](const elem_t *el, size_t sz){
+            //     ASSERT_EQ(sz, kPushSize);
+            //     EXPECT_EQ(*(el), (elem_t)i);
+            //     EXPECT_EQ(memcmp(el, el + 1, (sz - 1) * sizeof(elem_t)), 0);
+            // }, -1);
+            ret = fifo.pop(outbuff.data(), kPushSize);
+            EXPECT_EQ(memcmp(outbuff.data(), buff.data(), kPushSize), 0);
             EXPECT_EQ(ret, kPushSize);
         }
         UT_LOGD("%s", fifo.dump().data());
@@ -100,20 +106,20 @@ struct RingBufferTest : public ::testing::Test
         fifo.pop(val);
         /// Now the fifo is empty.
         /// But should not be able to push capacity size
-        EXPECT_EQ(fifo.push(do_nothing, capa), 0);
+        EXPECT_EQ(fifo.push_cb(do_nothing, capa), 0);
         /// Can only pushing the reset of the buffer.
-        EXPECT_EQ(fifo.push(do_nothing, capa - 1), capa - 1);
+        EXPECT_EQ(fifo.push_cb(do_nothing, capa - 1), capa - 1);
         /// reset everything
         fifo.reset();
-        fifo.push(do_nothing, capa);
-        fifo.pop(do_nothing, capa/2);
+        fifo.push_cb(do_nothing, capa);
+        fifo.pop_cb(do_nothing, capa/2);
         /// wrapped perfectly
-        fifo.push(do_nothing, capa/2);
+        fifo.push_cb(do_nothing, capa/2);
         /// should having the capacity elems
         EXPECT_EQ(fifo.size(), capa);
         /// Should only be able to pop capa/2 due to wrapped (contiguously)
-        EXPECT_EQ(fifo.pop(do_nothing, -1), capa/2);
-        EXPECT_EQ(fifo.pop(do_nothing, -1), capa/2);
+        EXPECT_EQ(fifo.pop_cb(do_nothing, -1), capa/2);
+        EXPECT_EQ(fifo.pop_cb(do_nothing, -1), capa/2);
     }
 }; /// class RingBufferTest
 
@@ -209,7 +215,7 @@ struct RingQueueTest : public ::testing::Test
         EXPECT_EQ(ret, 0);
         UT_LOGD("%s", fifo.dump().data());
         UT_LOGD("pop all");
-        ret = fifo.pop(do_nothing, -1);
+        ret = fifo.pop_cb(do_nothing, -1);
         EXPECT_EQ(ret, fifo.capacity());
         UT_LOGD("%s", fifo.dump().data());
         UT_LOGD("underrun");
@@ -226,10 +232,10 @@ struct RingQueueTest : public ::testing::Test
         };
         for(size_t i=0; i < fifo.capacity()*loop; i++)
         {
-            ret = fifo.push(pushCb, kPushSize, (elem_t)i);
+            ret = fifo.push_cb(pushCb, kPushSize, (elem_t)i);
             EXPECT_EQ(ret, kPushSize);
 
-            ret = fifo.pop([&](const elem_t *el, size_t el_left){
+            ret = fifo.pop_cb([&](const elem_t *el, size_t el_left){
                 EXPECT_EQ(*(el), (elem_t)i);
             }, -1);
             EXPECT_EQ(ret, kPushSize);
@@ -252,17 +258,17 @@ struct RingQueueTest : public ::testing::Test
         fifo.pop(val);
         /// Now the fifo is empty.
         /// Should be able to push capacity size
-        EXPECT_EQ(fifo.push(do_nothing, capa), capa);
+        EXPECT_EQ(fifo.push_cb(do_nothing, capa), capa);
         /// reset everything
         fifo.reset();
-        fifo.push(do_nothing, capa);
-        fifo.pop(do_nothing, capa/2);
+        fifo.push_cb(do_nothing, capa);
+        fifo.pop_cb(do_nothing, capa/2);
         /// wrapped perfectly
-        fifo.push(do_nothing, capa/2);
+        fifo.push_cb(do_nothing, capa/2);
         /// should having the capacity elems
         EXPECT_EQ(fifo.size(), capa);
         /// Should be able to pop capa even wrapped
-        EXPECT_EQ(fifo.pop(do_nothing, -1), capa);
+        EXPECT_EQ(fifo.pop_cb(do_nothing, -1), capa);
     }
 }; /// class RingQueueTest
 
@@ -364,7 +370,7 @@ struct RingBufferConcurrentTest : public ::testing::Test
                     char i=0;
                     for(;total_push_size.load(std::memory_order_relaxed) < (kTotalWriteSize);)
                     {
-                        size_t ret_size = fifo.push([](char *el, size_t size, char val) {
+                        size_t ret_size = fifo.push_cb([](char *el, size_t size, char val) {
                             memset(el, val, size);
                         }, kMaxPkgSize, i);
                         if(ret_size)
@@ -390,7 +396,7 @@ struct RingBufferConcurrentTest : public ::testing::Test
                     for(;prod_completed.load(std::memory_order_relaxed) < index_seq.value /*- (thread_num + 1) / 2*/
                         || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
                     {
-                        size_t ret_size = fifo.pop([&store_buff, &pop_size, &fifo, kTid](const char *el, size_t size) {
+                        size_t ret_size = fifo.pop_cb([&store_buff, &pop_size, &fifo, kTid](const char *el, size_t size) {
                             // LOGD("%ld\t%s", size, fifo.dump().data());
                             auto dst = store_buff[kTid/2].data() + pop_size;
                             auto src = el;

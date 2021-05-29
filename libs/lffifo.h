@@ -12,7 +12,7 @@
 #include "util.h"
 
 typedef std::chrono::steady_clock StatClock;
-typedef std::chrono::duration<size_t, std::ratio<1, 1000000000>> StatDuration; /// ns
+typedef std::chrono::duration<size_t, std::nano> StatDuration; /// ns
 
 namespace tll::lf {
 
@@ -21,7 +21,7 @@ using Callback = std::function<void(const T *o, size_t s)>;
 
 
 namespace internal {
-static thread_local tll::util::Counter<StatDuration, StatClock> counter;
+static thread_local tll::util::Counter<1, StatDuration, StatClock> counter;
 }
 
 struct Statistic {
@@ -716,27 +716,38 @@ public:
         reset();
     }
 
+    inline size_t push(const elem_t *ptr, size_t sz)
+    {
+        return push_cb([ptr](elem_t *el, size_t sz){ std::memcpy(el, ptr, sz); }, sz);
+    }
+
+    inline size_t pop(elem_t *ptr, size_t sz)
+    {
+        return pop_cb([ptr](elem_t *el, size_t sz){ std::memcpy(ptr, el, sz); }, sz);
+    }
+
+    template<typename U>
+    inline size_t push(U &&val)
+    {
+        return push_cb([&val](elem_t *el, size_t){ *el = std::forward<U>(val); }, 1);
+    }
+
+    inline size_t pop(elem_t &val)
+    {
+        return pop_cb([&val](elem_t *el, size_t){ val = std::move(*el); }, 1);
+    }
+
+
     template <typename F, typename ...Args>
-    size_t push(const F &callback, size_t size, Args &&...args)
+    size_t push_cb(const F &callback, size_t size, Args &&...args)
     {
         return doFifing<true>(callback, size, std::forward<Args>(args)...);
     }
 
-    template<typename U>
-    size_t push(U &&val)
-    {
-        return push([&val](elem_t *el, size_t){ *el = std::forward<U>(val); }, 1);
-    }
-
     template <typename F, typename ...Args>
-    size_t pop(const F &callback, size_t size, Args &&...args)
+    size_t pop_cb(const F &callback, size_t size, Args &&...args)
     {
         return doFifing<false>(callback, size, std::forward<Args>(args)...);
-    }
-
-    size_t pop(elem_t &val)
-    {
-        return pop([&val](elem_t *el, size_t){ val = std::move(*el); }, 1);
     }
 
 /// utility functions

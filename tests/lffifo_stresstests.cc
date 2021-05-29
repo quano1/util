@@ -134,7 +134,7 @@ struct LFFIFOStressTest : public ::testing::Test
             }
 
         auto do_push = [&](int tid, size_t loop_num, size_t lt_size, size_t tt_count, size_t tt_size) -> size_t {
-            size_t ret = fifo.push([verification](char *el, size_t size, int tid, char val, size_t push_size) {
+            size_t ret = fifo.push_cb([verification](char *el, size_t size, int tid, char val, size_t push_size) {
                 if(!verification) return;
 
                 memset(el, (char)(tid), size);
@@ -143,7 +143,7 @@ struct LFFIFOStressTest : public ::testing::Test
         };
 
         auto do_pop = [&](int tid, size_t loop_num, size_t lt_size, size_t tt_count, size_t tt_size) -> size_t {
-            size_t ret = fifo.pop([&](const char *el, size_t size, size_t pop_size) {
+            size_t ret = fifo.pop_cb([&](const char *el, size_t size, size_t pop_size) {
                 if(!verification) return;
 
                 auto dst = store_buff[tid].data() + pop_size;
@@ -209,14 +209,14 @@ struct LFFIFOStressTest : public ::testing::Test
         }
 
         auto do_push = [&](int tid, size_t loop_num, size_t lt_size, size_t tt_count, size_t tt_size) -> size_t {
-            size_t ret = fifo.push([](char *el, size_t size, int tid, char val, size_t push_size) {
+            size_t ret = fifo.push_cb([](char *el, size_t size, int tid, char val, size_t push_size) {
                 memset(el, (char)(tid), size);
             }, max_pkg_size, tid, (char)loop_num, lt_size);
             return ret;
         };
 
         auto do_pop_while_doing_push = [&](int tid, size_t loop_num, size_t lt_size, size_t tt_count, size_t tt_size) -> size_t {
-            size_t ret = fifo.pop([&](const char *el, size_t size, size_t pop_size) {
+            size_t ret = fifo.pop_cb([&](const char *el, size_t size, size_t pop_size) {
                 auto dst = store_buff[tid / 2].data() + pop_size;
                 auto src = el;
                 memcpy(dst, src, size);

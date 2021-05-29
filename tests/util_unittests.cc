@@ -89,11 +89,19 @@ TEST_F(UtilTest, StreamBuffer)
 {
     tll::util::Counter<> counter;
     std::chrono::steady_clock::time_point now;
-    // int8_t val;
+    std::vector<char> buffer(0x1000);
+
+    StreamBuffer sb(18);
+    sb << "help me please";
+    EXPECT_EQ(sb.size, strlen("help me please") + 4);
+    /// overflow, size should not change
+    sb << 1;
+    EXPECT_EQ(sb.size, 18);
+
     counter.start();
-    for(int i=0; i<1000; i++) {
-        now = std::chrono::steady_clock::now();
-        StreamBuffer sb;
+    for(int i=0; i<(int)1e6; i++) {
+        // now = std::chrono::steady_clock::now();
+        StreamBuffer sb(buffer.data(), buffer.size());
         sb << (int8_t)1;
         sb << (uint8_t)1;
         sb << (uint16_t)1;
@@ -104,7 +112,8 @@ TEST_F(UtilTest, StreamBuffer)
         sb << (uint64_t)1;
         sb << (double)1;
         sb << (float)1;
+        sb << "help me please";
     }
     LOGD("%.9f", counter.elapse().count() * 1e-6);
-
+    // LOGD("%ld", buffer.size());
 }

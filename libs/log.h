@@ -209,7 +209,7 @@ public:
 
         if(mode == Mode::kAsync && isRunning())
         {
-            size_t ps = ring_buffer_.push([](char *el, size_t sz, const std::string &msg) {
+            size_t ps = ring_buffer_.push_cb([](char *el, size_t sz, const std::string &msg) {
                 memcpy(el, msg.data(), sz);
             }, payload.size(), payload);
 
@@ -268,7 +268,7 @@ public:
     //     const int tid = tll::util::tid_nice();
     //     const int level = tll::log::context::level;
 
-    //     if(mode == Mode::kAsync)
+    //     if(mode == Mode::kAsync && isRunning())
     //     {
     //         auto preprocess = [=, &info]() -> std::string {
     //                 return util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
@@ -329,7 +329,7 @@ public:
 
         broadcast_ = std::thread([this, period_us]()
         {
-            util::Counter<std::chrono::duration<uint32_t, std::ratio<1, 1000000>>> counter_us;
+            util::Counter<1, std::chrono::duration<uint32_t, std::micro>> counter_us;
             uint32_t delta = 0;
 
             while(isRunning())
@@ -350,7 +350,7 @@ public:
 
                 while(!task_queue_.empty())
                 {
-                    rs = task_queue_.pop([this](std::function<std::string()> *el, size_t sz){
+                    rs = task_queue_.pop_cb([this](std::function<std::string()> *el, size_t sz){
                         std::string payload = (*el)();
                         this->log_(payload);
                     }, 0x100);
@@ -372,7 +372,7 @@ public:
 
             if(!task_queue_.empty())
             {
-                size_t rs = task_queue_.pop([this](std::function<std::string()> *el, size_t sz){
+                size_t rs = task_queue_.pop_cb([this](std::function<std::string()> *el, size_t sz){
                     total_count ++;
                     this->log_((*el)());
                 }, -1);
@@ -391,7 +391,7 @@ public:
 
         broadcast_ = std::thread([this, chunk_size, period_us]()
         {
-            util::Counter<std::chrono::duration<uint32_t, std::ratio<1, 1000000>>> counter_us;
+            util::Counter<1, std::chrono::duration<uint32_t, std::micro>> counter_us;
             uint32_t delta = 0;
             while(isRunning())
             {
@@ -409,7 +409,7 @@ public:
                 if(delta >= period_us || ring_buffer_.size() >= chunk_size)
                 {
                     delta -= period_us;
-                    size_t rs = ring_buffer_.pop([&](const char *el, size_t sz){
+                    size_t rs = ring_buffer_.pop_cb([&](const char *el, size_t sz){
                         log_(el, sz);
                     }, -1);
                 }
@@ -417,7 +417,7 @@ public:
 
             if(!ring_buffer_.empty())
             {
-                size_t rs = ring_buffer_.pop([&](const char *el, size_t sz){ log_(el, sz); }, -1);
+                size_t rs = ring_buffer_.pop_cb([&](const char *el, size_t sz){ log_(el, sz); }, -1);
             }
         });
     }

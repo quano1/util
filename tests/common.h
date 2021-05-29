@@ -41,7 +41,7 @@ std::pair<size_t, size_t> fifing(
     std::atomic<size_t> running_prod{0}, 
         tt_push_count{0}, tt_pop_count{0},
         tt_push_size{0}, tt_pop_size{0};
-    tll::util::Counter<std::chrono::duration<double, std::ratio<1, 1>>> counter; /// second
+    tll::util::Counter<1, std::chrono::duration<double, std::ratio<1, 1>>> counter; /// second
     // double tt_time;
     std::atomic<bool> is_done{false};
     std::condition_variable cv;
