@@ -30,6 +30,9 @@
 
 extern char *__progname;
 
+#define COMBINE_(X,Y) X ##_ ##Y // helper macro
+#define COMBINE(X,Y) COMBINE_(X,Y)
+
 #define TLL_LOG(plog, severity, ...) \
     (plog)->log2<Mode::kAsync>((tll::log::Severity)severity, \
                                 __FILE__, __FUNCTION__, __LINE__, \
@@ -43,12 +46,13 @@ extern char *__progname;
 #define TLL_GLOGW2(...) TLL_GLOG((tll::log::Severity::kWarn), ##__VA_ARGS__)
 #define TLL_GLOGF2(...) TLL_GLOG((tll::log::Severity::kFatal), ##__VA_ARGS__)
 #define TLL_GLOGT2(ID) \
-    tll::log::Tracer tracer_##ID##__(#ID, \
+    tll::log::Tracer COMBINE(tracer, __LINE__)(ID, \
     std::bind(&tll::log::Manager::log2<Mode::kAsync, Tracer *, const std::string &, double>, &tll::log::Manager::instance(), (tll::log::Severity::kTrace), __FILE__, __FUNCTION__, __LINE__, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4))
 
-#define TLL_GLOGTF2() \
-    tll::log::Tracer tracer__(__FUNCTION__, \
-    std::bind(&tll::log::Manager::log2<Mode::kAsync, Tracer *, const std::string &, double>, &tll::log::Manager::instance(), (tll::log::Severity::kTrace), __FILE__, __FUNCTION__, __LINE__, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4))
+#define TLL_GLOGTF2()   TLL_GLOGT2(__FUNCTION__)
+
+    // tll::log::Tracer COMBINE(tracer__, __LINE__)(__FUNCTION__, \
+    // std::bind(&tll::log::Manager::log2<Mode::kAsync, Tracer *, const std::string &, double>, &tll::log::Manager::instance(), (tll::log::Severity::kTrace), __FILE__, __FUNCTION__, __LINE__, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4))
 
 namespace tll::log {
 
@@ -92,6 +96,11 @@ namespace context {
 struct Tracer
 {
     typedef std::function <void (const char *format, Tracer *, const std::string &, double)> LogCallback;
+private:
+    std::string name_;
+    LogCallback doLog_;
+public:
+    util::Counter<> counter;
 
     Tracer(const std::string &name, LogCallback &&doLog) : name_(name), doLog_(std::move(doLog))
     {
@@ -102,12 +111,8 @@ struct Tracer
     ~Tracer()
     {
         context::level--;
-        doLog_("-%p:%s %.9f(s)", this, name_, counter_.elapse().count());
+        doLog_("-%p:%s %.9f(s)", this, name_, counter.elapse().count());
     }
-
-    std::string name_;
-    LogCallback doLog_;
-    util::Counter<> counter_;
 };
 
 struct StaticLogInfo
@@ -232,7 +237,7 @@ public:
         const int tid = tll::util::tid_nice();
         const int level = tll::log::context::level;
 
-        if(mode == Mode::kAsync)
+        if(mode == Mode::kAsync && isRunning())
         {
             auto preprocess = [=]() -> std::string {
                     return util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
@@ -285,11 +290,12 @@ public:
     //     }
     // }
 
-    inline void start(size_t chunk_size = 0x400 * 16, uint32_t period_us=(uint32_t)1e6) /// 16 Kb
+    inline void start(size_t chunk_size = 0x400 * 16, uint32_t period_us=(uint32_t)1e6)
     {
         bool val = false;
         if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
             return;
+
         for(auto &entry : ents_)
         {
             // entry.second.start();
@@ -297,48 +303,34 @@ public:
             if(ent.handle == nullptr && ent.onStart)
             {
                 ent.handle = ent.onStart();
-                /// send first log to notify time_since_epoch
-                auto std_now = std::chrono::steady_clock::now();
-                auto sys_now = std::chrono::system_clock::now();
-                auto sys_time = std::chrono::system_clock::to_time_t(sys_now);
-                auto buff = util::stringFormat("%s{%.9f}{%.9f}\n", 
-                    std::ctime(&sys_time),
-                    std::chrono::duration_cast< std::chrono::duration<double> >(std_now.time_since_epoch()).count(), 
-                    std::chrono::duration_cast< std::chrono::duration<double> >(sys_now.time_since_epoch()).count());
-                ent.onLog(ent.handle, false, buff.data(), buff.size());
             }
         }
 
-        broadcast_ = std::thread([this, chunk_size, period_us]()
+        {
+            /// send first log to notify time_since_epoch
+            auto sys_now = std::chrono::system_clock::now();
+            auto std_now = std::chrono::steady_clock::now();
+            auto sys_time = std::chrono::system_clock::to_time_t(sys_now);
+            auto first_log = util::stringFormat("%s{%.9f}{%.9f}\n", 
+                std::ctime(&sys_time),
+                std::chrono::duration_cast< std::chrono::duration<double> >(std_now.time_since_epoch()).count(), 
+                std::chrono::duration_cast< std::chrono::duration<double> >(sys_now.time_since_epoch()).count());
+            log_(first_log);
+        }
+
+        start2(period_us);
+    }
+
+    inline void start2(uint32_t period_us=(uint32_t)1e6)
+    {
+        // bool val = false;
+        // if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
+        //     return;
+
+        broadcast_ = std::thread([this, period_us]()
         {
             util::Counter<std::chrono::duration<uint32_t, std::ratio<1, 1000000>>> counter_us;
             uint32_t delta = 0;
-            // while(isRunning())
-            // {
-            //     delta += counter.elapse().count();
-            //     counter.start();
-            //     if(delta < period_us && ring_buffer_.size() < chunk_size)
-            //     {
-            //         std::unique_lock<std::mutex> lock(mtx_);
-            //         /// wait timeout
-            //         bool wait_status = pop_wait_.wait_for(lock, std::chrono::milliseconds(period_us - delta), [this, chunk_size, &delta, &counter] {
-            //             delta += counter.elapse().count();
-            //             return !isRunning() || (this->ring_buffer_.size() >= chunk_size);
-            //         });
-            //     }
-            //     if(delta >= period_us || ring_buffer_.size() >= chunk_size)
-            //     {
-            //         delta -= period_us;
-            //         size_t rs = ring_buffer_.pop([&](const char *el, size_t sz){
-            //             log_(el, sz);
-            //         }, -1);
-            //     }
-            // } /// while(isRunning())
-
-            // if(!ring_buffer_.empty())
-            // {
-            //     size_t rs = ring_buffer_.pop([&](const char *el, size_t sz){ log_(el, sz); }, -1);
-            // }
 
             while(isRunning())
             {
@@ -349,7 +341,7 @@ public:
                     std::unique_lock<std::mutex> lock(mtx_);
                     /// wait timeout
                     bool wait_status = pop_wait_.wait_for(lock, std::chrono::microseconds(period_us - delta), 
-                        [this, chunk_size, &delta, &counter_us]
+                        [this, &delta, &counter_us]
                         {
                             delta += counter_us.elapse().count();
                             return !isRunning() || !task_queue_.empty();
@@ -361,14 +353,17 @@ public:
                     rs = task_queue_.pop([this](std::function<std::string()> *el, size_t sz){
                         std::string payload = (*el)();
                         this->log_(payload);
-                    }, -1);
-
-                    delta = 0;
+                    }, 0x100);
                     total_count += rs;
-                    counter_us.start();
+                    // LOGD("%ld", rs);
                 }
 
-                if(delta > period_us)
+                if(rs)
+                {
+                    delta = 0;
+                    counter_us.start();
+                }
+                else if(delta > period_us)
                 {
                     delta -= period_us;
                 }
@@ -384,6 +379,46 @@ public:
 
                 total_count += rs;
             };
+        });
+    }
+
+
+    inline void start3(size_t chunk_size = 0x400 * 16, uint32_t period_us=(uint32_t)1e6)
+    {
+        // bool val = false;
+        // if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
+        //     return;
+
+        broadcast_ = std::thread([this, chunk_size, period_us]()
+        {
+            util::Counter<std::chrono::duration<uint32_t, std::ratio<1, 1000000>>> counter_us;
+            uint32_t delta = 0;
+            while(isRunning())
+            {
+                delta += counter_us.elapse().count();
+                counter_us.start();
+                if(delta < period_us && ring_buffer_.size() < chunk_size)
+                {
+                    std::unique_lock<std::mutex> lock(mtx_);
+                    /// wait timeout
+                    bool wait_status = pop_wait_.wait_for(lock, std::chrono::milliseconds(period_us - delta), [this, chunk_size, &delta, &counter_us] {
+                        delta += counter_us.elapse().count();
+                        return !isRunning() || (this->ring_buffer_.size() >= chunk_size);
+                    });
+                }
+                if(delta >= period_us || ring_buffer_.size() >= chunk_size)
+                {
+                    delta -= period_us;
+                    size_t rs = ring_buffer_.pop([&](const char *el, size_t sz){
+                        log_(el, sz);
+                    }, -1);
+                }
+            } /// while(isRunning())
+
+            if(!ring_buffer_.empty())
+            {
+                size_t rs = ring_buffer_.pop([&](const char *el, size_t sz){ log_(el, sz); }, -1);
+            }
         });
     }
 

@@ -242,7 +242,7 @@ private:
 
 private:
     template <bool kIsProducer, typename F, typename ...Args>
-    size_t doFifing(F &&callback, size_t size, Args &&...args)
+    size_t doFifing(const F &callback, size_t size, Args &&...args)
     {
         auto &marker = kIsProducer ? producer_ : consumer_;
         size_t id, index;
@@ -729,9 +729,9 @@ public:
     }
 
     template <typename F, typename ...Args>
-    size_t pop(F &&callback, size_t size, Args &&...args)
+    size_t pop(const F &callback, size_t size, Args &&...args)
     {
-        return doFifing<false>(std::forward<F>(callback), size, std::forward<Args>(args)...);
+        return doFifing<false>(callback, size, std::forward<Args>(args)...);
     }
 
     size_t pop(elem_t &val)

@@ -134,16 +134,35 @@ TEST_F(LoggerTest, Log2)
         ins.start();
         std::this_thread::sleep_for(std::chrono::nanoseconds(0));
         // std::this_thread::yield();
-        counter.start();
+        // counter.start();
+        TLL_GLOGTF2(); /// tracer_138
         for(int i=0;i<(int)1e5;i++)
         {
             TLL_GLOGTF2();
-            TLL_GLOGT2(haha);
+            TLL_GLOGT2("haha");
             TLL_GLOGD2("");
             TLL_GLOGD2("%.9f", counter.elapse().count());
             TLL_GLOGI2("%.9f", counter.elapse().count());
             TLL_GLOGW2("%.9f", counter.elapse().count());
             TLL_GLOGF2("%.9f", counter.elapse().count());
+        }
+        finish_log_time = tracer_138.counter.elapse().count();
+        // std::this_thread::sleep_for(std::chrono::seconds(10));
+        ins.stop();
+        total_log_time = tracer_138.counter.elapse().count();
+        LOGD("%ld\t%.9f\t%.9f", ins.total_count, finish_log_time, finish_log_time / ins.total_count);
+        LOGD("In:Out speed: %.3f / %.3f Mbs", ins.total_size / finish_log_time / 0x100000, ins.total_size / total_log_time / 0x100000);
+    }
+
+    {
+        ins.total_size = 0;
+        ins.start();
+        std::this_thread::sleep_for(std::chrono::nanoseconds(0));
+        // std::this_thread::yield();
+        counter.start();
+        for(int i=0;i<(int)1e6;i++)
+        {
+            TLL_GLOGTF2();
         }
         finish_log_time = counter.elapse().count();
         // std::this_thread::sleep_for(std::chrono::seconds(10));
@@ -152,30 +171,4 @@ TEST_F(LoggerTest, Log2)
         LOGD("%ld\t%.9f\t%.9f", ins.total_count, finish_log_time, finish_log_time / ins.total_count);
         LOGD("In:Out speed: %.3f / %.3f Mbs", ins.total_size / finish_log_time / 0x100000, ins.total_size / total_log_time / 0x100000);
     }
-
-    // {
-    //     ins.total_size = 0;
-    //     ins.start();
-    //     counter.start();
-    //     for(int i=0;i<(int)1e6;i++)
-    //     {
-    //         // TLL_GLOGD2("%.9f", counter.elapse().count());
-    //         TLL_GLOG(1, "%.9f", counter.elapse().count());
-    //     }
-    //     LOGD("%.9f", counter.elapse().count() * 1e-6);
-    //     ins.stop();
-    // }
-    // LOGD("Out speed: %.3f Mbs", ins.total_size / counter.elapse().count() / 0x100000);
-
-    // tll::log::Manager::instance().start();
-    // counter.start();
-    // #pragma omp parallel num_threads ( NUM_CPU )
-    // {
-    //     for(int i=0;i<1000000;i++)
-    //         TLL_GLOGD2("%f", counter.elapse().count());
-    // }
-    // LOGD("%.9f", counter.elapse().count() * 1e-6 / NUM_CPU);
-    // // tll::log::Manager::instance().log2<Mode::kAsync>((tll::log::Type::kDebug), __FILE__, __FUNCTION__, __LINE__, "");
-
-    // tll::log::Manager::instance().stop();
 }

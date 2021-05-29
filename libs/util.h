@@ -202,8 +202,9 @@ inline std::string str_tid()
 
 inline std::string str_tidcpu()
 {
+    using std::to_string;
     static std::atomic<int> __tidcpu__{0};
-    static const thread_local auto ret = tll::util::stringFormat("%s/%d", tll::util::to_string(__tidcpu__.fetch_add(1, std::memory_order_relaxed)).data(), sched_getcpu());
+    static const thread_local auto ret = to_string(__tidcpu__.fetch_add(1, std::memory_order_relaxed)) + "/" + to_string(sched_getcpu());
     return ret;
 }
 
@@ -241,7 +242,7 @@ std::string stringFormat(
     Args const & ... args)
 {
     constexpr size_t kLogSize = 0x1000;
-    constexpr std::size_t kArgSize = sizeof...(Args);
+    constexpr size_t kArgSize = sizeof...(Args);
 
     if(kArgSize)
     {
@@ -260,6 +261,71 @@ std::string stringFormat(
     }
 }
 #pragma GCC diagnostic pop
+
+
+template <typename D=std::chrono::duration<double, std::ratio<1>>, typename C=std::chrono::steady_clock>
+class Counter
+{
+public:
+    using Clock = C;
+    using Duration = D;
+    using Rep = typename Duration::rep;
+    using Period = typename Duration::period;
+    using Tp = std::chrono::time_point<C,D>;
+private:
+    Tp begin_=std::chrono::time_point_cast<D>(Clock::now());
+    Tp abs_begin_=begin_;
+
+    Duration total_elapsed_{0}, last_elapsed_{0};
+public:
+    Counter() = default;
+    ~Counter() = default;
+
+    auto &start(Tp tp=std::chrono::time_point_cast<D>(Clock::now()))
+    {
+        begin_ = tp;
+        return *this;
+    }
+
+    void reset(Tp tp=std::chrono::time_point_cast<D>(Clock::now()))
+    {
+        begin_ = tp;
+        abs_begin_ = begin_;
+        total_elapsed_ = Duration::zero();
+    }
+
+    Duration elapse() const
+    {
+        return std::chrono::time_point_cast<D>(Clock::now()) - begin_;
+    }
+
+    auto elapsed()
+    {
+        last_elapsed_ = elapse();
+        total_elapsed_ += last_elapsed_;
+        return last_elapsed_;
+    }
+
+    const Tp &absBegin() const
+    {
+        return abs_begin_;
+    }
+
+    Duration lastElapsed() const
+    {
+        return last_elapsed_;
+    }
+
+    Duration totalElapsed() const
+    {
+        return total_elapsed_;
+    }
+
+    Duration absElapse() const
+    {
+        return std::chrono::time_point_cast<D>(Clock::now()) - abs_begin_;
+    }
+}; /// Counter
 
 template <class T>
 class Guard
@@ -446,69 +512,23 @@ inline StreamBuffer &StreamBuffer::operator<< <char>(const char *val)
     return *this;
 }
 
-template <typename D=std::chrono::duration<double, std::ratio<1>>, typename C=std::chrono::steady_clock>
-class Counter
+template <typename ...Args>
+std::vector<char> compress(const char *format, Args ... args)
 {
-public:
-    using Clock = C;
-    using Duration = D;
-    using Type = typename Duration::rep;
-    using Ratio = typename Duration::period;
-    using Tp = std::chrono::time_point<C,D>;
-private:
-    Tp begin_=std::chrono::time_point_cast<D>(Clock::now());
-    Tp abs_begin_=begin_;
+    std::vector<char> ret;
+    decompress(ret, args...);
+    return ret;
+}
 
-    Duration total_elapsed_{0}, last_elapsed_{0};
-public:
-    Counter() = default;
-    ~Counter() = default;
-
-    auto &start(Tp tp=std::chrono::time_point_cast<D>(Clock::now()))
+template <typename ...Args>
+std::string decompress(const std::vector<char> &buffer, Args... args)
+{
+    std::string ret;
+    if(!buffer.empty())
     {
-        begin_ = tp;
-        return *this;
-    }
 
-    void reset(Tp tp=std::chrono::time_point_cast<D>(Clock::now()))
-    {
-        begin_ = tp;
-        abs_begin_ = begin_;
-        total_elapsed_ = Duration::zero();
     }
-
-    Duration elapse() const
-    {
-        return std::chrono::time_point_cast<D>(Clock::now()) - begin_;
-    }
-
-    auto elapsed()
-    {
-        last_elapsed_ = elapse();
-        total_elapsed_ += last_elapsed_;
-        return last_elapsed_;
-    }
-
-    const Tp &absBegin() const
-    {
-        return abs_begin_;
-    }
-
-    Duration lastElapsed() const
-    {
-        return last_elapsed_;
-    }
-
-    Duration totalElapsed() const
-    {
-        return total_elapsed_;
-    }
-
-    Duration absElapse() const
-    {
-        return std::chrono::time_point_cast<D>(Clock::now()) - abs_begin_;
-    }
-}; /// Counter
-
+    return ret;
+}
 
 }} /// tll::util
