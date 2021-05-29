@@ -103,19 +103,24 @@ constexpr bool isPowerOf2(T val)
     return (val & (val - 1)) == 0;
 }
 
-template<typename T, std::size_t N, std::size_t... I>
-constexpr auto make_array_impl(T && value, std::index_sequence<I...>)
+/// https://stackoverflow.com/questions/57756557/initializing-a-stdarray-with-a-constant-value
+namespace detail
 {
-    return std::array<std::decay_t<T>, N> {
-            (static_cast<void>(I), std::forward<T>(value))..., 
-        };
+    template <typename T, std::size_t ... Is>
+    constexpr std::array<T, sizeof...(Is)>
+    create_array(T value, std::index_sequence<Is...>)
+    {
+        // cast Is to void to remove the warning: unused value
+        return {{(static_cast<void>(Is), value)...}};
+    }
 }
 
-template<std::size_t N, typename T>
-constexpr auto make_array(T && value)
+template <typename T, std::size_t N>
+constexpr std::array<T, N> create_array(const T& value)
 {
-    return make_array_impl<T, N>(std::forward<T>(value), std::make_index_sequence<N>{});
+    return detail::create_array(value, std::make_index_sequence<N>());
 }
+
 
 template <size_t end, typename T = std::size_t>
 constexpr T generate_ith_number(const std::size_t index) {
@@ -127,43 +132,28 @@ constexpr T generate_ith_number(const std::size_t index) {
     return end * (index - 1);
     // return end * pow(2, index - 2);
 }
-
 template <size_t end, std::size_t... Is> 
 constexpr auto make_sequence_impl(std::index_sequence<Is...>)
 {
     return std::index_sequence<generate_ith_number<end>(Is)...>{};
 }
-
 template <std::size_t N, size_t extended> 
 constexpr auto make_sequence()
 {
     return make_sequence_impl<N>(std::make_index_sequence<3 + extended>{});
 }
-
-template <std::size_t... Is>
-constexpr auto make_array_from_sequence_impl(std::index_sequence<Is...>)
-{
-    return std::array<std::size_t, sizeof...(Is)>{Is...};
-}
-
-template <typename Seq>
-constexpr auto make_array_from_sequence(Seq)
-{
-    return make_array_from_sequence_impl(Seq{});
-}
-
 template<class F, size_t... ints>
 constexpr void CallFuncInSeq(F f, std::integer_sequence<size_t, ints...>)
 {
     (f(std::integral_constant<size_t, ints>{}),...);
 }
-
 template<size_t end, size_t extended, class F>
 constexpr auto CallFuncInSeq(F f)
 {
     // return CallFuncInSeq<>(f, std::make_integer_sequence<size_t, end>{});
     return CallFuncInSeq<>(f, make_sequence<end, extended>());
 }
+
 
 inline std::thread::id tid()
 {
@@ -263,70 +253,51 @@ std::string stringFormat(
 #pragma GCC diagnostic pop
 
 
-template <size_t num_of_counters=1, typename D=std::chrono::duration<double, std::ratio<1>>, typename C=std::chrono::steady_clock>
+template <uint32_t num_of_counters=1, typename D=std::chrono::duration<double, std::ratio<1>>, typename C=std::chrono::steady_clock>
 class Counter
 {
 public:
     using Clock = C;
     using Duration = D;
-    using Rep = typename Duration::rep;
-    using Period = typename Duration::period;
+    using Type = typename Duration::rep;
+    using Ratio = typename Duration::period;
     using Tp = std::chrono::time_point<C,D>;
 private:
-    Tp begin_=std::chrono::time_point_cast<D>(Clock::now());
-    std::array<Tp, num_of_counters> begs_ = {begin_};
-    Tp abs_begin_=begin_;
-
-    Duration total_elapsed_{0}, last_elapsed_{0};
+    std::array<Tp, num_of_counters> begs_ = create_array<Tp, num_of_counters>(std::chrono::time_point_cast<D>(Clock::now()));
 public:
     Counter() = default;
     ~Counter() = default;
 
-    auto &start(Tp tp=std::chrono::time_point_cast<D>(Clock::now()))
+    void start(uint32_t id=-1, Tp tp=std::chrono::time_point_cast<D>(Clock::now()))
     {
-        begin_ = tp;
-        return *this;
+        if(id > begs_.size())
+            for (auto &cnter: begs_) cnter = tp;
+        else
+            begs_[id] = tp;
     }
 
-    void reset(Tp tp=std::chrono::time_point_cast<D>(Clock::now()))
+    void reset(uint32_t id=-1, Tp tp=std::chrono::time_point_cast<D>(Clock::now()))
     {
-        begin_ = tp;
-        abs_begin_ = begin_;
-        total_elapsed_ = Duration::zero();
+        if(id > begs_.size())
+            for (auto &cnter: begs_) cnter = tp;
+        else
+            begs_[id] = tp;
     }
 
-    Duration elapse() const
+    Duration elapse(uint32_t id=0) const
     {
-        return std::chrono::time_point_cast<D>(Clock::now()) - begin_;
+        if(id > begs_.size()) return Duration{-1};
+        return std::chrono::time_point_cast<D>(Clock::now()) - begs_[id];
     }
 
-    auto elapsed()
+    Duration elapsed(uint32_t id=0)
     {
-        last_elapsed_ = elapse();
-        total_elapsed_ += last_elapsed_;
-        return last_elapsed_;
-    }
-
-    const Tp &absBegin() const
-    {
-        return abs_begin_;
-    }
-
-    Duration lastElapsed() const
-    {
-        return last_elapsed_;
-    }
-
-    Duration totalElapsed() const
-    {
-        return total_elapsed_;
-    }
-
-    Duration absElapse() const
-    {
-        return std::chrono::time_point_cast<D>(Clock::now()) - abs_begin_;
+        auto ret = elapse(id);
+        start(id);
+        return ret;
     }
 }; /// Counter
+
 
 template <class T>
 class Guard

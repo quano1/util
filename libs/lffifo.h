@@ -21,7 +21,7 @@ using Callback = std::function<void(const T *o, size_t s)>;
 
 
 namespace internal {
-static thread_local tll::util::Counter<1, StatDuration, StatClock> counter;
+static thread_local tll::util::Counter<2, StatDuration, StatClock> counter;
 }
 
 struct Statistic {
@@ -170,31 +170,36 @@ private:
     void profTimerReset()
     {
         if(kProfiling)
-            internal::counter.reset();
-    }
-
-    void profTimerStart()
-    {
-        if(kProfiling)
-            internal::counter.start();
+            internal::counter.reset(-1);
     }
 
     size_t profTimerElapse(std::atomic<size_t> &atomic)
     {
         if(kProfiling) 
         {
-            size_t diff = internal::counter.elapse().count();
+            size_t diff = internal::counter.elapse(0).count();
             atomic.fetch_add(diff, std::memory_order_relaxed);
             return diff;
         }
         return 0;
     }
 
-    size_t profTimerAbsElapse(std::atomic<size_t> &atomic)
+    size_t profTimerElapsed(std::atomic<size_t> &atomic)
+    {
+        if(kProfiling) 
+        {
+            size_t diff = internal::counter.elapsed(0).count();
+            atomic.fetch_add(diff, std::memory_order_relaxed);
+            return diff;
+        }
+        return 0;
+    }
+
+    size_t profTimerTotal(std::atomic<size_t> &atomic)
     {
         if(kProfiling)
         {
-            size_t diff = internal::counter.absElapse().count();
+            size_t diff = internal::counter.elapse(1).count();
             atomic.fetch_add(diff, std::memory_order_relaxed);
             return diff;
         }
@@ -249,8 +254,7 @@ private:
         size_t time_cb{0}, time_try{0}, time_comp{0};
         profTimerReset();
         size_t next = kIsProducer ? tryPush(id, index, size) : tryPop(id, index, size);
-        time_try = profTimerElapse(marker.time_try);
-        profTimerStart();
+        time_try = profTimerElapsed(marker.time_try);
         if(size)
         {
             if(!kIsProducer)
@@ -274,19 +278,18 @@ private:
                 // LOGD("%ld", size);
             }
 
-            time_cb = profTimerElapse(marker.time_cb);
-            profTimerStart();
+            time_cb = profTimerElapsed(marker.time_cb);
 
             complete<kIsProducer>(id, index, next, size);
 
             time_comp = profTimerElapse(marker.time_comp);
-            profTimerAbsElapse(marker.time_total);
+            profTimerTotal(marker.time_total);
             profAdd(marker.total_size, size);
             updateMinMax(marker, time_cb, time_try, time_comp);
         }
         else
         {
-            profTimerAbsElapse(marker.time_total);
+            profTimerTotal(marker.time_total);
             profAdd(marker.error_count, 1);
         }
         profAdd(marker.try_count, 1);
