@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.16.2 FATAL_ERROR)
 project(tll_utilities VERSION 1.0.1 LANGUAGES CXX)
 
 # print to console
-message( STATUS "Building with system: " ${CMAKE_SYSTEM_NAME})
+message( STATUS "CMAKE_SYSTEM_NAME: " ${CMAKE_SYSTEM_NAME})
 # MESSAGE( STATUS "CC: " ${CMAKE_C_COMPILER})
 # MESSAGE( STATUS "CXX: " ${CMAKE_CXX_COMPILER})
 # message(STATUS "CC : ")
@@ -60,24 +60,24 @@ else()
     message(STATUS "Disabled OpenMP")
 endif()
 
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 
-# if(CMAKE_BUILD_TYPE STREQUAL "")
-#   set(CMAKE_BUILD_TYPE Debug)
-# endif()
+if(NOT (CMAKE_BUILD_TYPE STREQUAL "Debug"))
+  set(CMAKE_BUILD_TYPE Release)
+endif()
 
-# if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-#   # Debug
-#   set(CMAKE_C_FLAGS_DEBUG "-g -O0")
+message( STATUS "CMAKE_BUILD_TYPE: " ${CMAKE_BUILD_TYPE})
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(CMAKE_C_FLAGS_DEBUG "-g")
 #   add_definitions(
 #     -D__LLT_DEBUG__
 #   )
-# elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-#   # Release
-#   set(CMAKE_C_FLAGS_DEBUG "-O3")
-#   add_definitions(
-#   )
-# endif()
+else()
+    add_definitions(
+        -DNDEBUG
+    )
+endif()
 
 
 
@@ -98,8 +98,8 @@ include_directories(
     ${PRJ_ROOT}/libs
 )
 
-set( CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE} )
-set( CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE} )
+set( CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/out )
+set( CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/out )
 
 # set(PRJ_LINK_LIB
 #   $<$<STREQUAL:${CMAKE_SYSTEM_NAME},QNX>:socket>

@@ -129,27 +129,44 @@ TEST_F(LoggerTest, Log2)
     tll::util::Counter<> counter;
     double finish_log_time, total_log_time;
 
+    // {
+    //     ins.total_size = 0;
+    //     ins.start();
+    //     std::this_thread::sleep_for(std::chrono::nanoseconds(0));
+    //     // std::this_thread::yield();
+    //     // counter.start();
+    //     TLL_GLOGTF2(); /// tracer_138
+    //     for(int i=0;i<(int)1e5;i++)
+    //     {
+    //         TLL_GLOGTF2();
+    //         TLL_GLOGT2("haha");
+    //         TLL_GLOGD2("");
+    //         TLL_GLOGD2("%.9f", counter.elapse().count());
+    //         TLL_GLOGI2("%.9f", counter.elapse().count());
+    //         TLL_GLOGW2("%.9f", counter.elapse().count());
+    //         TLL_GLOGF2("%.9f", counter.elapse().count());
+    //     }
+    //     finish_log_time = tracer_138.counter.elapse().count();
+    //     // std::this_thread::sleep_for(std::chrono::seconds(10));
+    //     ins.stop();
+    //     total_log_time = tracer_138.counter.elapse().count();
+    //     LOGD("%ld\t%.9f\t%.9f", ins.total_count, finish_log_time, finish_log_time / ins.total_count);
+    //     LOGD("In:Out speed: %.3f / %.3f Mbs", ins.total_size / finish_log_time / 0x100000, ins.total_size / total_log_time / 0x100000);
+    // }
+
     {
         ins.total_size = 0;
-        ins.start();
+        ins.start2();
         std::this_thread::sleep_for(std::chrono::nanoseconds(0));
-        // std::this_thread::yield();
-        // counter.start();
-        TLL_GLOGTF2(); /// tracer_138
-        for(int i=0;i<(int)1e5;i++)
+        counter.start();
+        for(int i=0;i<(int)1e6;i++)
         {
-            TLL_GLOGTF2();
-            TLL_GLOGT2("haha");
-            TLL_GLOGD2("");
             TLL_GLOGD2("%.9f", counter.elapse().count());
-            TLL_GLOGI2("%.9f", counter.elapse().count());
-            TLL_GLOGW2("%.9f", counter.elapse().count());
-            TLL_GLOGF2("%.9f", counter.elapse().count());
         }
-        finish_log_time = tracer_138.counter.elapse().count();
+        finish_log_time = counter.elapse().count();
         // std::this_thread::sleep_for(std::chrono::seconds(10));
         ins.stop();
-        total_log_time = tracer_138.counter.elapse().count();
+        total_log_time = counter.elapse().count();
         LOGD("%ld\t%.9f\t%.9f", ins.total_count, finish_log_time, finish_log_time / ins.total_count);
         LOGD("In:Out speed: %.3f / %.3f Mbs", ins.total_size / finish_log_time / 0x100000, ins.total_size / total_log_time / 0x100000);
     }
@@ -158,11 +175,10 @@ TEST_F(LoggerTest, Log2)
         ins.total_size = 0;
         ins.start();
         std::this_thread::sleep_for(std::chrono::nanoseconds(0));
-        // std::this_thread::yield();
         counter.start();
         for(int i=0;i<(int)1e6;i++)
         {
-            TLL_GLOGTF2();
+            TLL_GLOGD("%.9f", counter.elapse().count());
         }
         finish_log_time = counter.elapse().count();
         // std::this_thread::sleep_for(std::chrono::seconds(10));

@@ -91,29 +91,105 @@ TEST_F(UtilTest, StreamBuffer)
     std::chrono::steady_clock::time_point now;
     std::vector<char> buffer(0x1000);
 
-    StreamBuffer sb(18);
-    sb << "help me please";
-    EXPECT_EQ(sb.size, strlen("help me please") + 4);
-    /// overflow, size should not change
-    sb << 1;
-    EXPECT_EQ(sb.size, 18);
+    // StreamBuffer sb(18);
+    // sb << "help me please";
+    // EXPECT_EQ(sb.size, strlen("help me please") + 4);
+    // /// overflow, size should not change
+    // sb << 1;
+    // EXPECT_EQ(sb.size, 18);
+
+    // counter.start();
+    // for(int i=0; i<(int)1e6; i++) {
+    //     // now = std::chrono::steady_clock::now();
+    //     StreamBuffer sb(buffer.data());
+    //     sb << (int8_t)1;
+    //     sb << (uint8_t)1;
+    //     sb << (uint16_t)1;
+    //     sb << (uint16_t)1;
+    //     sb << (uint32_t)1;
+    //     sb << (uint32_t)1;
+    //     sb << (uint64_t)1;
+    //     sb << (uint64_t)1;
+    //     sb << (double)1;
+    //     sb << (float)1;
+    //     // sb << "help me please";
+    // }
+    // LOGD("%.9f", counter.elapse().count());
+
 
     counter.start();
     for(int i=0; i<(int)1e6; i++) {
         // now = std::chrono::steady_clock::now();
-        StreamBuffer sb(buffer.data(), buffer.size());
-        sb << (int8_t)1;
-        sb << (uint8_t)1;
-        sb << (uint16_t)1;
-        sb << (uint16_t)1;
-        sb << (uint32_t)1;
-        sb << (uint32_t)1;
-        sb << (uint64_t)1;
-        sb << (uint64_t)1;
-        sb << (double)1;
-        sb << (float)1;
-        sb << "help me please";
+        StreamWrapper sw(buffer.data());
+        sw.writeArg((int8_t)1
+                    ,(uint8_t)1
+                    ,(uint16_t)1
+                    ,(uint16_t)1
+                    ,(uint32_t)1
+                    ,(uint32_t)1
+                    ,(uint64_t)1
+                    ,(uint64_t)1
+                    ,(double)1
+                    ,(float)1);
+                    // ,"help me please");
     }
-    LOGD("%.9f", counter.elapse().count() * 1e-6);
-    // LOGD("%ld", buffer.size());
+    LOGD("%.9f", counter.elapse().count());
+    
+    {
+        counter.start();
+        StreamWrapper sw(buffer.data());
+        for(int i=0; i<(int)1e6; i++) {
+            // now = std::chrono::steady_clock::now();
+            sw.reset(buffer.data());
+            sw.writeArg((int8_t)1
+                    ,(uint8_t)1
+                    ,(uint16_t)1
+                    ,(uint16_t)1
+                    ,(uint32_t)1
+                    ,(uint32_t)1
+                    ,(uint64_t)1
+                    ,(uint64_t)1
+                    ,(double)1
+                    ,(float)1);
+                        // ,"help me please");
+        }
+        LOGD("%.9f", counter.elapse().count());
+        LOGD("%ld", sw.size);
+    }
+
+    {
+        counter.start();
+        StreamWrapper sw(buffer.data());
+        for(int i=0; i<(int)1e6; i++) {
+            // now = std::chrono::steady_clock::now();
+            sw.reset(buffer.data());
+            sw.writeArg((int8_t)1);
+            sw.writeArg((uint8_t)2);
+            sw.writeArg((uint16_t)3);
+            sw.writeArg((uint16_t)4);
+            sw.writeArg((uint32_t)5);
+            sw.writeArg((uint32_t)6);
+            sw.writeArg((uint64_t)7);
+            sw.writeArg((uint64_t)8);
+            sw.writeArg((double)9);
+            sw.writeArg((float)10);
+                        // ,"help me please");
+        }
+        LOGD("%.9f", counter.elapse().count());
+        LOGD("%ld", sw.size);
+    }
+
+    counter.start();
+    for(int i=0; i<(int)1e6; i++)
+    {
+        foo(1,2,3,4,5,6,7,8,9,10);
+    }
+    LOGD("%.9f", counter.elapse().count());
+
+    counter.start();
+    for(int i=0; i<(int)1e6; i++)
+    {
+        foo(1);foo(2);foo(3);foo(4);foo(5);foo(6);foo(7);foo(8);foo(9);foo(10);
+    }
+    LOGD("%.9f", counter.elapse().count());
 }

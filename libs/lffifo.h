@@ -247,7 +247,7 @@ private:
 
 private:
     template <bool kIsProducer, typename F, typename ...Args>
-    size_t doFifing(const F &callback, size_t size, Args &&...args)
+    size_t doFifo(const F &callback, size_t size, Args &&...args)
     {
         auto &marker = kIsProducer ? producer_ : consumer_;
         size_t id, index;
@@ -294,7 +294,7 @@ private:
         }
         profAdd(marker.try_count, 1);
         return size;
-    } /// doFifing
+    } /// doFifo
 
     size_t tryPop(size_t &entry_id, size_t &cons_index_head, size_t &size)
     {
@@ -428,7 +428,7 @@ private:
                     /// prod leads
                     if(wrap(prod_next_index) >= wrap(cons_index))
                     {
-                        /// not enough space    ?
+                        /// not enough space ?
                         if(size > capacity() - wrap(prod_next_index))
                         {
                             if(size <= wrap(cons_index))
@@ -721,36 +721,40 @@ public:
 
     inline size_t push(const elem_t *ptr, size_t sz)
     {
-        return push_cb([ptr](elem_t *el, size_t sz){ std::memcpy(el, ptr, sz); }, sz);
+        static auto cb = [](elem_t *el, size_t sz, const elem_t *ptr){ std::memcpy(el, ptr, sz); };
+        return push_cb(cb, sz, ptr);
     }
 
     inline size_t pop(elem_t *ptr, size_t sz)
     {
-        return pop_cb([ptr](elem_t *el, size_t sz){ std::memcpy(ptr, el, sz); }, sz);
+        static auto cb = [](elem_t *el, size_t sz, elem_t *ptr){ std::memcpy(ptr, el, sz); };
+        return pop_cb(cb, sz, ptr);
     }
 
     template<typename U>
     inline size_t push(U &&val)
     {
-        return push_cb([&val](elem_t *el, size_t){ *el = std::forward<U>(val); }, 1);
+        static auto cb = [](elem_t *el, size_t, U &&val){ *el = std::forward<U>(val); };
+        return push_cb(cb, 1, std::forward<U>(val));
     }
 
     inline size_t pop(elem_t &val)
     {
-        return pop_cb([&val](elem_t *el, size_t){ val = std::move(*el); }, 1);
+        static auto cb = [](elem_t *el, size_t, elem_t &val){ val = std::move(*el); };
+        return pop_cb(cb, 1, val);
     }
 
 
     template <typename F, typename ...Args>
     size_t push_cb(const F &callback, size_t size, Args &&...args)
     {
-        return doFifing<true>(callback, size, std::forward<Args>(args)...);
+        return doFifo<true>(callback, size, std::forward<Args>(args)...);
     }
 
     template <typename F, typename ...Args>
     size_t pop_cb(const F &callback, size_t size, Args &&...args)
     {
-        return doFifing<false>(callback, size, std::forward<Args>(args)...);
+        return doFifo<false>(callback, size, std::forward<Args>(args)...);
     }
 
 /// utility functions

@@ -40,6 +40,10 @@ extern char *__progname;
 
 #define TLL_GLOG(severity, ...) TLL_LOG(&tll::log::Manager::instance(), severity, ##__VA_ARGS__)
 
+#define TLL_GLOGD(...) \
+    (&tll::log::Manager::instance())->log<Mode::kAsync>(tll::log::Severity::kDebug, \
+        __FILE__, __FUNCTION__, __LINE__, \
+        ##__VA_ARGS__)
 
 #define TLL_GLOGD2(...) TLL_GLOG((tll::log::Severity::kDebug), ##__VA_ARGS__)
 #define TLL_GLOGI2(...) TLL_GLOG((tll::log::Severity::kInfo), ##__VA_ARGS__)
@@ -132,9 +136,43 @@ private:
     std::atomic<bool> is_running_{false}, flush_request_{false};
     // lf::CCFIFO<Message> ccq_{0x1000};
     lf::ring_queue_ds<std::function<std::string()>> task_queue_{1000000};
-    lf::ring_buffer_mpsc<char> ring_buffer_{0x100000 * 16}; /// 16Mb
+    lf::ring_buffer_ds<char> ring_buffer_{0x100000 * 16}; /// 16Mb
 
-    std::unordered_map<std::string, Entity> ents_ = {{"file", Entity{
+    std::unordered_map<std::string, Entity> raw_ents_ = {{"file", Entity{
+                .name = "file",
+                [this](void *handle, bool flush_req, const char *buff, size_t size)
+                {
+                    if(handle == nullptr)
+                    {
+                        printf("%.*s", (int)size, buff);
+                    }
+                    else 
+                    {
+                        auto ofs = static_cast<std::ofstream*>(handle);
+                        ofs->write((const char *)buff, size);
+                        if(flush_req) ofs->flush();
+                    }
+                },
+                [this]()
+                {
+                    auto log_path =std::getenv("TLL_LOG_PATH");
+                    auto const &file = util::stringFormat("%s/%s.%d.tll", log_path ? log_path : TLL_DEFAULT_LOG_PATH, __progname, getpid());
+                    LOGD("%s", file.data());
+                    return static_cast<void*>(new std::ofstream(file, std::ios::out | std::ios::binary));
+                }, 
+                [this](void *&handle)
+                {
+                    if(handle)
+                    {
+                        // static_cast<std::ofstream*>(handle)->flush();
+                        // static_cast<std::ofstream*>(handle)->close();
+                        delete static_cast<std::ofstream*>(handle);
+                        handle = nullptr;
+                    }
+                }
+            }}};
+
+    std::unordered_map<std::string, Entity> pre_ents_ = {{"file", Entity{
                 .name = "file",
                 [this](void *handle, bool flush_req, const char *buff, size_t size)
                 {
@@ -160,8 +198,8 @@ private:
                 {
                     if(handle)
                     {
-                        static_cast<std::ofstream*>(handle)->flush();
-                        static_cast<std::ofstream*>(handle)->close();
+                        // static_cast<std::ofstream*>(handle)->flush();
+                        // static_cast<std::ofstream*>(handle)->close();
                         delete static_cast<std::ofstream*>(handle);
                         handle = nullptr;
                     }
@@ -177,7 +215,7 @@ public:
     Manager()
     {
         // start_(0);
-        start();
+        start2();
     }
 
     Manager(uint32_t queue_size) :
@@ -202,32 +240,46 @@ public:
     Manager(Manager&&) = delete;
     Manager& operator=(Manager&&) = delete;
 
-    template <Mode mode, typename... Args>
-    void log(Severity severity, const char *format, Args ...args)
+
+    template <Mode mode, size_t N, typename... Args>
+    void log(Severity severity, const char *file, const char *function, int line, const char (&format)[N], Args ...args)
     {
-        std::string payload = util::stringFormat("{%c}%s", kLogSeverityString[(int)severity], util::stringFormat(format, std::forward<Args>(args)...));
-
-        if(mode == Mode::kAsync && isRunning())
-        {
-            size_t ps = ring_buffer_.push_cb([](char *el, size_t sz, const std::string &msg) {
-                memcpy(el, msg.data(), sz);
-            }, payload.size(), payload);
-
-            assert(ps > 0);
-            pop_wait_.notify_all();
-        }
-        else
-        {
-            log_(payload);
-        }
+        // LOGD("%s", format);
+        log(0, args...);
     }
 
     template <typename... Args>
-    void log(Severity severity, const char *format, Args ...args)
+    void log(int id, Args ...args)
     {
-        // std::string payload = util::stringFormat(format, std::forward<Args>(args)...);
-        log<Mode::kAsync>(severity, format, args...);
+        static std::vector<char> payload(4096);
+        static util::StreamWrapper stream(nullptr);
+
+        stream.reset(payload.data());
+        stream.writeArg<>(args...);
+        if(isRunning())
+        {
+
+            while(ring_buffer_.push(payload.data(), stream.size) == 0) 
+            {
+                pop_wait_.notify_all();
+            }
+
+            pop_wait_.notify_all();
+            // LOGD("%ld", stream.size);
+        }
+        else
+        {
+            // std::string payload = util::stringFormat("{%c}%s", kLogSeverityString[(int)severity], util::stringFormat(format, std::forward<Args>(args)...));
+            log_<true>(payload);
+        }
     }
+
+    // template <typename... Args>
+    // void log(Severity severity, const char *format, Args ...args)
+    // {
+    //     // std::string payload = util::stringFormat(format, std::forward<Args>(args)...);
+    //     log<Mode::kAsync>(severity, format, args...);
+    // }
 
 
     template <Mode mode, typename... Args>
@@ -247,11 +299,12 @@ public:
                             util::stringFormat(format, (args)...));
                 };
             while(task_queue_.push( std::move(preprocess) ) == 0) pop_wait_.notify_all();
+            pop_wait_.notify_all();
             // assert(ps > 0);
         }
         else
         {
-            log_(util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
+            log_<false>(util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
                             kLogSeverityString[(int)severity],
                             util::timestamp(ts), tid, level,
                             util::stringFormat("{%s}{%s}{%d}", file, function, line), 
@@ -290,13 +343,13 @@ public:
     //     }
     // }
 
-    inline void start(size_t chunk_size = 0x400 * 16, uint32_t period_us=(uint32_t)1e6)
+    inline void start(uint32_t period_us=(uint32_t)1e6)
     {
         bool val = false;
         if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
             return;
 
-        for(auto &entry : ents_)
+        for(auto &entry : raw_ents_)
         {
             // entry.second.start();
             auto &ent = entry.second;
@@ -315,36 +368,93 @@ public:
                 std::ctime(&sys_time),
                 std::chrono::duration_cast< std::chrono::duration<double> >(std_now.time_since_epoch()).count(), 
                 std::chrono::duration_cast< std::chrono::duration<double> >(sys_now.time_since_epoch()).count());
-            log_(first_log);
+            log_<true>(first_log);
         }
 
-        start2(period_us);
+        start_(period_us);
     }
 
-    inline void start2(uint32_t period_us=(uint32_t)1e6)
+    inline void start_(uint32_t period_us=(uint32_t)1e6)
     {
-        // bool val = false;
-        // if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
-        //     return;
-
         broadcast_ = std::thread([this, period_us]()
         {
-            util::Counter<1, std::chrono::duration<uint32_t, std::micro>> counter_us;
-            uint32_t delta = 0;
+            size_t rs = 0;
 
             while(isRunning())
             {
-                size_t rs = 0;
-                counter_us.start();
-                if(delta < period_us && task_queue_.empty())
+                if(ring_buffer_.empty())
                 {
                     std::unique_lock<std::mutex> lock(mtx_);
-                    /// wait timeout
-                    bool wait_status = pop_wait_.wait_for(lock, std::chrono::microseconds(period_us - delta), 
-                        [this, &delta, &counter_us]
+                    bool wait_status = pop_wait_.wait_for(lock, std::chrono::microseconds(period_us), 
+                        [this]
                         {
-                            delta += counter_us.elapse().count();
-                            return !isRunning() || !task_queue_.empty();
+                            return !ring_buffer_.empty()
+                                    || !isRunning();
+                        });
+                }
+
+                while(!ring_buffer_.empty())
+                {
+                    rs = ring_buffer_.pop_cb([&](const char *el, size_t sz){ log_<true>(el, sz); }, -1);
+                }
+
+            } /// while(isRunning())
+
+            if(!ring_buffer_.empty())
+            {
+                rs = ring_buffer_.pop_cb([&](const char *el, size_t sz){ log_<true>(el, sz); }, -1);
+            };
+        });
+    }
+
+
+    inline void start2(uint32_t period_us=(uint32_t)1e6)
+    {
+        bool val = false;
+        if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
+            return;
+
+        for(auto &entry : pre_ents_)
+        {
+            // entry.second.start();
+            auto &ent = entry.second;
+            if(ent.handle == nullptr && ent.onStart)
+            {
+                ent.handle = ent.onStart();
+            }
+        }
+
+        {
+            /// send first log to notify time_since_epoch
+            auto sys_now = std::chrono::system_clock::now();
+            auto std_now = std::chrono::steady_clock::now();
+            auto sys_time = std::chrono::system_clock::to_time_t(sys_now);
+            auto first_log = util::stringFormat("%s{%.9f}{%.9f}\n", 
+                std::ctime(&sys_time),
+                std::chrono::duration_cast< std::chrono::duration<double> >(std_now.time_since_epoch()).count(), 
+                std::chrono::duration_cast< std::chrono::duration<double> >(sys_now.time_since_epoch()).count());
+            log_<false>(first_log);
+        }
+
+        start2_(period_us);
+    }
+
+    inline void start2_(uint32_t period_us=(uint32_t)1e6)
+    {
+        broadcast_ = std::thread([this, period_us]()
+        {
+            size_t rs = 0;
+
+            while(isRunning())
+            {
+                if(task_queue_.empty())
+                {
+                    std::unique_lock<std::mutex> lock(mtx_);
+                    bool wait_status = pop_wait_.wait_for(lock, std::chrono::microseconds(period_us), 
+                        [this]
+                        {
+                            return !task_queue_.empty()
+                                    || !isRunning();
                         });
                 }
 
@@ -352,73 +462,20 @@ public:
                 {
                     rs = task_queue_.pop_cb([this](std::function<std::string()> *el, size_t sz){
                         std::string payload = (*el)();
-                        this->log_(payload);
+                        this->log_<false>(payload);
                     }, 0x100);
                     total_count += rs;
-                    // LOGD("%ld", rs);
-                }
-
-                if(rs)
-                {
-                    delta = 0;
-                    counter_us.start();
-                }
-                else if(delta > period_us)
-                {
-                    delta -= period_us;
                 }
 
             } /// while(isRunning())
 
             if(!task_queue_.empty())
             {
-                size_t rs = task_queue_.pop_cb([this](std::function<std::string()> *el, size_t sz){
-                    total_count ++;
-                    this->log_((*el)());
+                rs = task_queue_.pop_cb([this](std::function<std::string()> *el, size_t sz){
+                    this->log_<false>((*el)());
                 }, -1);
-
                 total_count += rs;
             };
-        });
-    }
-
-
-    inline void start3(size_t chunk_size = 0x400 * 16, uint32_t period_us=(uint32_t)1e6)
-    {
-        // bool val = false;
-        // if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
-        //     return;
-
-        broadcast_ = std::thread([this, chunk_size, period_us]()
-        {
-            util::Counter<1, std::chrono::duration<uint32_t, std::micro>> counter_us;
-            uint32_t delta = 0;
-            while(isRunning())
-            {
-                delta += counter_us.elapse().count();
-                counter_us.start();
-                if(delta < period_us && ring_buffer_.size() < chunk_size)
-                {
-                    std::unique_lock<std::mutex> lock(mtx_);
-                    /// wait timeout
-                    bool wait_status = pop_wait_.wait_for(lock, std::chrono::milliseconds(period_us - delta), [this, chunk_size, &delta, &counter_us] {
-                        delta += counter_us.elapse().count();
-                        return !isRunning() || (this->ring_buffer_.size() >= chunk_size);
-                    });
-                }
-                if(delta >= period_us || ring_buffer_.size() >= chunk_size)
-                {
-                    delta -= period_us;
-                    size_t rs = ring_buffer_.pop_cb([&](const char *el, size_t sz){
-                        log_(el, sz);
-                    }, -1);
-                }
-            } /// while(isRunning())
-
-            if(!ring_buffer_.empty())
-            {
-                size_t rs = ring_buffer_.pop_cb([&](const char *el, size_t sz){ log_(el, sz); }, -1);
-            }
         });
     }
 
@@ -433,7 +490,14 @@ public:
         }
 
         if(broadcast_.joinable()) broadcast_.join();
-        for(auto &ent_entry : ents_)
+        for(auto &ent_entry : pre_ents_)
+        {
+            auto &ent = ent_entry.second;
+            if(ent.onStop)
+                ent.onStop(ent.handle);
+        }
+
+        for(auto &ent_entry : raw_ents_)
         {
             auto &ent = ent_entry.second;
             if(ent.onStop)
@@ -446,20 +510,22 @@ public:
         return is_running_.load(std::memory_order_relaxed);
     }
 
+    template <bool is_raw=false>
     void remove(const std::string &name)
     {
+        auto &ents_ = is_raw ? raw_ents_ : pre_ents_;
         auto it = ents_.find(name);
         if(it != ents_.end())
             ents_.erase(it);
     }
 
-    template < typename ... LogEnts>
+    template <bool is_raw=false, typename ... LogEnts>
     void add(LogEnts ...ents)
     {
         if(isRunning())
             return;
 
-        add_(ents...);
+        add_(is_raw, ents...);
     }
 
     static Manager &instance()
@@ -493,15 +559,18 @@ public:
 
 private:
 
-    inline void log_(const std::string &buff)
+    template <bool is_raw, typename C>
+    inline void log_(const C &buff)
     {
-        log_(buff.data(), buff.size());
+        log_<is_raw>(buff.data(), buff.size());
     }
 
+    template <bool is_raw>
     inline void log_(const char *buff, size_t size)
     {
         total_size += size;
         bool flush_request = flush_request_.exchange(false, std::memory_order_relaxed);
+        auto &ents_ = is_raw ? raw_ents_ : pre_ents_;
         for(auto &ent_entry : ents_)
         {
             auto &ent = ent_entry.second;
@@ -509,15 +578,18 @@ private:
         }
     }
 
-    template <typename ... LogEnts>
+    template <bool is_raw, typename ... LogEnts>
     void add_(Entity ent, LogEnts ...ents)
     {
+        auto &ents_ = is_raw ? raw_ents_ : pre_ents_;
         ents_[ent.name] = ent;
-        add_(ents...);
+        add_<is_raw>(ents...);
     }
 
+    template <bool is_raw>
     inline void add_(Entity ent)
     {
+        auto &ents_ = is_raw ? raw_ents_ : pre_ents_;
         ents_[ent.name] = ent;
     }
 };

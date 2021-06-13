@@ -414,69 +414,76 @@ enum class TypeId : uint16_t {
     kCharPtr,
 };
 
-struct StreamBuffer {
-    StreamBuffer(size_t capa=0x400) : capacity(capa) { internal_buff.resize(capa); }
-    StreamBuffer(char *ptr, size_t capa) : external_buff(ptr), capacity(capa) {}
+namespace internal {
+template <typename T> TypeId getId();
 
-    template <typename T>
-    TypeId getId();
+template <> inline TypeId getId<int8_t>() {return TypeId::kInt8;}
+template <> inline TypeId getId<uint8_t>() {return TypeId::kUint8;}
+template <> inline TypeId getId<int16_t>() {return TypeId::kInt16;}
+template <> inline TypeId getId<uint16_t>() {return TypeId::kUint16;}
+template <> inline TypeId getId<int32_t>() {return TypeId::kInt32;}
+template <> inline TypeId getId<uint32_t>() {return TypeId::kUint32;}
+template <> inline TypeId getId<int64_t>() {return TypeId::kInt64;}
+template <> inline TypeId getId<uint64_t>() {return TypeId::kUint64;}
+template <> inline TypeId getId<float>() {return TypeId::kFloat;}
+template <> inline TypeId getId<double>() {return TypeId::kDouble;}
+template <> inline TypeId getId<const char*>() {return TypeId::kCharPtr;}
+
+static constexpr uint8_t kIdSize = sizeof(TypeId);
+}
+
+struct StreamBuffer {
+    StreamBuffer(size_t capa=0x400) { internal_buff.reserve(capa); }
+    StreamBuffer(char *ptr) : external_buff(ptr) {}
+
+
     template <typename T>
     StreamBuffer &operator<< (const T *val);
 
     template <typename T>
     StreamBuffer &operator<< (T val)
     {
-        char *buffer_ptr = (external_buff != nullptr) ? (external_buff) : (!internal_buff.empty()) ? (internal_buff.data() + size) : nullptr;
-        size_t payload_size = kIdSize + sizeof(T);
-        if((size + payload_size) <= capacity)
+        char *buffer_ptr = (external_buff != nullptr) ? (external_buff) : (!internal_buff.capacity()) ? (internal_buff.data() + size) : nullptr;
+        size_t payload_size = internal::kIdSize + sizeof(T);
+        // if((size + payload_size) <= capacity)
         {
             size += payload_size;
+            if(internal_buff.capacity()) internal_buff.resize(size);
             if(buffer_ptr != nullptr)
             {
-                *(TypeId*)buffer_ptr = getId<T>(); /// primitive id
-                *(T*)(buffer_ptr + kIdSize) = val;
+                *(TypeId*)buffer_ptr = internal::getId<T>(); /// primitive id
+                *(T*)(buffer_ptr + internal::kIdSize) = val;
                 buffer_ptr += payload_size;
             }
         }
         return *this;
     }
 
-    static constexpr uint8_t kIdSize = sizeof(TypeId);
     char *external_buff=nullptr;
     size_t size=0;
-    size_t capacity=0;
+    // size_t capacity=0;
     std::vector<char> internal_buff;
 };
 
 
-template <> inline TypeId StreamBuffer::getId<int8_t>() {return TypeId::kInt8;}
-template <> inline TypeId StreamBuffer::getId<uint8_t>() {return TypeId::kUint8;}
-template <> inline TypeId StreamBuffer::getId<int16_t>() {return TypeId::kInt16;}
-template <> inline TypeId StreamBuffer::getId<uint16_t>() {return TypeId::kUint16;}
-template <> inline TypeId StreamBuffer::getId<int32_t>() {return TypeId::kInt32;}
-template <> inline TypeId StreamBuffer::getId<uint32_t>() {return TypeId::kUint32;}
-template <> inline TypeId StreamBuffer::getId<int64_t>() {return TypeId::kInt64;}
-template <> inline TypeId StreamBuffer::getId<uint64_t>() {return TypeId::kUint64;}
-template <> inline TypeId StreamBuffer::getId<float>() {return TypeId::kFloat;}
-template <> inline TypeId StreamBuffer::getId<double>() {return TypeId::kDouble;}
-template <> inline TypeId StreamBuffer::getId<const char*>() {return TypeId::kCharPtr;}
 
 template <>
 inline StreamBuffer &StreamBuffer::operator<< <char>(const char *val)
 {
-    char *buffer_ptr = (external_buff != nullptr) ? (external_buff) : (!internal_buff.empty()) ? (internal_buff.data() + size) : nullptr;
+    char *buffer_ptr = (external_buff != nullptr) ? (external_buff) : (!internal_buff.capacity()) ? (internal_buff.data() + size) : nullptr;
 
     auto str_len = strlen(val);
-    size_t payload_size = kIdSize + 2 + str_len;
-    if((size + payload_size) <= capacity)
+    size_t payload_size = internal::kIdSize + 2 + str_len;
+    // if((size + payload_size) <= capacity)
     {
         size += payload_size;
+        if(internal_buff.capacity()) internal_buff.resize(size);
         if(buffer_ptr != nullptr)
         {
-            *(TypeId*)buffer_ptr = getId<const char *>(); /// string id
-            buffer_ptr += kIdSize;
-            *(uint16_t*)(buffer_ptr+kIdSize) = str_len;
-            memcpy(buffer_ptr+kIdSize+2, val, str_len);
+            *(TypeId*)buffer_ptr = internal::getId<const char *>(); /// string id
+            buffer_ptr += internal::kIdSize;
+            *(uint16_t*)(buffer_ptr+internal::kIdSize) = str_len;
+            memcpy(buffer_ptr+internal::kIdSize+2, val, str_len);
             buffer_ptr += payload_size;
         }
     }
@@ -500,6 +507,64 @@ std::string decompress(const std::vector<char> &buffer, Args... args)
 
     }
     return ret;
+}
+
+
+// template <typename B>
+struct StreamWrapper {
+
+    StreamWrapper(char *buffer) : buffer_(buffer) {}
+
+    void reset(char *buffer) {buffer_ = buffer; size=0;}
+
+    template <bool check=false>
+    inline void writeArg() {/*return 0;*/}
+
+    template <bool check=false>
+    inline void writeArg (const char *val)
+    {
+        auto str_len = strlen(val);
+        size_t payload_size = internal::kIdSize + 2 + str_len;
+        size += payload_size;
+        if(check && buffer_ != nullptr)
+        {
+            *(TypeId*)buffer_ = internal::getId<const char *>(); /// string id
+            buffer_ += internal::kIdSize;
+            *(uint16_t*)(buffer_+internal::kIdSize) = str_len;
+            memcpy(buffer_+internal::kIdSize+2, val, str_len);
+            buffer_ += payload_size;
+        }
+    }
+
+    template <bool check=false, typename T, typename ... Args>
+    inline void writeArg(T val, Args ... args)
+    {
+        size_t payload_size = internal::kIdSize + sizeof(T);
+        size += payload_size;
+        if(check && buffer_ != nullptr)
+        {
+            *(TypeId*)buffer_ = internal::getId<T>(); /// primitive id
+            *(T*)(buffer_ + internal::kIdSize) = val;
+            buffer_ += payload_size;
+        }
+
+        writeArg<check>(args...);
+
+        // return size;
+    }
+
+    size_t size=0;
+    char *buffer_=nullptr;
+
+};
+
+inline void foo() {}
+static int sum_=0;
+template <typename T, typename ... Args>
+void foo(T t, Args ... args)
+{
+    sum_ += t;
+    foo(args...);
 }
 
 }} /// tll::util
