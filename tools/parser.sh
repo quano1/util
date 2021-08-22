@@ -122,13 +122,20 @@ function parse()
 
 }
 
-# total_size=`ls -l $1 | awk '{print $5}'`;
-block_=1024;
+# block_=1024;
 # skip_=0;
 # cnt_=1024;
 
+main() {
 # cnt_=1048576;
-(dd if=${1} iflag=skip_bytes,count_bytes,nonblock bs=1024 skip=${2} count=${3} 2> /tmp/null ) | sort -t "}" -k 2,2 -s | parse;
+
+total_size=`ls -l $1 | awk '{print $5}'`;
+block=4096
+# echo $total_size;
+count=$[$total_size/$block + 1]
+# echo $count;
+
+ (dd if=${1} iflag=skip_bytes,count_bytes,nonblock bs=${block} skip=0 count=${count} 2> /tmp/null ) | sort -t "}" -k 2,2 -s | parse;
 
     # ( ((sort_enabled)) && ( sort -t "}" -nsk 2,2 | parse ) || parse)
 
@@ -167,3 +174,6 @@ block_=1024;
 #     rm -f .run.log;
 # fi
 # parse $1 $block_ $skip_ $cnt_ >> run.log
+}
+
+main $*

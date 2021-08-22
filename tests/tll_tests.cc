@@ -12,6 +12,8 @@ int __attribute__((weak)) unittests(int argc, char **argv)
     return 0;
 }
 
+bool gVerbose = false, gPlotting = false;
+
 int main(int argc, char **argv)
 {
     cxxopts::Options options(argv[0]);
@@ -19,6 +21,8 @@ int main(int argc, char **argv)
     options.add_options()
         ("b,benchmark", "Run benchmark", cxxopts::value<bool>()->default_value("false"))
         ("u,unittests", "Run unit tests", cxxopts::value<bool>()->default_value("false"))
+        ("verbose", "Verbose mode", cxxopts::value<bool>()->default_value("false"))
+        ("plotting", "Enable Plotting", cxxopts::value<bool>()->default_value("false"))
         ("h,help", "Print help")
     ;
     options.allow_unrecognised_options();
@@ -31,6 +35,9 @@ int main(int argc, char **argv)
         std::cout << options.help() << std::endl;
         exit(0);
     }
+
+    gPlotting = result.count("plotting");
+    gVerbose = result.count("verbose");
 
     // bool debug = result["debug"].as<bool>();
     // std::string bar;

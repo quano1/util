@@ -67,6 +67,8 @@
 #define LOGD(format, ...) PRINTF("%.9f\t%s\t%s:%s:%d\t" format "\n", tll::util::timestamp(), tll::util::str_tidcpu().data(), tll::util::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__)
 #define LOGE(format, ...) PRINTF("(E)(%.9f)(%s)(%s:%s:%d)(" format ")(%s)\n", tll::util::timestamp(), tll::util::str_tidcpu().data(), tll::util::fileName(__FILE__).data(), __FUNCTION__, __LINE__, ##__VA_ARGS__, strerror(errno))
 
+extern bool gVerbose;
+#define LOGVB(...) do { if(gVerbose) LOGD(__VA_ARGS__); } while(0)
 
 #define LOGV(...)   LOGD("%s", VAR_STR(__VA_ARGS__).data())
 
@@ -194,7 +196,8 @@ inline std::string str_tidcpu()
 {
     using std::to_string;
     static std::atomic<int> __tidcpu__{0};
-    static const thread_local auto ret = to_string(__tidcpu__.fetch_add(1, std::memory_order_relaxed)) + "/" + to_string(sched_getcpu());
+    // static const thread_local auto ret = to_string(__tidcpu__.fetch_add(1, std::memory_order_relaxed)) + "/" + to_string(sched_getcpu());
+    static const thread_local auto ret = stringFormat("%02d:%02d", __tidcpu__.fetch_add(1, std::memory_order_relaxed), sched_getcpu());
     return ret;
 }
 

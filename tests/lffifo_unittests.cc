@@ -25,7 +25,7 @@ struct RingBufferTest : public ::testing::Test
         using namespace tll::lf;
         using elem_t = typename FIFO::elem_t;
         FIFO fifo;
-        UT_LOGD("[%ld] sizeof elem_t: %ld", loop, sizeof(elem_t));
+        LOGVB("[%ld] sizeof elem_t: %ld", loop, sizeof(elem_t));
         elem_t val = -1;
         size_t ret = -1;
         Callback<elem_t> do_nothing = [](const elem_t*, size_t){};
@@ -33,11 +33,11 @@ struct RingBufferTest : public ::testing::Test
         {
             for(int i=0; i<sz; i++) *(el+i) = val;
         };
-        UT_LOGD("reserve not power of 2");
+        LOGVB("reserve not power of 2");
         fifo.reserve(7, 0x400);
         ASSERT_EQ(fifo.capacity(), 8);
-        UT_LOGD("%s", fifo.dump().data());
-        UT_LOGD("simple push/pop: %ld", fifo.capacity()*loop);
+        LOGVB("%s", fifo.dump().data());
+        LOGVB("simple push/pop: %ld", fifo.capacity()*loop);
         for(size_t i=0; i < fifo.capacity()*loop; i++)
         {
             /// https://stackoverflow.com/questions/610245/where-and-why-do-i-have-to-put-the-template-and-typename-keywords
@@ -46,8 +46,8 @@ struct RingBufferTest : public ::testing::Test
             fifo.pop(val);
             EXPECT_EQ(val, (elem_t)i);
         }
-        UT_LOGD("%s", fifo.dump().data());
-        UT_LOGD("fill");
+        LOGVB("%s", fifo.dump().data());
+        LOGVB("fill");
         fifo.reset();
         std::vector<elem_t> buff(fifo.capacity(), 0);
         for(size_t i=0; i < fifo.capacity(); i++)
@@ -55,21 +55,21 @@ struct RingBufferTest : public ::testing::Test
 
         fifo.push(buff.data(), buff.size());
 
-        UT_LOGD("%s", fifo.dump().data());
-        UT_LOGD("overrun");
+        LOGVB("%s", fifo.dump().data());
+        LOGVB("overrun");
         EXPECT_FALSE(fifo.empty());
         ret = fifo.push((elem_t)val);
         EXPECT_EQ(ret, 0);
-        UT_LOGD("%s", fifo.dump().data());
-        UT_LOGD("pop all");
+        LOGVB("%s", fifo.dump().data());
+        LOGVB("pop all");
         ret = fifo.pop_cb(do_nothing, -1);
         EXPECT_EQ(ret, fifo.capacity());
-        UT_LOGD("%s", fifo.dump().data());
-        UT_LOGD("underrun");
+        LOGVB("%s", fifo.dump().data());
+        LOGVB("underrun");
         EXPECT_TRUE(fifo.empty());
         EXPECT_EQ(fifo.pop(val), 0);
-        UT_LOGD("%s", fifo.dump().data());
-        UT_LOGD("push/pop odd size");
+        LOGVB("%s", fifo.dump().data());
+        LOGVB("push/pop odd size");
         fifo.reset();
         constexpr size_t kPushSize = 3;
         for(size_t i=0; i < fifo.capacity()*loop; i++)
@@ -88,7 +88,7 @@ struct RingBufferTest : public ::testing::Test
             EXPECT_EQ(memcmp(outbuff.data(), buff.data(), kPushSize), 0);
             EXPECT_EQ(ret, kPushSize);
         }
-        UT_LOGD("%s", fifo.dump().data());
+        LOGVB("%s", fifo.dump().data());
     }
 
     template <typename FIFO>
@@ -183,16 +183,16 @@ struct RingQueueTest : public ::testing::Test
         using namespace tll::lf;
         using elem_t = typename FIFO::elem_t;
         FIFO fifo;
-        UT_LOGD("[%ld] sizeof elem_t: %ld", loop, sizeof(elem_t));
+        LOGVB("[%ld] sizeof elem_t: %ld", loop, sizeof(elem_t));
         elem_t val = -1;
         size_t ret = -1;
         tll::lf::Callback<elem_t> do_nothing = [&fifo](const elem_t*, size_t){};
 
-        UT_LOGD("reserve not power of 2");
+        LOGVB("reserve not power of 2");
         fifo.reserve(7, 0x400);
         ASSERT_EQ(fifo.capacity(), 8);
-        UT_LOGD("%s", fifo.dump().data());
-        UT_LOGD("simple push/pop: %ld", fifo.capacity()*loop);
+        LOGVB("%s", fifo.dump().data());
+        LOGVB("simple push/pop: %ld", fifo.capacity()*loop);
         for(size_t i=0; i < fifo.capacity()*loop; i++)
         {
             /// https://stackoverflow.com/questions/610245/where-and-why-do-i-have-to-put-the-template-and-typename-keywords
@@ -201,29 +201,29 @@ struct RingQueueTest : public ::testing::Test
             fifo.pop(val);
             EXPECT_EQ(val, (elem_t)i);
         }
-        UT_LOGD("%s", fifo.dump().data());
-        UT_LOGD("fill");
+        LOGVB("%s", fifo.dump().data());
+        LOGVB("fill");
         fifo.reset();
         for(size_t i=0; i < fifo.capacity(); i++)
         {
             fifo.push((elem_t)i);
         }
-        UT_LOGD("%s", fifo.dump().data());
-        UT_LOGD("overrun");
+        LOGVB("%s", fifo.dump().data());
+        LOGVB("overrun");
         EXPECT_FALSE(fifo.empty());
         ret = fifo.push((elem_t)val);
         EXPECT_EQ(ret, 0);
-        UT_LOGD("%s", fifo.dump().data());
-        UT_LOGD("pop all");
+        LOGVB("%s", fifo.dump().data());
+        LOGVB("pop all");
         ret = fifo.pop_cb(do_nothing, -1);
         EXPECT_EQ(ret, fifo.capacity());
-        UT_LOGD("%s", fifo.dump().data());
-        UT_LOGD("underrun");
+        LOGVB("%s", fifo.dump().data());
+        LOGVB("underrun");
         EXPECT_TRUE(fifo.empty());
         EXPECT_EQ(fifo.pop(val), 0);
-        UT_LOGD("%s", fifo.dump().data());
+        LOGVB("%s", fifo.dump().data());
 
-        UT_LOGD("push/pop odd size");
+        LOGVB("push/pop odd size");
         fifo.reset();
         constexpr size_t kPushSize = 3;
         auto pushCb = [](elem_t *el, size_t el_left, elem_t val)
@@ -240,7 +240,7 @@ struct RingQueueTest : public ::testing::Test
             }, -1);
             EXPECT_EQ(ret, kPushSize);
         }
-        UT_LOGD("%s", fifo.dump().data());
+        LOGVB("%s", fifo.dump().data());
     }
 
     template <typename FIFO>
@@ -367,6 +367,7 @@ struct RingBufferConcurrentTest : public ::testing::Test
                 if(!(kTid & 1)) /// Prod
                 {
                     // LOGD("Producer: %s", tll::util::str_tidcpu().data());
+                    LOGVB("Producer: %s", tll::util::str_tidcpu().data());
                     char i=0;
                     for(;total_push_size.load(std::memory_order_relaxed) < (kTotalWriteSize);)
                     {
@@ -392,6 +393,7 @@ struct RingBufferConcurrentTest : public ::testing::Test
                 else /// Cons
                 {
                     // LOGD("Consumer: %s", tll::util::str_tidcpu().data());
+                    LOGVB("Consumer: %s", tll::util::str_tidcpu().data());
                     size_t pop_size=0;
                     for(;prod_completed.load(std::memory_order_relaxed) < index_seq.value /*- (thread_num + 1) / 2*/
                         || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
@@ -418,16 +420,15 @@ struct RingBufferConcurrentTest : public ::testing::Test
                         // std::this_thread::sleep_for(std::chrono::nanoseconds(0));
                     }
                 }
-                // LOGD("%d Done", kTid);
-                // LOGD("%s", fifo.dump().data());
+                LOGVB("  - Done: %s", tll::util::str_tidcpu().data());
             }
             double tt_time = counter.elapse().count();
             auto ttps = total_push_size.load(std::memory_order_relaxed);
-#define DUMP
-#ifdef DUMP
-            fifo.dumpStat(tt_time);
-            LOGD("Total time: %f (s)", tt_time);
-#endif
+            if(gVerbose)
+            {
+                fifo.dumpStat(tt_time);
+                LOGVB("Total time: %f (s)", tt_time);
+            }
             LOGD("%ld:%ld\t%s", total_pop_size.load(), kStoreSize, fifo.dump().data());
             ASSERT_GE(ttps, (kTotalWriteSize));
             ASSERT_LE(ttps, kStoreSize);

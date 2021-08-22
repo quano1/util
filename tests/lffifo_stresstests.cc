@@ -153,17 +153,17 @@ struct LFFIFOStressTest : public ::testing::Test
             return ret;
         };
 
-        size_t rts_push = tll::test::fifing<num_of_threads>(do_push, nullptr, [](int tid){return true;}, resting, [&]{LOGD("%s",fifo.dump().data());}, total_write_size, time_lst, total_count_lst).first;
+        size_t rts_push = tll::test::fifing<num_of_threads>(do_push, nullptr, [](int tid){return true;}, resting, [&]{LOGVB("%s",fifo.dump().data());}, total_write_size, time_lst, total_count_lst).first;
         if(fifo.isProfilingEnabled())
         {
             auto stats = fifo.statistics();
             fifo.dumpStat(time_lst.back() * num_of_threads, 1);
-            // LOGD("%ld\t%s", rts_push, fifo.dump().data());
+            // LOGVB("%ld\t%s", rts_push, fifo.dump().data());
         }
         /// push >= kTotalWriteSize
         ASSERT_GE(rts_push, total_write_size);
 
-        size_t rts_pop = tll::test::fifing<num_of_threads>(nullptr, do_pop, [](int tid){return false;}, resting, [&]{LOGD("%s",fifo.dump().data());}, rts_push, time_lst, total_count_lst).second;
+        size_t rts_pop = tll::test::fifing<num_of_threads>(nullptr, do_pop, [](int tid){return false;}, resting, [&]{LOGVB("%s",fifo.dump().data());}, rts_push, time_lst, total_count_lst).second;
         if(fifo.isProfilingEnabled())
         {
             auto stats = fifo.statistics();
@@ -226,7 +226,7 @@ struct LFFIFOStressTest : public ::testing::Test
             return ret;
         };
 
-        auto rtt_size = tll::test::fifing<num_of_threads * 2>(do_push, do_pop_while_doing_push, [](int tid){ return (tid&1);}, resting, [&]{LOGD("%s",fifo.dump().data());}, total_write_size, time_lst, total_count_lst);
+        auto rtt_size = tll::test::fifing<num_of_threads * 2>(do_push, do_pop_while_doing_push, [](int tid){ return (tid&1);}, resting, [&]{LOGVB("%s",fifo.dump().data());}, total_write_size, time_lst, total_count_lst);
         size_t rts_push = rtt_size.first;
         size_t rts_pop = rtt_size.second;
 

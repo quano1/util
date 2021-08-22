@@ -19,7 +19,7 @@
 
 #include <omp.h>
 #include <tll.h>
-
+extern bool gPlotting;
 #define NOP_LOOP() for(int i__=0; i__<0x100; i__++) __asm__("nop")
 namespace tll::test {
 
@@ -62,7 +62,7 @@ std::pair<size_t, size_t> fifing(
         size_t lc_tt_size = 0;
         if(is_prod(kTid)) /// Producer
         {
-            // LOGD("Producer: %d, cpu: %d", kTid, sched_getcpu());
+            LOGVB("Producer: %s", tll::util::str_tidcpu().data());
             running_prod.fetch_add(1);
             for(;tt_push_size.load(std::memory_order_relaxed) < (max_val);)
             {
@@ -84,7 +84,7 @@ std::pair<size_t, size_t> fifing(
         }
         else /// Consumer
         {
-            // LOGD("Consumer: %s, cpu: %d", tll::util::str_tid().data(), sched_getcpu());
+            LOGVB("Consumer: %s", tll::util::str_tidcpu().data());
             for(;
                 running_prod.load(std::memory_order_relaxed) > 0
                 || (tt_pop_count.load(std::memory_order_relaxed) < tt_push_count.load(std::memory_order_relaxed))
@@ -106,7 +106,7 @@ std::pair<size_t, size_t> fifing(
             }
             // LOGD("Cons Done");
         }
-
+        LOGVB("  - Done: %s", tll::util::str_tidcpu().data());
     }
     double tt_time = counter.elapsed().count();
     if(do_push)
@@ -136,6 +136,7 @@ void plot_data(const std::string &file_name, const std::string &title, const std
                 const std::vector<int> &x_axes,
                 const std::vector<T> &data)
 {
+    if(!gPlotting) return;
     std::ofstream ofs{file_name, std::ios::out | std::ios::binary};
     assert(ofs.is_open());
     // assert(x_axes.size() == column_lst.size());
