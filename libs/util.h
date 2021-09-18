@@ -207,11 +207,11 @@ inline std::string str_tid_nice()
     return ret;
 }
 
-static const auto begin_ = std::chrono::steady_clock::now();
 
 template <typename Dur=std::chrono::duration<double, std::ratio<1>>, typename Clk=std::chrono::steady_clock>
-typename Dur::rep timestamp(const typename Clk::time_point &t = Clk::now())
+auto timestamp(const typename Clk::time_point &t = Clk::now())
 {
+    static const auto begin_ = std::chrono::steady_clock::now();
     return std::chrono::duration_cast< Dur >( (t - begin_) ).count();
 }
 

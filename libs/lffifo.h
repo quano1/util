@@ -493,8 +493,8 @@ private:
     void complete(size_t exit_id, size_t curr_index, size_t next_index, size_t size)
     {
         auto &marker = kIsProducer ? producer_ : consumer_;
-        constexpr Mode mode = kIsProducer ? kProdMode : kConsMode;
-        if(mode == mode::dense)
+        constexpr Mode kMode = kIsProducer ? kProdMode : kConsMode;
+        if constexpr (kMode == mode::dense)
         {
             while(exit_id >= (marker.get_exit_id() + num_threads_)){};
             size_t const kIdx = exit_id;
@@ -589,7 +589,7 @@ public:
     // template <uint8_t type = 3>
     inline void dumpStat(double real_total_time, int type=3, bool title=true) const
     {
-        if(!kProfiling) return;
+        if constexpr (!kProfiling) return;
         using namespace std::chrono;
         if(title) printf("        count(K) |err(%%) | miss(%%)tr:co|try(%%) |comp(%%)| cb(%%) | all(%%)| Mbs    | cb try comp (min:max:avg) (nano sec)\n");
         auto stats = statistics();
@@ -816,7 +816,7 @@ public:
         return buffer_[wrap(id)];
     }
 
-    inline bool isProfilingEnabled() const
+    inline constexpr bool isProfilingEnabled() const
     {
         return kProfiling;
     }

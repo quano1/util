@@ -27,7 +27,7 @@ clean:
 
 distclean:
 	@echo make $@;
-	$(RM) -rf $(BUILD_FOLDER);
+	$(RM) -rf $(BUILD_FOLDER) *.log;
 
 
 .PHONY: .first all tests clean distclean

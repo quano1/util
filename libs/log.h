@@ -57,7 +57,8 @@ extern char *__progname;
 
 
 #define TLL_LOG3(plog, severity, fmt, ...) \
-    do { \
+    do \
+    { \
         static const StaticLogInfo sInfo = { \
             .format = fmt, \
             .file = __FILE__, \
@@ -65,7 +66,7 @@ extern char *__progname;
             .severity = severity, \
             .line = __LINE__, \
         }; \
-        (plog)->log3<Mode::kAsync>(sInfo, \
+        (plog)->log3<Mode::kAsync>(id, \
                                 ##__VA_ARGS__); \
     } while(0)
 
@@ -332,30 +333,35 @@ public:
     }
 
     template <Mode mode, typename... Args>
-    void log3(const StaticLogInfo &info, Args ...args)
+    void log3(const char *info_data, Args ...args)
     {
-        const auto ts = std::chrono::steady_clock::now();
+        const auto ts = util::timestamp();
         const int tid = tll::util::tid_nice();
         const int level = tll::log::context::level;
-        // static util::StreamBuffer sb;
+        static thread_local std::vector<char> log_buffer(0x1000);
+        thread_local util::StreamBuffer sb(log_buffer.data(), log_buffer.size());
+
         if(mode == Mode::kAsync && isRunning())
         {
+            sb << info_data << ts << tid << level << (... << args);
+            // (sb << args)...;
             // std::string payload = util::stringFormat("{%c}%s", kLogSeverityString[(int)severity], util::stringFormat(format, std::forward<Args>(args)...));
             // util::StreamBuffer sb;
             // size_t ps = ring_buffer_.push_cb([](char *el, size_t sz, const std::string &msg) {
-            //     memcpy(el, msg.data(), sz);
-            // }, payload.size(), payload);
+                // memcpy(el, msg.data(), sz);
+            // }, sb.size(), sb);
+            size_t ps = ring_buffer_.push(log_buffer.data(), sb.size);
 
-            // assert(ps > 0);
-            // pop_wait_.notify_all();
+            assert(ps > 0);
+            pop_wait_.notify_all();
         }
         else
         {
-            log_(util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
-                            kLogSeverityString[(int)info.severity],
-                            util::timestamp(ts), tid, level,
-                            util::stringFormat("{%s}{%s}{%d}", info.file, info.func, info.line), 
-                            util::stringFormat(info.format, (args)...)));
+            // log_(util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
+            //                 kLogSeverityString[(int)info.severity],
+            //                 ts, tid, level,
+            //                 util::stringFormat("{%s}{%s}{%d}", info.file, info.func, info.line), 
+            //                 util::stringFormat(info.format, (args)...)));
         }
     }
 
