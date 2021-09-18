@@ -37,5 +37,6 @@
 *.debug
 
 
-.build
+.build-*
 *.zip
+*.ptl

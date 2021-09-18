@@ -55,6 +55,23 @@ extern char *__progname;
 
 #define TLL_GLOGTF2()   TLL_GLOGT2(__FUNCTION__)
 
+
+#define TLL_LOG3(plog, severity, fmt, ...) \
+    do { \
+        static const StaticLogInfo sInfo = { \
+            .format = fmt, \
+            .file = __FILE__, \
+            .func = __FUNCTION__, \
+            .severity = severity, \
+            .line = __LINE__, \
+        }; \
+        (plog)->log3<Mode::kAsync>(sInfo, \
+                                ##__VA_ARGS__); \
+    } while(0)
+
+#define TLL_GLOG3(severity, fmt, ...) TLL_LOG(&tll::log::Manager::instance(), severity, fmt, ##__VA_ARGS__)
+#define TLL_GLOGD3(...) TLL_GLOG((tll::log::Severity::kDebug), ##__VA_ARGS__)
+
     // tll::log::Tracer COMBINE(tracer__, __LINE__)(__FUNCTION__, \
     // std::bind(&tll::log::Manager::log2<Mode::kAsync, Tracer *, const std::string &, double>, &tll::log::Manager::instance(), (tll::log::Severity::kTrace), __FILE__, __FUNCTION__, __LINE__, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4))
 
@@ -121,14 +138,14 @@ public:
 
 struct StaticLogInfo
 {
-    int severity=0;
-    std::string format;
-    std::string file;
-    std::string function;
-    int line=0;
+    const char *format;
+    const char *file;
+    const char *func;
+    const int severity;
+    const int line;
 }; /// StaticLogInfo
 
-class Manager
+class Manager : public util::SingletonBase<Manager>
 {
 public:
     size_t total_size = 0, total_count = 0;
@@ -291,16 +308,16 @@ public:
 
         if(mode == Mode::kAsync && isRunning())
         {
-            auto preprocess = [=]() -> std::string {
+            auto preformat = [=]() -> std::string {
                     return util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
                             kLogSeverityString[(int)severity],
                             util::timestamp(ts), tid, level,
                             util::stringFormat("{%s}{%s}{%d}", file, function, line),
                             util::stringFormat(format, (args)...));
                 };
-            while(task_queue_.push( std::move(preprocess) ) == 0) pop_wait_.notify_all();
-            pop_wait_.notify_all();
+            while(task_queue_.push( std::move(preformat) ) == 0) pop_wait_.notify_all();
             // assert(ps > 0);
+            pop_wait_.notify_all();
         }
         else
         {
@@ -311,37 +328,36 @@ public:
                             util::stringFormat(format, (args)...)));
         }
 
-        pop_wait_.notify_all();
+        // pop_wait_.notify_all();
     }
 
-    // template <Mode mode, typename... Args>
-    // void log3(const StaticLogInfo &info, Args ...args)
-    // {
-    //     const auto timestamp = std::chrono::steady_clock::now();
-    //     const int tid = tll::util::tid_nice();
-    //     const int level = tll::log::context::level;
+    template <Mode mode, typename... Args>
+    void log3(const StaticLogInfo &info, Args ...args)
+    {
+        const auto ts = std::chrono::steady_clock::now();
+        const int tid = tll::util::tid_nice();
+        const int level = tll::log::context::level;
+        // static util::StreamBuffer sb;
+        if(mode == Mode::kAsync && isRunning())
+        {
+            // std::string payload = util::stringFormat("{%c}%s", kLogSeverityString[(int)severity], util::stringFormat(format, std::forward<Args>(args)...));
+            // util::StreamBuffer sb;
+            // size_t ps = ring_buffer_.push_cb([](char *el, size_t sz, const std::string &msg) {
+            //     memcpy(el, msg.data(), sz);
+            // }, payload.size(), payload);
 
-    //     if(mode == Mode::kAsync && isRunning())
-    //     {
-    //         auto preprocess = [=, &info]() -> std::string {
-    //                 return util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
-    //                         kLogSeverityString[(int)info.severity],
-    //                         util::timestamp(timestamp), tid, level,
-    //                         util::stringFormat("{%s}{%s}{%d}", info.file, info.function, info.line),
-    //                         util::stringFormat(info.format.data(), (args)...));
-    //             };
-    //         while(task_queue_.push( std::move(preprocess) ) == 0);
-    //         // assert(ps > 0);
-    //     }
-    //     else
-    //     {
-    //         log_(util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
-    //                         kLogSeverityString[(int)info.severity],
-    //                         util::timestamp(timestamp), tid, level,
-    //                         util::stringFormat("{%s}{%s}{%d}", info.file, info.function, info.line), 
-    //                         util::stringFormat(info.format.data(), (args)...)));
-    //     }
-    // }
+            // assert(ps > 0);
+            // pop_wait_.notify_all();
+        }
+        else
+        {
+            log_(util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
+                            kLogSeverityString[(int)info.severity],
+                            util::timestamp(ts), tid, level,
+                            util::stringFormat("{%s}{%s}{%d}", info.file, info.func, info.line), 
+                            util::stringFormat(info.format, (args)...)));
+        }
+    }
 
     inline void start(uint32_t period_us=(uint32_t)1e6)
     {
@@ -526,28 +542,6 @@ public:
             return;
 
         add_(is_raw, ents...);
-    }
-
-    static Manager &instance()
-    {
-        static std::atomic<Manager*> singleton{nullptr};
-        static std::atomic<bool> init{false};
-        bool tmp = false;
-        auto obj = singleton.load(std::memory_order_acquire);
-
-        if (obj)
-            return *obj;
-
-        if(!init.compare_exchange_strong(tmp, true))
-        {
-            while(!singleton.load(std::memory_order_relaxed)){}
-        }
-        else
-        {
-            singleton.store(new Manager{}, std::memory_order_release);
-        }
-
-        return *singleton.load(std::memory_order_acquire);
     }
 
     /// wait for ring_queue is empty

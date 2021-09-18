@@ -234,11 +234,9 @@ std::string stringFormat(
     const char *format,
     Args const & ... args)
 {
-    constexpr size_t kLogSize = 0x1000;
-    constexpr size_t kArgSize = sizeof...(Args);
-
-    if(kArgSize)
+    if constexpr (sizeof...(Args))
     {
+        constexpr size_t kLogSize = 0x1000;
         std::string buffer;
         buffer.resize(kLogSize);
         int len = snprintf(&buffer[0],
@@ -323,15 +321,15 @@ private:
 }; /// Guard pointer
 
 template <class T>
-struct SingletonT
+struct SingletonBase
 {
 static T &instance()
 {
     static std::atomic<T*> singleton{nullptr};
     static std::atomic<bool> init{false};
 
-    if (singleton.load(std::memory_order_relaxed))
-        return *singleton.load(std::memory_order_relaxed);
+    if (auto obj = singleton.load(std::memory_order_acquire); obj != nullptr)
+        return *obj;
 
     if(init.exchange(true))
     {
@@ -441,6 +439,8 @@ struct StreamBuffer {
 
 
     template <typename T>
+    constexpr TypeId getId();
+    template <typename T>
     StreamBuffer &operator<< (const T *val);
 
     template <typename T>
@@ -469,6 +469,17 @@ struct StreamBuffer {
 };
 
 
+template <> inline constexpr TypeId StreamBuffer::getId<int8_t>() {return TypeId::kInt8;}
+template <> inline constexpr TypeId StreamBuffer::getId<uint8_t>() {return TypeId::kUint8;}
+template <> inline constexpr TypeId StreamBuffer::getId<int16_t>() {return TypeId::kInt16;}
+template <> inline constexpr TypeId StreamBuffer::getId<uint16_t>() {return TypeId::kUint16;}
+template <> inline constexpr TypeId StreamBuffer::getId<int32_t>() {return TypeId::kInt32;}
+template <> inline constexpr TypeId StreamBuffer::getId<uint32_t>() {return TypeId::kUint32;}
+template <> inline constexpr TypeId StreamBuffer::getId<int64_t>() {return TypeId::kInt64;}
+template <> inline constexpr TypeId StreamBuffer::getId<uint64_t>() {return TypeId::kUint64;}
+template <> inline constexpr TypeId StreamBuffer::getId<float>() {return TypeId::kFloat;}
+template <> inline constexpr TypeId StreamBuffer::getId<double>() {return TypeId::kDouble;}
+template <> inline constexpr TypeId StreamBuffer::getId<const char*>() {return TypeId::kCharPtr;}
 
 template <>
 inline StreamBuffer &StreamBuffer::operator<< <char>(const char *val)
@@ -493,24 +504,24 @@ inline StreamBuffer &StreamBuffer::operator<< <char>(const char *val)
     return *this;
 }
 
-template <typename ...Args>
-std::vector<char> compress(const char *format, Args ... args)
-{
-    std::vector<char> ret;
-    decompress(ret, args...);
-    return ret;
-}
+// template <typename ...Args>
+// std::vector<char> compress(const char *format, Args ... args)
+// {
+//     std::vector<char> ret;
+//     decompress(ret, args...);
+//     return ret;
+// }
 
-template <typename ...Args>
-std::string decompress(const std::vector<char> &buffer, Args... args)
-{
-    std::string ret;
-    if(!buffer.empty())
-    {
+// template <typename ...Args>
+// std::string decompress(const std::vector<char> &buffer, Args... args)
+// {
+//     std::string ret;
+//     if(!buffer.empty())
+//     {
 
-    }
-    return ret;
-}
+//     }
+//     return ret;
+// }
 
 
 // template <typename B>

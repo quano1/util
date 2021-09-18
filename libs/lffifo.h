@@ -169,13 +169,13 @@ private:
 
     void profTimerReset()
     {
-        if(kProfiling)
+        if constexpr (kProfiling)
             internal::counter.reset(-1);
     }
 
     size_t profTimerElapse(std::atomic<size_t> &atomic)
     {
-        if(kProfiling) 
+        if constexpr (kProfiling) 
         {
             size_t diff = internal::counter.elapse(0).count();
             atomic.fetch_add(diff, std::memory_order_relaxed);
@@ -186,7 +186,7 @@ private:
 
     size_t profTimerElapsed(std::atomic<size_t> &atomic)
     {
-        if(kProfiling) 
+        if constexpr (kProfiling) 
         {
             size_t diff = internal::counter.elapsed(0).count();
             atomic.fetch_add(diff, std::memory_order_relaxed);
@@ -197,7 +197,7 @@ private:
 
     size_t profTimerTotal(std::atomic<size_t> &atomic)
     {
-        if(kProfiling)
+        if constexpr (kProfiling)
         {
             size_t diff = internal::counter.elapse(1).count();
             atomic.fetch_add(diff, std::memory_order_relaxed);
@@ -209,14 +209,14 @@ private:
     template <typename U>
     size_t profAdd(std::atomic<size_t> &atomic, const U &val)
     {
-        if(kProfiling)
+        if constexpr (kProfiling)
             return atomic.fetch_add(val, std::memory_order_relaxed);
         return 0;
     }
 
     inline void updateMinMax(Marker &mk, size_t time_cb, size_t time_try, size_t time_comp)
     {
-        if(kProfiling)
+        if constexpr (kProfiling)
         {
             size_t time_min_cb = mk.time_min_cb.load(std::memory_order_relaxed);
             while(time_min_cb > time_cb) mk.time_min_cb.compare_exchange_weak(time_min_cb, time_cb, std::memory_order_relaxed, std::memory_order_relaxed);
@@ -257,12 +257,12 @@ private:
         time_try = profTimerElapsed(marker.time_try);
         if(size)
         {
-            if(!kIsProducer)
+            if constexpr (!kIsProducer)
             {
                 std::atomic_thread_fence(std::memory_order_acquire);
             }
 
-            if(kContiguous)
+            if constexpr (kContiguous)
             {
                 callback(elemAt(next), size, std::forward<Args>(args)...);
             }
@@ -272,7 +272,7 @@ private:
                     callback(elemAt(next+i), size - i - 1, std::forward<Args>(args)...);
             }
 
-            if(kIsProducer)
+            if constexpr (kIsProducer)
             {
                 std::atomic_thread_fence(std::memory_order_release);
                 // LOGD("%ld", size);
@@ -307,7 +307,7 @@ private:
         {
             next_size = size;
             size_t prod_index = producer_.get_index_tail();
-            if(kContiguous && kConsMode == mode::dense)
+            if constexpr (kContiguous && kConsMode == mode::dense)
             {
                 entry_id_head = marker.get_entry_id_head();
                 while(entry_id_head != marker.get_entry_id_tail())
@@ -320,7 +320,7 @@ private:
             size_t wmark = water_mark_.load(std::memory_order_relaxed);
             if(cons_next_index < prod_index)
             {
-                if(kContiguous)
+                if constexpr (kContiguous)
                 {
                     if(cons_next_index == wmark)
                     {
@@ -363,7 +363,7 @@ private:
                     }
                 }
 
-                if(kContiguous && kConsMode == mode::dense)
+                if constexpr (kContiguous && kConsMode == mode::dense)
                 {
                     if(!marker.ref_entry_id_head().compare_exchange_strong(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
                     {
@@ -410,7 +410,7 @@ private:
         for(;;profAdd(marker.try_miss_count, 1))
         {
             size_t cons_index = consumer_.get_index_tail();
-            if(kContiguous && kProdMode == mode::dense)
+            if constexpr (kContiguous && kProdMode == mode::dense)
             {
                 entry_id_head = marker.get_entry_id_head();
                 while(entry_id_head != marker.get_entry_id_tail())
@@ -423,7 +423,7 @@ private:
 
             if(prod_next_index + size <= capacity() + cons_index)
             {
-                if(kContiguous)
+                if constexpr (kContiguous)
                 {
                     /// prod leads
                     if(wrap(prod_next_index) >= wrap(cons_index))
@@ -455,7 +455,7 @@ private:
                     }
                 } /// if(kContiguous)
 
-                if(kContiguous && kProdMode == mode::dense)
+                if constexpr (kContiguous && kProdMode == mode::dense)
                 {
                     if(!marker.ref_entry_id_head().compare_exchange_strong(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
                     {
@@ -503,10 +503,9 @@ private:
             // size_t new_exit_id=exit_id + 1;
 
             // LOGD("%d:%ld\t%ld:%ld", kIsProducer, kIdx, next_index, this->next(curr_index));
-            if(kContiguous && kIsProducer && next_index >= this->next(curr_index))
-            {
-                water_mark_head_.store(curr_index, std::memory_order_relaxed);
-            }
+            if constexpr (kContiguous && kIsProducer)
+                if(next_index >= this->next(curr_index))
+                    water_mark_head_.store(curr_index, std::memory_order_relaxed);
 
             next_index += size;
             // LOGD("%ld/%ld %ld/%ld %s", curr_index, next_index, old_exit_id, exit_id, dump().data());
@@ -527,7 +526,7 @@ private:
 
                         if(old_next_index > next_index)
                         {
-                            if(kContiguous)
+                            if constexpr (kContiguous)
                                 new_exit_id++;
                             else
                                 new_exit_id = old_next_index;
@@ -540,7 +539,7 @@ private:
 
                     // next_index = marker.ref_next_index_list(wrap(new_exit_id - 1, num_threads_)).load(std::memory_order_relaxed);
 
-                    if(kContiguous && kIsProducer)
+                    if constexpr (kContiguous && kIsProducer)
                     {
                         size_t wmh = water_mark_head_.load(std::memory_order_relaxed);
                         if((water_mark_.load(std::memory_order_relaxed) < wmh) 
@@ -567,11 +566,10 @@ private:
         } /// if(mode == mode::dense)
         else
         {
-            for(;marker.get_index_tail() != curr_index;){}
-            if(kContiguous && kIsProducer && next_index >= this->next(curr_index))
-            {
-                water_mark_.store(curr_index, std::memory_order_relaxed);
-            }
+            while(marker.get_index_tail() != curr_index){}
+            if constexpr (kContiguous && kIsProducer)
+                if(next_index >= this->next(curr_index))
+                    water_mark_.store(curr_index, std::memory_order_relaxed);
             marker.ref_index_tail().store(next_index + size, std::memory_order_release);
         }
         // LOGD(" <(%ld/%ld) {%ld}", kIdx, entry_id, marker.get_exit_id());
