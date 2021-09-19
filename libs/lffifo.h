@@ -67,31 +67,35 @@ struct Marker
         // if(size_list_) delete size_list_;
     }
 
-    inline void reset(size_t capacity, size_t list_size)
+    template <bool kIsDense=true>
+    void reset(size_t capacity, size_t list_size)
     {
-        if(this->list_size != list_size)
-        {
-            this->list_size = list_size;
-            // if(exit_id_list_) delete exit_id_list_;
-            if(next_index_list_) delete next_index_list_;
-            // if(curr_index_list_) delete curr_index_list_;
-            // if(size_list_) delete size_list_;
-            // exit_id_list_ = new std::atomic<size_t> [list_size];
-            next_index_list_ = new std::atomic<size_t> [list_size];
-            // curr_index_list_ = new std::atomic<size_t> [list_size];
-            // size_list_ = new std::atomic<size_t> [list_size];
-        }
-
         index_head_.store(0, std::memory_order_relaxed);
         index_tail_.store(0, std::memory_order_relaxed);
         entry_id_head_.store(0, std::memory_order_relaxed);
         entry_id_tail_.store(0, std::memory_order_relaxed);
         exit_id_.store(0, std::memory_order_relaxed);
 
-        for(int i=0; i<list_size; i++)
+        if constexpr (kIsDense)
         {
-            // exit_id_list_[i].store(0, std::memory_order_relaxed);
-            next_index_list_[i].store(0, std::memory_order_relaxed);
+            if(this->list_size != list_size)
+            {
+                this->list_size = list_size;
+                // if(exit_id_list_) delete exit_id_list_;
+                if(next_index_list_) delete next_index_list_;
+                // if(curr_index_list_) delete curr_index_list_;
+                // if(size_list_) delete size_list_;
+                // exit_id_list_ = new std::atomic<size_t> [list_size];
+                next_index_list_ = new std::atomic<size_t> [list_size];
+                // curr_index_list_ = new std::atomic<size_t> [list_size];
+                // size_list_ = new std::atomic<size_t> [list_size];
+            }
+
+            for(int i=0; i<list_size; i++)
+            {
+                // exit_id_list_[i].store(0, std::memory_order_relaxed);
+                next_index_list_[i].store(0, std::memory_order_relaxed);
+            }
         }
     }
 
@@ -175,7 +179,7 @@ private:
 
     size_t profTimerElapse(std::atomic<size_t> &atomic)
     {
-        if constexpr (kProfiling) 
+        if constexpr (kProfiling)
         {
             size_t diff = internal::counter.elapse(0).count();
             atomic.fetch_add(diff, std::memory_order_relaxed);
@@ -186,7 +190,7 @@ private:
 
     size_t profTimerElapsed(std::atomic<size_t> &atomic)
     {
-        if constexpr (kProfiling) 
+        if constexpr (kProfiling)
         {
             size_t diff = internal::counter.elapsed(0).count();
             atomic.fetch_add(diff, std::memory_order_relaxed);
@@ -542,7 +546,7 @@ private:
                     if constexpr (kContiguous && kIsProducer)
                     {
                         size_t wmh = water_mark_head_.load(std::memory_order_relaxed);
-                        if((water_mark_.load(std::memory_order_relaxed) < wmh) 
+                        if((water_mark_.load(std::memory_order_relaxed) < wmh)
                            && (next_index > wmh))
                         {
                             marker.ref_index_tail().store(wmh, std::memory_order_relaxed);
@@ -695,8 +699,8 @@ public:
     {
         water_mark_.store(0,std::memory_order_relaxed);
         water_mark_head_.store(0,std::memory_order_relaxed);
-        producer_.reset(capacity_, num_threads_);
-        consumer_.reset(capacity_, num_threads_);
+        producer_.reset<kProdMode == mode::dense>(capacity_, num_threads_);
+        consumer_.reset<kConsMode == mode::dense>(capacity_, num_threads_);
     }
 
     inline void reserve(size_t size)
@@ -707,10 +711,13 @@ public:
     inline void reserve(size_t size, size_t num_threads)
     {
         capacity_ = util::isPowerOf2(size) ? size : util::nextPowerOf2(size);
-        if(num_threads > capacity_)
-            num_threads_ = capacity_;
-        else
-            num_threads_ = tll::util::isPowerOf2(num_threads) ? num_threads : tll::util::nextPowerOf2(num_threads);
+        if constexpr (kProdMode == mode::dense || kConsMode == mode::dense)
+        {
+            if(num_threads > capacity_)
+                num_threads_ = capacity_;
+            else
+                num_threads_ = tll::util::isPowerOf2(num_threads) ? num_threads : tll::util::nextPowerOf2(num_threads);
+        }
 #if (!defined NO_ALLOCATE)
         buffer_.resize(capacity_);
 #endif

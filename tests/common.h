@@ -30,7 +30,7 @@ std::pair<size_t, size_t> fifing(
         const std::function<bool(int)> &is_prod, /// true == producer
         const std::function<void()> &do_wait, /// std::this_thread::yield()
         const std::function<void()> &do_dump,
-        size_t max_val,
+        size_t max_size,
         // std::vector<double> &speed_lst,
         // std::vector<double> &throughputs,
         std::vector<double> &time_lst,
@@ -48,7 +48,7 @@ std::pair<size_t, size_t> fifing(
     std::mutex cv_m;
     std::thread dumpt = std::thread{[&](){
         std::unique_lock<std::mutex> lk(cv_m);
-        while(! cv.wait_for(lk, std::chrono::seconds(60), [&]{return is_done.load();}) )
+        while(! cv.wait_for(lk, std::chrono::seconds(10), [&]{return is_done.load();}) )
         {
             do_dump();
         }
@@ -64,7 +64,7 @@ std::pair<size_t, size_t> fifing(
         {
             LOGVB("Producer: %s", tll::util::str_tidcpu().data());
             running_prod.fetch_add(1);
-            for(;tt_push_size.load(std::memory_order_relaxed) < (max_val);)
+            for(;tt_push_size.load(std::memory_order_relaxed) < (max_size);)
             {
                 size_t ret = do_push(kTid, loop_num, lc_tt_size, 
                                      tt_push_count.load(std::memory_order_relaxed),
@@ -88,7 +88,7 @@ std::pair<size_t, size_t> fifing(
             for(;
                 running_prod.load(std::memory_order_relaxed) > 0
                 || (tt_pop_count.load(std::memory_order_relaxed) < tt_push_count.load(std::memory_order_relaxed))
-                || (tt_pop_size.load(std::memory_order_relaxed) < max_val)
+                || (tt_pop_size.load(std::memory_order_relaxed) < max_size)
                 ;)
             {
                 size_t ret = do_pop(kTid, loop_num, lc_tt_size, 

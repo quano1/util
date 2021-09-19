@@ -133,23 +133,21 @@ struct LFFIFOStressTest : public ::testing::Test
                 memset(store_buff[i].data(), 0xFF, store_buff[i].size());
             }
 
-        auto do_push = [&](int tid, size_t loop_num, size_t lt_size, size_t tt_count, size_t tt_size) -> size_t {
+        auto do_push = [&](int tid, size_t loop_num, size_t lc_tt_size, size_t tt_count, size_t tt_size) -> size_t {
             size_t ret = fifo.push_cb([verification](char *el, size_t size, int tid, char val, size_t push_size) {
                 if(!verification) return;
-
                 memset(el, (char)(tid), size);
-            }, max_pkg_size, tid, (char)loop_num, lt_size);
+            }, max_pkg_size, tid, (char)loop_num, lc_tt_size);
             return ret;
         };
 
-        auto do_pop = [&](int tid, size_t loop_num, size_t lt_size, size_t tt_count, size_t tt_size) -> size_t {
+        auto do_pop = [&](int tid, size_t loop_num, size_t lc_tt_size, size_t tt_count, size_t tt_size) -> size_t {
             size_t ret = fifo.pop_cb([&](const char *el, size_t size, size_t pop_size) {
                 if(!verification) return;
-
                 auto dst = store_buff[tid].data() + pop_size;
                 auto src = el;
                 memcpy(dst, src, size);
-            }, max_pkg_size, lt_size);
+            }, max_pkg_size, lc_tt_size);
             return ret;
         };
 
@@ -208,20 +206,20 @@ struct LFFIFOStressTest : public ::testing::Test
             memset(store_buff[i].data(), 0xFF, store_buff[i].size());
         }
 
-        auto do_push = [&](int tid, size_t loop_num, size_t lt_size, size_t tt_count, size_t tt_size) -> size_t {
+        auto do_push = [&](int tid, size_t loop_num, size_t lc_tt_size, size_t tt_count, size_t tt_size) -> size_t {
             size_t ret = fifo.push_cb([](char *el, size_t size, int tid, char val, size_t push_size) {
                 memset(el, (char)(tid), size);
-            }, max_pkg_size, tid, (char)loop_num, lt_size);
+            }, max_pkg_size, tid, (char)loop_num, lc_tt_size);
             return ret;
         };
 
-        auto do_pop_while_doing_push = [&](int tid, size_t loop_num, size_t lt_size, size_t tt_count, size_t tt_size) -> size_t {
+        auto do_pop_while_doing_push = [&](int tid, size_t loop_num, size_t lc_tt_size, size_t tt_count, size_t tt_size) -> size_t {
             size_t ret = fifo.pop_cb([&](const char *el, size_t size, size_t pop_size) {
                 auto dst = store_buff[tid / 2].data() + pop_size;
                 auto src = el;
                 memcpy(dst, src, size);
                 // if(size != 3) LOGD("%ld:%ld:%ld\t%s", size, tt_count, tt_size, fifo.dump().data());
-            }, max_pkg_size, lt_size);
+            }, max_pkg_size, lc_tt_size);
             // LOGD("tt_count: %ld\ttt_size: %ld", tt_count, tt_size);
             return ret;
         };
@@ -281,7 +279,7 @@ std::vector<size_t> LFFIFOStressTest::total_count_lst;
 //         std::this_thread::sleep_for(std::chrono::nanoseconds(1));
 //     };
 
-//     constexpr int kExtend = 2u;
+//     constexpr int kExtend = 2;
 //     {
 //         ring_buffer_dd<char, PROFILING> fifo{kCapacity, 0x100};
 //         SequenceFixedSize<kExtend>(fifo, 3, resting);
@@ -305,7 +303,7 @@ std::vector<size_t> LFFIFOStressTest::total_count_lst;
 //         std::this_thread::yield();
 //     };
 
-//     constexpr int kExtend = 2u;
+//     constexpr int kExtend = 2;
 //     {
 //         ring_buffer_dd<char, PROFILING> fifo{kCapacity, 0x100};
 //         SequenceFixedSize<kExtend>(fifo, 3, resting);
@@ -329,7 +327,7 @@ TEST_F(LFFIFOStressTest, SequenceTrafficJamDD)
         std::this_thread::sleep_for(std::chrono::nanoseconds(0));
     };
 
-    constexpr int kExtend = 3u;
+    constexpr int kExtend = 3;
     constexpr size_t kPkgSize = 5;
     // constexpr size_t kCapacity = kPkgSize * kWriteCount;
 
@@ -393,7 +391,7 @@ TEST_F(LFFIFOStressTest, SequenceYieldDD)
         std::this_thread::yield();
     };
 
-    constexpr int kExtend = 5u;
+    constexpr int kExtend = 3;
     constexpr size_t kPkgSize = 5;
 
     std::vector<Statistics> stat_lst;
@@ -458,7 +456,7 @@ TEST_F(LFFIFOStressTest, SequenceYieldMixed)
         std::this_thread::yield();
     };
 
-    constexpr int kExtend = 9u;
+    constexpr int kExtend = 3;
     constexpr size_t kPkgSize = 5;
 
     // std::vector<Statistics> stat_lst;
@@ -504,17 +502,15 @@ TEST_F(LFFIFOStressTest, SequenceYieldMixed)
         "queue dd", "queue dd",
     };
     plotting();
-} /// DDRushSequence
+} /// SequenceYieldMixed
 
-
-TEST_F(LFFIFOStressTest, DISABLED_DDRushConcurrent)
+TEST_F(LFFIFOStressTest, RushSequence)
 {
     auto resting = [](){
         std::this_thread::yield();
     };
 
-    constexpr int kExtend = 1u;
-    constexpr size_t kPkgSize = 5;
+    constexpr int kExtend = -1;
     // size_t write_count = kWriteCount;
     // constexpr size_t kCapacity = kPkgSize * kWriteCount;
 
@@ -522,39 +518,29 @@ TEST_F(LFFIFOStressTest, DISABLED_DDRushConcurrent)
     tll::util::CallFuncInSeq<NUM_CPU, kExtend>( [&](auto index_seq)
     {
         thread_lst.push_back(index_seq.value*2);
-        size_t total_write_size = kWriteCount * kPkgSize * index_seq.value;
-        size_t capacity = total_write_size / 8;
+        size_t total_write_size = 0x400 * 0x100000 * index_seq.value;
         LOGD("=====================================================");
-        LOGD("Number of threads: %ld\tpkg_size: %ld:%ld:%ld", index_seq.value, kPkgSize, total_write_size, total_write_size / kPkgSize);
+        LOGD("Number of threads: %ld\ttotal size: %ld", index_seq.value, total_write_size);
+        for(int i=1; i<=16; i*=2)
         {
-            ring_buffer_dd<char, PROFILING> fifo{capacity, 0x400};
-            ConcurrentFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
-            // stat_lst.push_back(fifo.statistics());
-            LOGD("-----------------------------------------");
-        }
-
-        {
-            ring_buffer_dd<char, PROFILING> fifo{capacity, 0x800};
-            ConcurrentFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
-            // stat_lst.push_back(fifo.statistics());
-            LOGD("-----------------------------------------");
-        }
-
-        {
-            ring_buffer_dd<char, PROFILING> fifo{capacity, 0x1000};
-            ConcurrentFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
-            // stat_lst.push_back(fifo.statistics());
-            LOGD("-----------------------------------------");
-        }
-
-        {
-            ring_buffer_dd<char, PROFILING> fifo{capacity, 0x2000};
-            ConcurrentFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
-            // stat_lst.push_back(fifo.statistics());
-            LOGD("-----------------------------------------");
+            size_t pkg_size = 0x400 * i;
+            LOGD("\tpkg_size: %ld/%d", pkg_size, i);
+            {
+                ring_buffer_ss<char, PROFILING> fifo{total_write_size + pkg_size};
+                SequenceFixedSize<index_seq.value>(fifo, pkg_size, total_write_size, resting, true);
+                // stat_lst.push_back(fifo.statistics());
+                LOGD("-----------------------------------------");
+            }
+            {
+                ring_buffer_dd<char, PROFILING> fifo{total_write_size + pkg_size};
+                SequenceFixedSize<index_seq.value>(fifo, pkg_size, total_write_size, resting, true);
+                // stat_lst.push_back(fifo.statistics());
+                LOGD("-----------------------------------------");
+            }
         }
     });
     plotting();
 }
+
 
 #endif

@@ -13,7 +13,7 @@
 #include <tll.h>
 #include "common.h"
 
-constexpr size_t kExtend = 5u;
+constexpr int kExtend = 5;
 
 void benchmark_yield()
 {

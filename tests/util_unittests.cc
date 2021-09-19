@@ -85,36 +85,36 @@ TEST_F(UtilTest, Counter)
 }
 
 
-TEST_F(UtilTest, StreamBuffer)
+TEST_F(UtilTest, StreamWrapper)
 {
     tll::util::Counter<> counter;
     std::chrono::steady_clock::time_point now;
     std::vector<char> buffer(0x1000);
 
-    // StreamBuffer sb(18);
-    // sb << "help me please";
-    // EXPECT_EQ(sb.size, strlen("help me please") + 4);
-    // /// overflow, size should not change
-    // sb << 1;
-    // EXPECT_EQ(sb.size, 18);
+    StreamWrapper sb(buffer.data());
+    sb << "help me please";
+    EXPECT_EQ(sb.size, strlen("help me please") + 4);
+    EXPECT_EQ(sb.size, 18);
+    sb << 1;
+    EXPECT_EQ(sb.size, 24);
 
-    // counter.start();
-    // for(int i=0; i<(int)1e6; i++) {
-    //     // now = std::chrono::steady_clock::now();
-    //     StreamBuffer sb(buffer.data());
-    //     sb << (int8_t)1;
-    //     sb << (uint8_t)1;
-    //     sb << (uint16_t)1;
-    //     sb << (uint16_t)1;
-    //     sb << (uint32_t)1;
-    //     sb << (uint32_t)1;
-    //     sb << (uint64_t)1;
-    //     sb << (uint64_t)1;
-    //     sb << (double)1;
-    //     sb << (float)1;
-    //     // sb << "help me please";
-    // }
-    // LOGD("%.9f", counter.elapse().count());
+    counter.start();
+    for(int i=0; i<(int)1e6; i++) {
+        // now = std::chrono::steady_clock::now();
+        StreamWrapper sb(buffer.data());
+        sb << (int8_t)1;
+        sb << (uint8_t)1;
+        sb << (uint16_t)1;
+        sb << (uint16_t)1;
+        sb << (uint32_t)1;
+        sb << (uint32_t)1;
+        sb << (uint64_t)1;
+        sb << (uint64_t)1;
+        sb << (double)1;
+        sb << (float)1;
+        // sb << "help me please";
+    }
+    LOGD("%.9f", counter.elapse().count());
 
 
     counter.start();
@@ -179,18 +179,5 @@ TEST_F(UtilTest, StreamBuffer)
         LOGD("%ld", sw.size);
     }
 
-    counter.start();
-    for(int i=0; i<(int)1e6; i++)
-    {
-        foo(1,2,3,4,5,6,7,8,9,10);
-    }
-    LOGD("%.9f", counter.elapse().count());
-
-    counter.start();
-    for(int i=0; i<(int)1e6; i++)
-    {
-        foo(1);foo(2);foo(3);foo(4);foo(5);foo(6);foo(7);foo(8);foo(9);foo(10);
-    }
-    LOGD("avg: %.9f", counter.elapse().count()* 1e-6);
     // LOGD("%ld", buffer.size());
 }

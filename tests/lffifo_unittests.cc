@@ -339,7 +339,7 @@ struct RingBufferConcurrentTest : public ::testing::Test
     static constexpr size_t kMaxPkgSize = 0x3;
     // static constexpr size_t kWrap = 16;
 
-    template <tll::lf::Mode prod_mode, tll::lf::Mode cons_mode, size_t extend>
+    template <tll::lf::Mode prod_mode, tll::lf::Mode cons_mode, int extend>
     void RWSimulFixedSize()
     {
         using namespace tll::lf;
@@ -466,21 +466,21 @@ TEST_F(RingBufferConcurrentTest, MPMCRWFixedSizeDD)
 TEST_F(RingBufferConcurrentTest, MPMCRWFixedSizeDS)
 {
     using namespace tll::lf;
-    RWSimulFixedSize<mode::dense, mode::sparse, -1u>();
+    RWSimulFixedSize<mode::dense, mode::sparse, -1>();
 }
 
 /// MPMC read write fixed size
 TEST_F(RingBufferConcurrentTest, MPMCRWFixedSizeSD)
 {
     using namespace tll::lf;
-    RWSimulFixedSize<mode::sparse, mode::dense, -1u>();
+    RWSimulFixedSize<mode::sparse, mode::dense, -1>();
 }
 
 /// MPMC read write fixed size
 TEST_F(RingBufferConcurrentTest, MPMCRWFixedSizeSS)
 {
     using namespace tll::lf;
-    RWSimulFixedSize<mode::sparse, mode::sparse, -1u>();
+    RWSimulFixedSize<mode::sparse, mode::sparse, -1>();
 }
 
 #endif /// #if (HAVE_OPENMP)

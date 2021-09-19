@@ -174,7 +174,7 @@ private:
                 [this]()
                 {
                     auto log_path =std::getenv("TLL_LOG_PATH");
-                    auto const &file = util::stringFormat("%s/%s.%d.tll", log_path ? log_path : TLL_DEFAULT_LOG_PATH, __progname, getpid());
+                    auto const &file = util::stringFormat("%s/%s.%d.raw.log", log_path ? log_path : TLL_DEFAULT_LOG_PATH, __progname, getpid());
                     LOGD("%s", file.data());
                     return static_cast<void*>(new std::ofstream(file, std::ios::out | std::ios::binary));
                 }, 
@@ -273,7 +273,7 @@ public:
         static util::StreamWrapper stream(nullptr);
 
         stream.reset(payload.data());
-        stream.writeArg<>(args...);
+        stream.writeArg(args...);
         if(isRunning())
         {
 
@@ -339,7 +339,7 @@ public:
         const int tid = tll::util::tid_nice();
         const int level = tll::log::context::level;
         static thread_local std::vector<char> log_buffer(0x1000);
-        thread_local util::StreamBuffer sb(log_buffer.data(), log_buffer.size());
+        thread_local util::StreamWrapper sb(log_buffer.data());
 
         if(mode == Mode::kAsync && isRunning())
         {
