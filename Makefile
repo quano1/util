@@ -10,14 +10,14 @@ endif
 
 BUILD_FOLDER:=.build-$(shell uname -p)
 
-all: tests
+all: test
 	@echo make $@;
 
 $(BUILD_FOLDER):
 	@echo make $@;
 	$(CMAKE) -S. -B$@ -GNinja || $(RM) -f $@/CMakeCache.txt;
 
-tests: | $(BUILD_FOLDER)
+test: | $(BUILD_FOLDER)
 	@echo make $@;
 	$(CMAKE) --build $(BUILD_FOLDER);
 

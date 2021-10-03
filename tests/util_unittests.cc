@@ -84,7 +84,6 @@ TEST_F(UtilTest, Counter)
 
 }
 
-
 TEST_F(UtilTest, StreamWrapper)
 {
     tll::util::Counter<> counter;
@@ -93,10 +92,10 @@ TEST_F(UtilTest, StreamWrapper)
 
     StreamWrapper sb(buffer.data());
     sb << "help me please";
-    EXPECT_EQ(sb.size, strlen("help me please") + 4);
-    EXPECT_EQ(sb.size, 18);
+    EXPECT_EQ(sb.size_, strlen("help me please") + 4);
+    EXPECT_EQ(sb.size_, 18);
     sb << 1;
-    EXPECT_EQ(sb.size, 24);
+    EXPECT_EQ(sb.size_, 24);
 
     counter.start();
     for(int i=0; i<(int)1e6; i++) {
@@ -154,7 +153,7 @@ TEST_F(UtilTest, StreamWrapper)
                         // ,"help me please");
         }
         LOGD("%.9f", counter.elapse().count());
-        LOGD("%ld", sw.size);
+        LOGD("%ld", sw.size_);
     }
 
     {
@@ -176,8 +175,57 @@ TEST_F(UtilTest, StreamWrapper)
                         // ,"help me please");
         }
         LOGD("%.9f", counter.elapse().count());
-        LOGD("%ld", sw.size);
+        LOGD("%ld", sw.size_);
     }
 
     // LOGD("%ld", buffer.size());
 }
+
+
+TEST_F(UtilTest, SWVsSS)
+{
+    Counter<> counter;
+    std::chrono::steady_clock::time_point now;
+    StreamWrapper<> sw(0x1000);
+
+    std::stringstream ss;
+
+    counter.start();
+    for(int i=0; i<(int)1e6; i++) {
+        // now = std::chrono::steady_clock::now();
+        sw.reset();
+        sw << (int8_t)1
+            << (uint8_t)1
+            << (uint16_t)1
+            << (uint16_t)1
+            << (uint32_t)1
+            << (uint32_t)1
+            << (uint64_t)1
+            << (uint64_t)1
+            << (double)1
+            << (float)1;
+        // sb << "help me please";
+    }
+    LOGD("%.9f", counter.elapse().count());
+
+
+    counter.start();
+    for(int i=0; i<(int)1e6; i++) {
+        // now = std::chrono::steady_clock::now();
+        ss.clear();
+        ss << (int8_t)1
+            << (uint8_t)1
+            << (uint16_t)1
+            << (uint16_t)1
+            << (uint32_t)1
+            << (uint32_t)1
+            << (uint64_t)1
+            << (uint64_t)1
+            << (double)1
+            << (float)1;
+        // sb << "help me please";
+    }
+    LOGD("%.9f", counter.elapse().count());
+}
+
+

@@ -437,14 +437,24 @@ template <bool check=false>
 struct StreamWrapper {
 
     StreamWrapper(char *buffer) : buffer_(buffer) {}
+    StreamWrapper(size_t size)
+    {
+        containerBuffer_.reserve(size);
+        size_ = size;
+        buffer_ = containerBuffer_.data();
+    }
 
-    inline void reset(char *buffer) {buffer_ = buffer; size=0;}
+    inline void reset(char *buffer=nullptr)
+    {
+        if(buffer) buffer_ = buffer;
+        size_ = 0;
+    }
 
     void writeArg (const char *val)
     {
         auto str_len = strlen(val);
         size_t payload_size = internal::kIdSize + 2 + str_len;
-        size += payload_size;
+        size_ += payload_size;
         if(check && buffer_ != nullptr)
         {
             *(TypeId*)buffer_ = internal::getId<const char *>(); /// string id
@@ -452,7 +462,7 @@ struct StreamWrapper {
             *(uint16_t*)(buffer_+internal::kIdSize) = str_len;
             memcpy(buffer_+internal::kIdSize+2, val, str_len);
             buffer_ += payload_size;
-            elem_count++;
+            elem_count_++;
         }
     }
 
@@ -460,13 +470,13 @@ struct StreamWrapper {
     void writeArg(T val, Args ... args)
     {
         size_t payload_size = internal::kIdSize + sizeof(T);
-        size += payload_size;
+        size_ += payload_size;
         if(check && buffer_ != nullptr)
         {
             *(TypeId*)buffer_ = internal::getId<T>(); /// primitive id
             *(T*)(buffer_ + internal::kIdSize) = val;
             buffer_ += payload_size;
-            elem_count++;
+            elem_count_++;
 
             if constexpr (sizeof...(Args) > 0)
                 writeArg(args...);
@@ -486,8 +496,9 @@ struct StreamWrapper {
         return *this;
     }
 
-    size_t size=0;
-    size_t elem_count=0;
+    std::vector<char> containerBuffer_;
+    size_t size_=0;
+    size_t elem_count_=0;
     char *buffer_=nullptr;
 
 };

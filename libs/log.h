@@ -33,22 +33,22 @@ extern char *__progname;
 #define COMBINE_(X,Y) X ##_ ##Y // helper macro
 #define COMBINE(X,Y) COMBINE_(X,Y)
 
-#define TLL_LOG(plog, severity, ...) \
+#define TLL_LOG2(plog, severity, ...) \
     (plog)->log2<Mode::kAsync>((tll::log::Severity)severity, \
                                 __FILE__, __FUNCTION__, __LINE__, \
                                 ##__VA_ARGS__)
 
-#define TLL_GLOG(severity, ...) TLL_LOG(&tll::log::Manager::instance(), severity, ##__VA_ARGS__)
+#define TLL_GLOG2(severity, ...) TLL_LOG2(&tll::log::Manager::instance(), severity, ##__VA_ARGS__)
 
 #define TLL_GLOGD(...) \
     (&tll::log::Manager::instance())->log<Mode::kAsync>(tll::log::Severity::kDebug, \
         __FILE__, __FUNCTION__, __LINE__, \
         ##__VA_ARGS__)
 
-#define TLL_GLOGD2(...) TLL_GLOG((tll::log::Severity::kDebug), ##__VA_ARGS__)
-#define TLL_GLOGI2(...) TLL_GLOG((tll::log::Severity::kInfo), ##__VA_ARGS__)
-#define TLL_GLOGW2(...) TLL_GLOG((tll::log::Severity::kWarn), ##__VA_ARGS__)
-#define TLL_GLOGF2(...) TLL_GLOG((tll::log::Severity::kFatal), ##__VA_ARGS__)
+#define TLL_GLOGD2(...) TLL_GLOG2((tll::log::Severity::kDebug), ##__VA_ARGS__)
+#define TLL_GLOGI2(...) TLL_GLOG2((tll::log::Severity::kInfo), ##__VA_ARGS__)
+#define TLL_GLOGW2(...) TLL_GLOG2((tll::log::Severity::kWarn), ##__VA_ARGS__)
+#define TLL_GLOGF2(...) TLL_GLOG2((tll::log::Severity::kFatal), ##__VA_ARGS__)
 #define TLL_GLOGT2(ID) \
     tll::log::Tracer COMBINE(tracer, __LINE__)(ID, \
     std::bind(&tll::log::Manager::log2<Mode::kAsync, Tracer *, const std::string &, double>, &tll::log::Manager::instance(), (tll::log::Severity::kTrace), __FILE__, __FUNCTION__, __LINE__, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4))
@@ -59,19 +59,25 @@ extern char *__progname;
 #define TLL_LOG3(plog, severity, fmt, ...) \
     do \
     { \
-        static const StaticLogInfo sInfo = { \
-            .format = fmt, \
-            .file = __FILE__, \
-            .func = __FUNCTION__, \
-            .severity = severity, \
-            .line = __LINE__, \
+        static const StaticLogInfo sInfo { \
+            fmt, \
+            __FILE__, \
+            __FUNCTION__, \
+            (int)severity, \
+            __LINE__ \
         }; \
-        (plog)->log3<Mode::kAsync>(id, \
+        (plog)->log3<Mode::kAsync>(sInfo, \
                                 ##__VA_ARGS__); \
     } while(0)
 
-#define TLL_GLOG3(severity, fmt, ...) TLL_LOG(&tll::log::Manager::instance(), severity, fmt, ##__VA_ARGS__)
-#define TLL_GLOGD3(...) TLL_GLOG((tll::log::Severity::kDebug), ##__VA_ARGS__)
+#define TLL_GLOG3(severity, ...) TLL_LOG3(&tll::log::Manager::instance(), severity, ##__VA_ARGS__)
+
+#define TLL_GLOGD(...) \
+    (&tll::log::Manager::instance())->log<Mode::kAsync>(tll::log::Severity::kDebug, \
+        __FILE__, __FUNCTION__, __LINE__, \
+        ##__VA_ARGS__)
+
+#define TLL_GLOGD3(...) TLL_GLOG3((tll::log::Severity::kDebug), ##__VA_ARGS__)
 
     // tll::log::Tracer COMBINE(tracer__, __LINE__)(__FUNCTION__, \
     // std::bind(&tll::log::Manager::log2<Mode::kAsync, Tracer *, const std::string &, double>, &tll::log::Manager::instance(), (tll::log::Severity::kTrace), __FILE__, __FUNCTION__, __LINE__, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4))
@@ -153,8 +159,8 @@ public:
 private:
     std::atomic<bool> is_running_{false}, flush_request_{false};
     // lf::CCFIFO<Message> ccq_{0x1000};
-    lf::ring_queue_ds<std::function<std::string()>> task_queue_{1000000};
-    lf::ring_buffer_ds<char> ring_buffer_{0x100000 * 16}; /// 16Mb
+    lf::ring_queue_ds<std::function<std::string()>> task_queue_{100000};
+    lf::ring_buffer_ds<char> ring_buffer_{0x100000 * 1}; /// 1Mb
 
     std::unordered_map<std::string, Entity> raw_ents_ = {{"file", Entity{
                 .name = "file",
@@ -228,6 +234,8 @@ private:
 
     std::condition_variable pop_wait_;
     std::mutex mtx_;
+    inline static thread_local auto sSW_ = util::StreamWrapper<>{0x1000};
+    // static thread_local std::vector<char> sLogBuffer;
 
 public:
     Manager()
@@ -269,15 +277,16 @@ public:
     template <typename... Args>
     void log(int id, Args ...args)
     {
-        static std::vector<char> payload(4096);
-        static util::StreamWrapper stream(nullptr);
+        // static std::vector<char> payload(4096);
+        // static util::StreamWrapper stream(nullptr);
 
-        stream.reset(payload.data());
-        stream.writeArg(args...);
+        // stream.reset(payload.data());
+        sSW_.reset();
+        sSW_.writeArg(args...);
         if(isRunning())
         {
 
-            while(ring_buffer_.push(payload.data(), stream.size) == 0) 
+            while(ring_buffer_.push(sSW_.buffer_, sSW_.size_) == 0) 
             {
                 pop_wait_.notify_all();
             }
@@ -288,7 +297,7 @@ public:
         else
         {
             // std::string payload = util::stringFormat("{%c}%s", kLogSeverityString[(int)severity], util::stringFormat(format, std::forward<Args>(args)...));
-            log_<true>(payload);
+            log_<true>(sSW_.buffer_, sSW_.size_);
         }
     }
 
@@ -333,26 +342,29 @@ public:
     }
 
     template <Mode mode, typename... Args>
-    void log3(const char *info_data, Args ...args)
+    void log3(const StaticLogInfo &info_data, Args ...args)
     {
         const auto ts = util::timestamp();
         const int tid = tll::util::tid_nice();
         const int level = tll::log::context::level;
-        static thread_local std::vector<char> log_buffer(0x1000);
-        thread_local util::StreamWrapper sb(log_buffer.data());
-
+        sSW_.reset();
+        sSW_ << 1
+            << ts << tid << level << (... << args);
         if(mode == Mode::kAsync && isRunning())
         {
-            sb << info_data << ts << tid << level << (... << args);
-            // (sb << args)...;
+            // (sSW_ << args)...;
             // std::string payload = util::stringFormat("{%c}%s", kLogSeverityString[(int)severity], util::stringFormat(format, std::forward<Args>(args)...));
-            // util::StreamBuffer sb;
+            // util::StreamBuffer sSW_;
             // size_t ps = ring_buffer_.push_cb([](char *el, size_t sz, const std::string &msg) {
                 // memcpy(el, msg.data(), sz);
-            // }, sb.size(), sb);
-            size_t ps = ring_buffer_.push(log_buffer.data(), sb.size);
+            // }, sSW_.size(), sSW_);
+            // size_t ps = ring_buffer_.push(sSW_.buffer_, sSW_.size_);
+            while(ring_buffer_.push(sSW_.buffer_, sSW_.size_) == 0) 
+            {
+                pop_wait_.notify_all();
+            }
 
-            assert(ps > 0);
+            // assert(ps > 0);
             pop_wait_.notify_all();
         }
         else
@@ -362,6 +374,7 @@ public:
             //                 ts, tid, level,
             //                 util::stringFormat("{%s}{%s}{%d}", info.file, info.func, info.line), 
             //                 util::stringFormat(info.format, (args)...)));
+            log_<true>(sSW_.buffer_, sSW_.size_);
         }
     }
 

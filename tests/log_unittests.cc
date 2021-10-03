@@ -128,35 +128,35 @@ TEST_F(LoggerTest, Log2)
     static auto &ins = tll::log::Manager::instance();
     tll::util::Counter<> counter;
     double finish_log_time, total_log_time;
+    size_t total_size = 0x80 * 0x400 * 0x400;
 
-    for(int c = 1 ; c <= 64; c*=2)
-    {
-        size_t total_size = 100 * 0x400 * 0x400;
-        std::ofstream ofs(tll::util::stringFormat("test%d.log", c));
-        std::vector<char> buff(0x400 * c, 'c');
-        counter.start();
-        for(int i=0; i<100 * 0x400 / c; i++) {
-            ofs.write(buff.data(), buff.size());
-        }
-        finish_log_time = counter.elapse().count();
-        ofs.flush();
-        total_log_time = counter.elapse().count();
-        LOGD("%dKB In/Out speed: %.3f / %.3f MBs", c, (total_size / finish_log_time) / 0x100000, (total_size / total_log_time) / 0x100000);
-    }
+    // for(int c = 1 ; c <= 64; c*=2)
+    // {
+    //     std::ofstream ofs(tll::util::stringFormat("test%d.log", c));
+    //     std::vector<char> buff(0x400 * c, 'c');
+    //     counter.start();
+    //     for(int i=0; i<total_size / buff.size(); i++) {
+    //         ofs.write(buff.data(), buff.size());
+    //     }
+    //     finish_log_time = counter.elapse().count();
+    //     ofs.flush();
+    //     total_log_time = counter.elapse().count();
+    //     LOGD("%dKB In/Out speed: %.3f / %.3f MBs", c, (total_size / finish_log_time) / 0x100000, (total_size / total_log_time) / 0x100000);
+    // }
 
-    {
-        size_t total_size = 100 * 0x400 * 0x400;
-        std::ofstream ofs("testfull.log");
-        std::vector<char> buff(total_size, 'c');
-        counter.start();
-        // for(int i=0; i<100 * 0x400 / 64; i++) {
-            ofs.write(buff.data(), buff.size());
-        // }
-        finish_log_time = counter.elapse().count();
-        ofs.flush();
-        total_log_time = counter.elapse().count();
-        LOGD("Full In/Out speed: %.3f / %.3f MBs", total_size / finish_log_time / 0x100000, total_size / total_log_time / 0x100000);
-    }
+    // {
+    //     // size_t total_size = 0x10 * 0x400 * 0x400;
+    //     std::ofstream ofs("testfull.log");
+    //     std::vector<char> buff(total_size, 'c');
+    //     counter.start();
+    //     // for(int i=0; i<100 * 0x400 / 64; i++) {
+    //         ofs.write(buff.data(), buff.size());
+    //     // }
+    //     finish_log_time = counter.elapse().count();
+    //     ofs.flush();
+    //     total_log_time = counter.elapse().count();
+    //     LOGD("Full In/Out speed: %.3f / %.3f MBs", total_size / finish_log_time / 0x100000, total_size / total_log_time / 0x100000);
+    // }
 
     {
         ins.total_size = 0;
@@ -166,15 +166,33 @@ TEST_F(LoggerTest, Log2)
         // std::this_thread::yield();
         counter.start();
         // TLL_GLOGTF2(); /// tracer_138
-        for(int i=0;i<(int)1e5;i++)
+        for(int i=0;i<(int)1e7;i++)
         {
-            TLL_GLOGTF2();
+            // TLL_GLOGD2();
             // TLL_GLOGT2("haha");
-            // TLL_GLOGD2("");
+            TLL_GLOGD2("%.9f", counter.elapse().count());
             // TLL_GLOGD2("%.9f", counter.elapse().count());
             // TLL_GLOGI2("%.9f", counter.elapse().count());
             // TLL_GLOGW2("%.9f", counter.elapse().count());
             // TLL_GLOGF2("%.9f", counter.elapse().count());
+        }
+        finish_log_time = counter.elapse().count();
+        // std::this_thread::sleep_for(std::chrono::seconds(10));
+        ins.stop();
+        total_log_time = counter.elapse().count();
+        LOGD("Callback: %ld\t%.9f\t%.9f", ins.total_count, finish_log_time, finish_log_time / ins.total_count);
+        LOGD("In/Out speed: %.3f / %.3f MBs", ins.total_size / finish_log_time / 0x100000, ins.total_size / total_log_time / 0x100000);
+    }
+
+    {
+        ins.total_size = 0;
+        ins.stop();
+        ins.start();
+        std::this_thread::sleep_for(std::chrono::nanoseconds(0));
+        counter.start();
+        for(int i=0;i<(int)1e7;i++)
+        {
+            TLL_GLOGD("%.9f", counter.elapse().count());
         }
         finish_log_time = counter.elapse().count();
         // std::this_thread::sleep_for(std::chrono::seconds(10));
@@ -190,15 +208,15 @@ TEST_F(LoggerTest, Log2)
         ins.start();
         std::this_thread::sleep_for(std::chrono::nanoseconds(0));
         counter.start();
-        for(int i=0;i<(int)1e6;i++)
+        for(int i=0;i<(int)1e7;i++)
         {
-            TLL_GLOGD("%.9f", counter.elapse().count());
+            TLL_GLOGD3("%.9f", counter.elapse().count());
         }
         finish_log_time = counter.elapse().count();
         // std::this_thread::sleep_for(std::chrono::seconds(10));
         ins.stop();
         total_log_time = counter.elapse().count();
-        LOGD("Callback: %ld\t%.9f\t%.9f", ins.total_count, finish_log_time, finish_log_time / ins.total_count);
+        LOGD("Raw3: %ld\t%.9f\t%.9f", ins.total_count, finish_log_time, finish_log_time / ins.total_count);
         LOGD("In/Out speed: %.3f / %.3f MBs", ins.total_size / finish_log_time / 0x100000, ins.total_size / total_log_time / 0x100000);
     }
 }
