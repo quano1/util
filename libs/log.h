@@ -33,54 +33,22 @@ extern char *__progname;
 #define COMBINE_(X,Y) X ##_ ##Y // helper macro
 #define COMBINE(X,Y) COMBINE_(X,Y)
 
-#define TLL_LOG2(plog, severity, ...) \
-    (plog)->log2<Mode::kAsync>((tll::log::Severity)severity, \
+#define TLL_LOG(plog, severity, ...) \
+    (plog)->log<Mode::kAsync>((tll::log::Severity)severity, \
                                 __FILE__, __FUNCTION__, __LINE__, \
                                 ##__VA_ARGS__)
 
-#define TLL_GLOG2(severity, ...) TLL_LOG2(&tll::log::Manager::instance(), severity, ##__VA_ARGS__)
+#define TLL_GLOG(severity, ...) TLL_LOG(&tll::log::Manager::instance(), severity, ##__VA_ARGS__)
 
-#define TLL_GLOGD(...) \
-    (&tll::log::Manager::instance())->log<Mode::kAsync>(tll::log::Severity::kDebug, \
-        __FILE__, __FUNCTION__, __LINE__, \
-        ##__VA_ARGS__)
-
-#define TLL_GLOGD2(...) TLL_GLOG2((tll::log::Severity::kDebug), ##__VA_ARGS__)
-#define TLL_GLOGI2(...) TLL_GLOG2((tll::log::Severity::kInfo), ##__VA_ARGS__)
-#define TLL_GLOGW2(...) TLL_GLOG2((tll::log::Severity::kWarn), ##__VA_ARGS__)
-#define TLL_GLOGF2(...) TLL_GLOG2((tll::log::Severity::kFatal), ##__VA_ARGS__)
-#define TLL_GLOGT2(ID) \
+#define TLL_GLOGD(...) TLL_GLOG((tll::log::Severity::kDebug), ##__VA_ARGS__)
+#define TLL_GLOGI(...) TLL_GLOG((tll::log::Severity::kInfo), ##__VA_ARGS__)
+#define TLL_GLOGW(...) TLL_GLOG((tll::log::Severity::kWarn), ##__VA_ARGS__)
+#define TLL_GLOGF(...) TLL_GLOG((tll::log::Severity::kFatal), ##__VA_ARGS__)
+#define TLL_GLOGT(ID) \
     tll::log::Tracer COMBINE(tracer, __LINE__)(ID, \
-    std::bind(&tll::log::Manager::log2<Mode::kAsync, Tracer *, const std::string &, double>, &tll::log::Manager::instance(), (tll::log::Severity::kTrace), __FILE__, __FUNCTION__, __LINE__, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4))
+    std::bind(&tll::log::Manager::log<Mode::kAsync, Tracer *, const std::string &, double>, &tll::log::Manager::instance(), (tll::log::Severity::kTrace), __FILE__, __FUNCTION__, __LINE__, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4))
 
-#define TLL_GLOGTF2()   TLL_GLOGT2(__FUNCTION__)
-
-
-#define TLL_LOG3(plog, severity, fmt, ...) \
-    do \
-    { \
-        static const StaticLogInfo sInfo { \
-            fmt, \
-            __FILE__, \
-            __FUNCTION__, \
-            (int)severity, \
-            __LINE__ \
-        }; \
-        (plog)->log3<Mode::kAsync>(sInfo, \
-                                ##__VA_ARGS__); \
-    } while(0)
-
-#define TLL_GLOG3(severity, ...) TLL_LOG3(&tll::log::Manager::instance(), severity, ##__VA_ARGS__)
-
-#define TLL_GLOGD(...) \
-    (&tll::log::Manager::instance())->log<Mode::kAsync>(tll::log::Severity::kDebug, \
-        __FILE__, __FUNCTION__, __LINE__, \
-        ##__VA_ARGS__)
-
-#define TLL_GLOGD3(...) TLL_GLOG3((tll::log::Severity::kDebug), ##__VA_ARGS__)
-
-    // tll::log::Tracer COMBINE(tracer__, __LINE__)(__FUNCTION__, \
-    // std::bind(&tll::log::Manager::log2<Mode::kAsync, Tracer *, const std::string &, double>, &tll::log::Manager::instance(), (tll::log::Severity::kTrace), __FILE__, __FUNCTION__, __LINE__, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4))
+#define TLL_GLOGTF()   TLL_GLOGT(__FUNCTION__)
 
 namespace tll::log {
 
@@ -143,14 +111,14 @@ public:
     }
 };
 
-struct StaticLogInfo
-{
-    const char *format;
-    const char *file;
-    const char *func;
-    const int severity;
-    const int line;
-}; /// StaticLogInfo
+// struct StaticLogInfo
+// {
+//     const char *format;
+//     const char *file;
+//     const char *func;
+//     const int severity;
+//     const int line;
+// }; /// StaticLogInfo
 
 class Manager : public util::SingletonBase<Manager>
 {
@@ -160,9 +128,9 @@ private:
     std::atomic<bool> is_running_{false}, flush_request_{false};
     // lf::CCFIFO<Message> ccq_{0x1000};
     lf::ring_queue_ds<std::function<std::string()>> task_queue_{0x1000};
+    // not supported
     lf::ring_buffer_ds<char> ring_buffer_{0x400 * 32}; /// 32Kb
-
-    std::unordered_map<std::string, Entity> raw_ents_ = {{"file", Entity{
+    std::unordered_map<std::string, Entity> raw_ents_;/* = {{"file", Entity{
                 .name = "file",
                 [this](void *handle, bool flush_req, const char *buff, size_t size)
                 {
@@ -194,7 +162,7 @@ private:
                         handle = nullptr;
                     }
                 }
-            }}};
+            }}};*/
 
     std::unordered_map<std::string, Entity> pre_ents_ = {{"file", Entity{
                 .name = "file",
@@ -245,13 +213,13 @@ public:
     }
 
     Manager(uint32_t queue_size) :
-        ring_buffer_{queue_size}
+        task_queue_{queue_size}
     {}
 
     template < typename ... LogEnts>
     Manager(uint32_t queue_size,
            LogEnts ...ents) :
-        ring_buffer_{queue_size}
+        task_queue_{queue_size}
     {
         add_(ents...);
     }
@@ -266,38 +234,8 @@ public:
     Manager(Manager&&) = delete;
     Manager& operator=(Manager&&) = delete;
 
-
-    template <Mode mode, size_t N, typename... Args>
-    void log(Severity severity, const char *file, const char *function, int line, const char (&format)[N], Args ...args)
-    {
-        // LOGD("%s", format);
-        log(0, args...);
-    }
-
-    template <typename... Args>
-    void log(int id, Args ...args)
-    {
-        sSW_.reset();
-        sSW_.writeArg(args...);
-        if(isRunning())
-        {
-
-            while(ring_buffer_.push(sSW_.buffer_, sSW_.size_) == 0)
-            {
-                pop_wait_.notify_all();
-            }
-
-            pop_wait_.notify_all();
-        }
-        else
-        {
-            // std::string payload = util::stringFormat("{%c}%s", kLogSeverityString[(int)severity], util::stringFormat(format, std::forward<Args>(args)...));
-            log_<true>(sSW_.buffer_, sSW_.size_);
-        }
-    }
-
     template <Mode mode, typename... Args>
-    void log2(Severity severity, const char *file, const char *function, int line, const char *format, Args ...args)
+    void log(Severity severity, const char *file, const char *function, int line, const char *format, Args ...args)
     {
         const auto ts = std::chrono::steady_clock::now();
         const int tid = tll::util::tid_nice();
@@ -326,43 +264,17 @@ public:
         }
     }
 
-    template <Mode mode, typename... Args>
-    void log3(const StaticLogInfo &info_data, Args ...args)
-    {
-        const auto ts = util::timestamp();
-        const int tid = tll::util::tid_nice();
-        const int level = tll::log::context::level;
-        sSW_.reset();
-        sSW_ << 1
-            << ts << tid << level << (... << args);
-        if(mode == Mode::kAsync && isRunning())
-        {
-            while(ring_buffer_.push(sSW_.buffer_, sSW_.size_) == 0)
-            {
-                pop_wait_.notify_all();
-            }
-
-            // assert(ps > 0);
-            pop_wait_.notify_all();
-        }
-        else
-        {
-            log_<true>(sSW_.buffer_, sSW_.size_);
-        }
-    }
-
     template <bool is_raw>
     void start(uint32_t period_us=(uint32_t)1e6)
     {
+        static_assert(!is_raw, "not supported raw mode yet.");
         bool val = false;
         if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
             return;
 
-        // prepare_<is_raw>();
         auto &ents = is_raw ? raw_ents_ : pre_ents_;
         for(auto &entry : ents)
         {
-            // entry.second.start();
             auto &ent = entry.second;
             if(ent.handle == nullptr && ent.onStart)
             {
@@ -382,7 +294,6 @@ public:
             log_<is_raw>(first_log);
         }
 
-        // start_<is_raw>(period_us);
         broadcast_ = std::thread([this, period_us]()
         {
             size_t rs = 0;
@@ -470,37 +381,10 @@ public:
     /// wait for ring_queue is empty
     inline bool flush()
     {
-        // flush_request_.store(true, std::memory_order_relaxed);
         return flush_request_.exchange(true, std::memory_order_relaxed);
     }
 
 private:
-
-    // template <bool is_raw>
-    // void prepare_() {
-    //     auto &ents = is_raw ? raw_ents_ : pre_ents_;
-    //     for(auto &entry : ents)
-    //     {
-    //         // entry.second.start();
-    //         auto &ent = entry.second;
-    //         if(ent.handle == nullptr && ent.onStart)
-    //         {
-    //             ent.handle = ent.onStart();
-    //         }
-    //     }
-
-    //     {
-    //         /// send first log to notify time_since_epoch
-    //         auto sys_now = std::chrono::system_clock::now();
-    //         auto std_now = std::chrono::steady_clock::now();
-    //         auto sys_time = std::chrono::system_clock::to_time_t(sys_now);
-    //         auto first_log = util::stringFormat("%s{%.9f}{%.9f}\n",
-    //             std::ctime(&sys_time),
-    //             std::chrono::duration_cast< std::chrono::duration<double> >(std_now.time_since_epoch()).count(),
-    //             std::chrono::duration_cast< std::chrono::duration<double> >(sys_now.time_since_epoch()).count());
-    //         log_<true>(first_log);
-    //     }
-    // }
 
     template <bool is_raw> auto &getFifo_()
     {
@@ -520,44 +404,6 @@ private:
                     this->log_<false>(payload);
                 };
     }
-
-    // template <bool is_raw>
-    // void start_(uint32_t period_us)
-    // {
-    //     broadcast_ = std::thread([this, period_us]()
-    //     {
-    //         size_t rs = 0;
-    //         auto do_pop = getPopCallback_<is_raw>();
-    //         auto &fifo = getFifo_<is_raw>();
-
-    //         auto wait_cb = [this, &fifo]
-    //             {
-    //                 return !fifo.empty()
-    //                         || !isRunning();
-    //             };
-
-    //         while(isRunning())
-    //         {
-    //             if(fifo.empty())
-    //             {
-    //                 std::unique_lock<std::mutex> lock(mtx_);
-    //                 bool wait_status = pop_wait_.wait_for(lock, std::chrono::microseconds(period_us), wait_cb);
-    //             }
-
-    //             while(!fifo.empty())
-    //             {
-    //                 rs = fifo.pop_cb(do_pop, is_raw ? -1 : 1);
-    //             }
-
-    //         } /// while(isRunning())
-
-    //         if(!fifo.empty())
-    //         {
-    //             rs = fifo.pop_cb(do_pop, -1);
-    //         }
-
-    //     });
-    // }
 
     template <bool is_raw, typename C>
     inline void log_(const C &buff)

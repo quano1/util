@@ -21,142 +21,11 @@ struct LoggerTest : public ::testing::Test
     }
 };
 
-// TEST_F(LoggerTest, Simple)
-// {
-//     tll::util::Counter<> counter;
-//     TLL_GLOGD2("");
-//     LOGD("%f", counter.elapse().count());
-//     Manager::instance().stop();
-
-//     Manager::instance().start(1);
-//     counter.start();
-//     TLL_GLOGD2("");
-//     LOGD("%f", counter.elapse().count());
-//     Manager::instance().stop();
-
-//     Manager::instance().remove("file");
-//     Manager::instance().add(Entity{
-//                 .name = "printf",
-//                 [this](void *handle, bool, const char *buff, size_t size)
-//                 {
-//                     printf("%.*s", (int)size, buff);
-//                 }
-//             });
-//     Manager::instance().start();
-//     counter.start();
-//     TLL_GLOGD2("");
-//     std::this_thread::sleep_for(std::chrono::seconds(1));
-//     LOGD("%f", counter.elapse().count());
-//     Manager::instance().stop();
-// }
-
-// TEST_F(LoggerTest, SequenceLog)
-// {
-//     tll::util::Counter<> counter;
-//     double time = 0;
-//     counter.start();
-//     {
-//         for(int i=0; i<1000000; i++)
-//         {
-//             __asm__("nop");
-//             TLL_GLOGD2("");
-//         }
-//     }
-//     time = counter.elapse().count();
-//     LOGD("%.3f:%f", (1)/(time), time);
-
-//     counter.start();
-//     {
-//         for(int i=0; i<1000000; i++)
-//         {
-//             // TLL_GLOGTF();
-//             __asm__("nop");
-//         }
-//     }
-//     time = counter.elapse().count();
-//     LOGD("%.3f:%f", (1)/(time), time);
-// }
-
-// TEST_F(LoggerTest, ConcurrentLog)
-// {
-//     double time = 0;
-//     tll::util::Counter<> counter;
-//     counter.start();
-//     #pragma omp parallel num_threads ( NUM_CPU )
-//     {
-//         for(int i=0; i<1000000; i++)
-//         {
-//             __asm__("nop");
-//             TLL_GLOGD2("");
-//         }
-//     }
-//     time = counter.elapse().count();
-//     LOGD("%.3f:%f", (NUM_CPU)/(time), time);
-
-//     counter.start();
-//     #pragma omp parallel num_threads ( NUM_CPU )
-//     {
-//         for(int i=0; i<1000000; i++)
-//         {
-//             // TLL_GLOGTF();
-//             __asm__("nop");
-//         }
-//     }
-//     time = counter.elapse().count();
-//     LOGD("%.3f:%f", (NUM_CPU)/(time), time);
-// }
-
-// void logfunction(char *dst, char src)
-// {
-//     memcpy(dst, &src, 1);
-// }
-
-// TEST_F(LoggerTest, NanoLog)
-// {
-//     char val = 0;
-//     // constexpr char src = 0xFF;
-//     tll::util::Counter<> counter;
-//     for(int i=0; i<100000; i++) logfunction(&val, 0xFF);
-
-//     LOGD("%.9f: %1x", counter.elapse().count(), val);
-//     // LOGV(counter.elapse().count(), (uint8_t)val);
-// }
-
-
-TEST_F(LoggerTest, Log2)
+TEST_F(LoggerTest, Log)
 {
     static auto &ins = tll::log::Manager::instance();
     tll::util::Counter<> counter;
     double finish_log_time, total_log_time;
-    // size_t total_size = 0x80 * 0x400 * 0x400;
-
-    // for(int c = 1 ; c <= 64; c*=2)
-    // {
-    //     std::ofstream ofs(tll::util::stringFormat("test%d.log", c));
-    //     std::vector<char> buff(0x400 * c, 'c');
-    //     counter.start();
-    //     for(int i=0; i<total_size / buff.size(); i++) {
-    //         ofs.write(buff.data(), buff.size());
-    //     }
-    //     finish_log_time = counter.elapse().count();
-    //     ofs.flush();
-    //     total_log_time = counter.elapse().count();
-    //     LOGD("%dKB In/Out speed: %.3f / %.3f MBs", c, (total_size / finish_log_time) / 0x100000, (total_size / total_log_time) / 0x100000);
-    // }
-
-    // {
-    //     // size_t total_size = 0x10 * 0x400 * 0x400;
-    //     std::ofstream ofs("testfull.log");
-    //     std::vector<char> buff(total_size, 'c');
-    //     counter.start();
-    //     // for(int i=0; i<100 * 0x400 / 64; i++) {
-    //         ofs.write(buff.data(), buff.size());
-    //     // }
-    //     finish_log_time = counter.elapse().count();
-    //     ofs.flush();
-    //     total_log_time = counter.elapse().count();
-    //     LOGD("Full In/Out speed: %.3f / %.3f MBs", total_size / finish_log_time / 0x100000, total_size / total_log_time / 0x100000);
-    // }
     size_t log_count = 0;
     {
         ins.total_size = 0;
@@ -166,49 +35,15 @@ TEST_F(LoggerTest, Log2)
         counter.start();
         for(log_count=0; log_count<0x1000; log_count++)
         {
-            TLL_GLOGD2("%.9f", counter.elapse().count());
-        }
-        finish_log_time = counter.elapse().count();
-        ins.stop();
-        total_log_time = counter.elapse().count();
-        LOGD("Callback: %ld:0x%lx\t%.9f:%.9f\t%.9f", log_count, ins.total_size, total_log_time, finish_log_time, finish_log_time / log_count);
-        LOGD("In/Out speed: %.3f / %.3f MBs", ins.total_size / finish_log_time / 0x100000, ins.total_size / total_log_time / 0x100000);
-    }
-
-    {
-        ins.total_size = 0;
-        ins.stop();
-        ins.start<true>();
-        std::this_thread::sleep_for(std::chrono::nanoseconds(0));
-        counter.start();
-        for(log_count=0; log_count<0x1000; log_count++)
-        {
             TLL_GLOGD("%.9f", counter.elapse().count());
         }
         finish_log_time = counter.elapse().count();
         ins.stop();
         total_log_time = counter.elapse().count();
-        LOGD("Raw: %ld:0x%lx\t%.9f:%.9f\t%.9f", log_count, ins.total_size, finish_log_time, total_log_time, finish_log_time / log_count);
+        LOGV(log_count, ins.total_size, finish_log_time, total_log_time);
+        LOGD("Callback: %.3f us", finish_log_time/log_count*1e6);
         LOGD("In/Out speed: %.3f / %.3f MBs", ins.total_size / finish_log_time / 0x100000, ins.total_size / total_log_time / 0x100000);
     }
-
-    {
-        ins.total_size = 0;
-        ins.stop();
-        ins.start<true>();
-        std::this_thread::sleep_for(std::chrono::nanoseconds(0));
-        counter.start();
-        for(log_count=0; log_count<0x1000; log_count++)
-        {
-            TLL_GLOGD3("%.9f", counter.elapse().count());
-        }
-        finish_log_time = counter.elapse().count();
-        ins.stop();
-        total_log_time = counter.elapse().count();
-        LOGD("Raw3: %ld:0x%lx\t%.9f:%.9f\t%.9f", log_count, ins.total_size, finish_log_time, total_log_time, finish_log_time / log_count);
-        LOGD("In/Out speed: %.3f / %.3f MBs", ins.total_size / finish_log_time / 0x100000, ins.total_size / total_log_time / 0x100000);
-    }
-
 
     {
         ins.total_size = 0;
@@ -216,57 +51,15 @@ TEST_F(LoggerTest, Log2)
         ins.start<false>();
         std::this_thread::sleep_for(std::chrono::nanoseconds(0));
         counter.start();
-        for(log_count=0; log_count<0x1000; log_count++)
+        for(log_count=0; log_count<0x10000; log_count++)
         {
-            TLL_GLOGD2("%.9f", counter.elapse().count());
-            TLL_GLOGD2("%.9f", counter.elapse().count());
-            TLL_GLOGD2("%.9f", counter.elapse().count());
-            TLL_GLOGD2("%.9f", counter.elapse().count());
-        }
-        finish_log_time = counter.elapse().count();
-        ins.stop();
-        total_log_time = counter.elapse().count();
-        LOGD("Callback: %ld:0x%lx\t%.9f:%.9f\t%.9f", log_count, ins.total_size, total_log_time, finish_log_time, finish_log_time / log_count);
-        LOGD("In/Out speed: %.3f / %.3f MBs", ins.total_size / finish_log_time / 0x100000, ins.total_size / total_log_time / 0x100000);
-    }
-
-    {
-        ins.total_size = 0;
-        ins.stop();
-        ins.start<true>();
-        std::this_thread::sleep_for(std::chrono::nanoseconds(0));
-        counter.start();
-        for(log_count=0; log_count<0x1000; log_count++)
-        {
-            TLL_GLOGD("%.9f", counter.elapse().count());
-            TLL_GLOGD("%.9f", counter.elapse().count());
-            TLL_GLOGD("%.9f", counter.elapse().count());
             TLL_GLOGD("%.9f", counter.elapse().count());
         }
         finish_log_time = counter.elapse().count();
         ins.stop();
         total_log_time = counter.elapse().count();
-        LOGD("Raw: %ld:0x%lx\t%.9f:%.9f\t%.9f", log_count, ins.total_size, finish_log_time, total_log_time, finish_log_time / log_count);
-        LOGD("In/Out speed: %.3f / %.3f MBs", ins.total_size / finish_log_time / 0x100000, ins.total_size / total_log_time / 0x100000);
-    }
-
-    {
-        ins.total_size = 0;
-        ins.stop();
-        ins.start<true>();
-        std::this_thread::sleep_for(std::chrono::nanoseconds(0));
-        counter.start();
-        for(log_count=0; log_count<0x1000; log_count++)
-        {
-            TLL_GLOGD3("%.9f", counter.elapse().count());
-            TLL_GLOGD3("%.9f", counter.elapse().count());
-            TLL_GLOGD3("%.9f", counter.elapse().count());
-            TLL_GLOGD3("%.9f", counter.elapse().count());
-        }
-        finish_log_time = counter.elapse().count();
-        ins.stop();
-        total_log_time = counter.elapse().count();
-        LOGD("Raw3: %ld:0x%lx\t%.9f:%.9f\t%.9f", log_count, ins.total_size, finish_log_time, total_log_time, finish_log_time / log_count);
+        LOGV(log_count, ins.total_size, finish_log_time, total_log_time);
+        LOGD("Callback: %.3f us", finish_log_time/log_count*1e6);
         LOGD("In/Out speed: %.3f / %.3f MBs", ins.total_size / finish_log_time / 0x100000, ins.total_size / total_log_time / 0x100000);
     }
 }

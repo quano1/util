@@ -207,12 +207,10 @@ inline std::string str_tid_nice()
     return ret;
 }
 
-
-template <typename Dur=std::chrono::duration<double, std::ratio<1>>, typename Clk=std::chrono::steady_clock>
-auto timestamp(const typename Clk::time_point &t = Clk::now())
+template <typename Clk=std::chrono::steady_clock, typename Dur=std::chrono::duration<double, std::ratio<1>>>
+auto timestamp(const typename Clk::time_point &tp = Clk::now())
 {
-    static const auto begin_ = std::chrono::steady_clock::now();
-    return std::chrono::duration_cast< Dur >( (t - begin_) ).count();
+    return std::chrono::duration_cast< Dur >(tp.time_since_epoch()).count();
 }
 
 /// format
