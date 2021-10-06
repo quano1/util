@@ -18,7 +18,7 @@ function parse()
 
     # dd if=${1} iflag=skip_bytes,count_bytes,nonblock bs=${2} skip=${3} count=${4} 2> /tmp/null | \
     # ( ((sort_enabled)) && (sort -t "}" -nsk 2,2) ) | \
-
+# apt-cache show "$package" | awk '/^Package: /{p=$2} /^Version: /{v=$2} /^Architecture: /{a=$2} /^$/{print "apt-get download "p"="v" -a="a}'
     gawk -F  "}{" '
     BEGIN {
         # print "BEGIN"
@@ -132,10 +132,12 @@ main() {
 total_size=`ls -l $1 | awk '{print $5}'`;
 block=4096
 # echo $total_size;
-count=$[$total_size/$block + 1]
+# count=$[$total_size/$block + 1]
 # echo $count;
+# skip_=`head -n2 ${1} | wc -c`;
+# echo $skip_;
 
- (dd if=${1} iflag=skip_bytes,count_bytes,nonblock bs=${block} skip=0 count=${count} 2> /tmp/null ) | sort -t "}" -k 2,2 -s | parse;
+dd if=${1} iflag=skip_bytes,count_bytes,nonblock bs=${block} skip=0 | sort -t "}" -k 2,2 -s | parse
 
     # ( ((sort_enabled)) && ( sort -t "}" -nsk 2,2 | parse ) || parse)
 
