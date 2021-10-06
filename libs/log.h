@@ -155,12 +155,12 @@ struct StaticLogInfo
 class Manager : public util::SingletonBase<Manager>
 {
 public:
-    size_t total_size = 0, total_count = 0;
+    size_t total_size = 0;
 private:
     std::atomic<bool> is_running_{false}, flush_request_{false};
     // lf::CCFIFO<Message> ccq_{0x1000};
-    lf::ring_queue_ds<std::function<std::string()>> task_queue_{100000};
-    lf::ring_buffer_ds<char> ring_buffer_{0x100000 * 1}; /// 1Mb
+    lf::ring_queue_ds<std::function<std::string()>> task_queue_{0x1000};
+    lf::ring_buffer_ds<char> ring_buffer_{0x400 * 32}; /// 32Kb
 
     std::unordered_map<std::string, Entity> raw_ents_ = {{"file", Entity{
                 .name = "file",
@@ -170,7 +170,7 @@ private:
                     {
                         printf("%.*s", (int)size, buff);
                     }
-                    else 
+                    else
                     {
                         auto ofs = static_cast<std::ofstream*>(handle);
                         ofs->write((const char *)buff, size);
@@ -183,7 +183,7 @@ private:
                     auto const &file = util::stringFormat("%s/%s.%d.raw.log", log_path ? log_path : TLL_DEFAULT_LOG_PATH, __progname, getpid());
                     LOGD("%s", file.data());
                     return static_cast<void*>(new std::ofstream(file, std::ios::out | std::ios::binary));
-                }, 
+                },
                 [this](void *&handle)
                 {
                     if(handle)
@@ -204,7 +204,7 @@ private:
                     {
                         printf("%.*s", (int)size, buff);
                     }
-                    else 
+                    else
                     {
                         auto ofs = static_cast<std::ofstream*>(handle);
                         ofs->write((const char *)buff, size);
@@ -217,7 +217,7 @@ private:
                     auto const &file = util::stringFormat("%s/%s.%d.log", log_path ? log_path : TLL_DEFAULT_LOG_PATH, __progname, getpid());
                     LOGD("%s", file.data());
                     return static_cast<void*>(new std::ofstream(file, std::ios::out | std::ios::binary));
-                }, 
+                },
                 [this](void *&handle)
                 {
                     if(handle)
@@ -241,7 +241,7 @@ public:
     Manager()
     {
         // start_(0);
-        start2();
+        start<false>();
     }
 
     Manager(uint32_t queue_size) :
@@ -277,22 +277,17 @@ public:
     template <typename... Args>
     void log(int id, Args ...args)
     {
-        // static std::vector<char> payload(4096);
-        // static util::StreamWrapper stream(nullptr);
-
-        // stream.reset(payload.data());
         sSW_.reset();
         sSW_.writeArg(args...);
         if(isRunning())
         {
 
-            while(ring_buffer_.push(sSW_.buffer_, sSW_.size_) == 0) 
+            while(ring_buffer_.push(sSW_.buffer_, sSW_.size_) == 0)
             {
                 pop_wait_.notify_all();
             }
 
             pop_wait_.notify_all();
-            // LOGD("%ld", stream.size);
         }
         else
         {
@@ -300,14 +295,6 @@ public:
             log_<true>(sSW_.buffer_, sSW_.size_);
         }
     }
-
-    // template <typename... Args>
-    // void log(Severity severity, const char *format, Args ...args)
-    // {
-    //     // std::string payload = util::stringFormat(format, std::forward<Args>(args)...);
-    //     log<Mode::kAsync>(severity, format, args...);
-    // }
-
 
     template <Mode mode, typename... Args>
     void log2(Severity severity, const char *file, const char *function, int line, const char *format, Args ...args)
@@ -334,11 +321,9 @@ public:
             log_<false>(util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
                             kLogSeverityString[(int)severity],
                             util::timestamp(ts), tid, level,
-                            util::stringFormat("{%s}{%s}{%d}", file, function, line), 
+                            util::stringFormat("{%s}{%s}{%d}", file, function, line),
                             util::stringFormat(format, (args)...)));
         }
-
-        // pop_wait_.notify_all();
     }
 
     template <Mode mode, typename... Args>
@@ -352,14 +337,7 @@ public:
             << ts << tid << level << (... << args);
         if(mode == Mode::kAsync && isRunning())
         {
-            // (sSW_ << args)...;
-            // std::string payload = util::stringFormat("{%c}%s", kLogSeverityString[(int)severity], util::stringFormat(format, std::forward<Args>(args)...));
-            // util::StreamBuffer sSW_;
-            // size_t ps = ring_buffer_.push_cb([](char *el, size_t sz, const std::string &msg) {
-                // memcpy(el, msg.data(), sz);
-            // }, sSW_.size(), sSW_);
-            // size_t ps = ring_buffer_.push(sSW_.buffer_, sSW_.size_);
-            while(ring_buffer_.push(sSW_.buffer_, sSW_.size_) == 0) 
+            while(ring_buffer_.push(sSW_.buffer_, sSW_.size_) == 0)
             {
                 pop_wait_.notify_all();
             }
@@ -369,22 +347,20 @@ public:
         }
         else
         {
-            // log_(util::stringFormat("{%c}{%.9f}{%d}{%d}%s{%s}\n",
-            //                 kLogSeverityString[(int)info.severity],
-            //                 ts, tid, level,
-            //                 util::stringFormat("{%s}{%s}{%d}", info.file, info.func, info.line), 
-            //                 util::stringFormat(info.format, (args)...)));
             log_<true>(sSW_.buffer_, sSW_.size_);
         }
     }
 
-    inline void start(uint32_t period_us=(uint32_t)1e6)
+    template <bool is_raw>
+    void start(uint32_t period_us=(uint32_t)1e6)
     {
         bool val = false;
         if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
             return;
 
-        for(auto &entry : raw_ents_)
+        // prepare_<is_raw>();
+        auto &ents = is_raw ? raw_ents_ : pre_ents_;
+        for(auto &entry : ents)
         {
             // entry.second.start();
             auto &ent = entry.second;
@@ -399,118 +375,46 @@ public:
             auto sys_now = std::chrono::system_clock::now();
             auto std_now = std::chrono::steady_clock::now();
             auto sys_time = std::chrono::system_clock::to_time_t(sys_now);
-            auto first_log = util::stringFormat("%s{%.9f}{%.9f}\n", 
+            auto first_log = util::stringFormat("%s{%.9f}{%.9f}\n",
                 std::ctime(&sys_time),
-                std::chrono::duration_cast< std::chrono::duration<double> >(std_now.time_since_epoch()).count(), 
+                std::chrono::duration_cast< std::chrono::duration<double> >(std_now.time_since_epoch()).count(),
                 std::chrono::duration_cast< std::chrono::duration<double> >(sys_now.time_since_epoch()).count());
-            log_<true>(first_log);
+            log_<is_raw>(first_log);
         }
 
-        start_(period_us);
-    }
-
-    inline void start_(uint32_t period_us=(uint32_t)1e6)
-    {
+        // start_<is_raw>(period_us);
         broadcast_ = std::thread([this, period_us]()
         {
             size_t rs = 0;
+            auto do_pop = getPopCallback_<is_raw>();
+            auto &fifo = getFifo_<is_raw>();
+
+            auto wait_cb = [this, &fifo]
+                {
+                    return !fifo.empty()
+                            || !isRunning();
+                };
 
             while(isRunning())
             {
-                if(ring_buffer_.empty())
+                if(fifo.empty())
                 {
                     std::unique_lock<std::mutex> lock(mtx_);
-                    bool wait_status = pop_wait_.wait_for(lock, std::chrono::microseconds(period_us), 
-                        [this]
-                        {
-                            return !ring_buffer_.empty()
-                                    || !isRunning();
-                        });
+                    bool wait_status = pop_wait_.wait_for(lock, std::chrono::microseconds(period_us), wait_cb);
                 }
 
-                while(!ring_buffer_.empty())
+                while(!fifo.empty())
                 {
-                    rs = ring_buffer_.pop_cb([&](const char *el, size_t sz){ log_<true>(el, sz); }, -1);
+                    rs = fifo.pop_cb(do_pop, is_raw ? -1 : 1);
                 }
 
             } /// while(isRunning())
 
-            if(!ring_buffer_.empty())
+            if(!fifo.empty())
             {
-                rs = ring_buffer_.pop_cb([&](const char *el, size_t sz){ log_<true>(el, sz); }, -1);
-            };
-        });
-    }
-
-
-    inline void start2(uint32_t period_us=(uint32_t)1e6)
-    {
-        bool val = false;
-        if(!is_running_.compare_exchange_strong(val, true, std::memory_order_relaxed))
-            return;
-
-        for(auto &entry : pre_ents_)
-        {
-            // entry.second.start();
-            auto &ent = entry.second;
-            if(ent.handle == nullptr && ent.onStart)
-            {
-                ent.handle = ent.onStart();
+                rs = fifo.pop_cb(do_pop, -1);
             }
-        }
 
-        {
-            /// send first log to notify time_since_epoch
-            auto sys_now = std::chrono::system_clock::now();
-            auto std_now = std::chrono::steady_clock::now();
-            auto sys_time = std::chrono::system_clock::to_time_t(sys_now);
-            auto first_log = util::stringFormat("%s{%.9f}{%.9f}\n", 
-                std::ctime(&sys_time),
-                std::chrono::duration_cast< std::chrono::duration<double> >(std_now.time_since_epoch()).count(), 
-                std::chrono::duration_cast< std::chrono::duration<double> >(sys_now.time_since_epoch()).count());
-            log_<false>(first_log);
-        }
-
-        start2_(period_us);
-    }
-
-    inline void start2_(uint32_t period_us=(uint32_t)1e6)
-    {
-        broadcast_ = std::thread([this, period_us]()
-        {
-            size_t rs = 0;
-
-            while(isRunning())
-            {
-                if(task_queue_.empty())
-                {
-                    std::unique_lock<std::mutex> lock(mtx_);
-                    bool wait_status = pop_wait_.wait_for(lock, std::chrono::microseconds(period_us), 
-                        [this]
-                        {
-                            return !task_queue_.empty()
-                                    || !isRunning();
-                        });
-                }
-
-                while(!task_queue_.empty())
-                {
-                    rs = task_queue_.pop_cb([this](std::function<std::string()> *el, size_t sz){
-                        std::string payload = (*el)();
-                        this->log_<false>(payload);
-                    }, 0x100);
-                    total_count += rs;
-                }
-
-            } /// while(isRunning())
-
-            if(!task_queue_.empty())
-            {
-                rs = task_queue_.pop_cb([this](std::function<std::string()> *el, size_t sz){
-                    this->log_<false>((*el)());
-                }, -1);
-                total_count += rs;
-            };
         });
     }
 
@@ -540,7 +444,7 @@ public:
         }
     }
 
-    inline bool isRunning() const 
+    inline bool isRunning() const
     {
         return is_running_.load(std::memory_order_relaxed);
     }
@@ -571,6 +475,89 @@ public:
     }
 
 private:
+
+    // template <bool is_raw>
+    // void prepare_() {
+    //     auto &ents = is_raw ? raw_ents_ : pre_ents_;
+    //     for(auto &entry : ents)
+    //     {
+    //         // entry.second.start();
+    //         auto &ent = entry.second;
+    //         if(ent.handle == nullptr && ent.onStart)
+    //         {
+    //             ent.handle = ent.onStart();
+    //         }
+    //     }
+
+    //     {
+    //         /// send first log to notify time_since_epoch
+    //         auto sys_now = std::chrono::system_clock::now();
+    //         auto std_now = std::chrono::steady_clock::now();
+    //         auto sys_time = std::chrono::system_clock::to_time_t(sys_now);
+    //         auto first_log = util::stringFormat("%s{%.9f}{%.9f}\n",
+    //             std::ctime(&sys_time),
+    //             std::chrono::duration_cast< std::chrono::duration<double> >(std_now.time_since_epoch()).count(),
+    //             std::chrono::duration_cast< std::chrono::duration<double> >(sys_now.time_since_epoch()).count());
+    //         log_<true>(first_log);
+    //     }
+    // }
+
+    template <bool is_raw> auto &getFifo_()
+    {
+        if constexpr (is_raw) return ring_buffer_;
+        else return task_queue_;
+    }
+
+    template <bool is_raw> auto getPopCallback_()
+    {
+        if constexpr (is_raw) return [this](const char *el, size_t sz)
+                {
+                    this->log_<true>(el, sz);
+                };
+        else return [this](std::function<std::string()> *el, size_t sz)
+                {
+                    std::string payload = (*el)();
+                    this->log_<false>(payload);
+                };
+    }
+
+    // template <bool is_raw>
+    // void start_(uint32_t period_us)
+    // {
+    //     broadcast_ = std::thread([this, period_us]()
+    //     {
+    //         size_t rs = 0;
+    //         auto do_pop = getPopCallback_<is_raw>();
+    //         auto &fifo = getFifo_<is_raw>();
+
+    //         auto wait_cb = [this, &fifo]
+    //             {
+    //                 return !fifo.empty()
+    //                         || !isRunning();
+    //             };
+
+    //         while(isRunning())
+    //         {
+    //             if(fifo.empty())
+    //             {
+    //                 std::unique_lock<std::mutex> lock(mtx_);
+    //                 bool wait_status = pop_wait_.wait_for(lock, std::chrono::microseconds(period_us), wait_cb);
+    //             }
+
+    //             while(!fifo.empty())
+    //             {
+    //                 rs = fifo.pop_cb(do_pop, is_raw ? -1 : 1);
+    //             }
+
+    //         } /// while(isRunning())
+
+    //         if(!fifo.empty())
+    //         {
+    //             rs = fifo.pop_cb(do_pop, -1);
+    //         }
+
+    //     });
+    // }
 
     template <bool is_raw, typename C>
     inline void log_(const C &buff)
