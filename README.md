@@ -1,7 +1,9 @@
 Utilities & Logging Library
 ----
 
-## Prerequisite
+## Prerequisites
+
+### tools
 
 ```
 sudo apt install -y curl ninja-build && \
@@ -14,7 +16,7 @@ git clone git@github.com:google/googletest.git -b release-1.11.0 &&
 cd googletest && { cmake -GNinja -B.build -DBUILD_SHARED_LIBS=ON && cmake --build .build && sudo cmake --install .build; cd ..; sudo ldconfig; }
 ```
 
-## Usage
+### submodules
 
 `git submodule update --init --recursive`
 
@@ -22,7 +24,6 @@ cd googletest && { cmake -GNinja -B.build -DBUILD_SHARED_LIBS=ON && cmake --buil
 ![push](./res/push.png)
 ![pop](./res/pop.png)
 ![push/pop](./res/pp.png)
-
 
 ## Plot
 plot.sh <file> 1
