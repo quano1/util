@@ -17,10 +17,12 @@ function parse()
     BEGIN {
         COLOR_ENABLED_='"$COLOR_ENABLED"'
         DIFF_='"$1"'
+
         if (COLOR_ENABLED_ == 1) {
             RESET="\033[0m"
             split("\033[91m;\033[92m;\033[93m;\033[94m;\033[95m;\033[96m;\033[97m;\033[31m;\033[32m;\033[33m;\033[34m;\033[35m;\033[36m;\033[37m;", colorlist, ";")
         }
+
         total_size = 0;
     }
     {
@@ -31,13 +33,10 @@ function parse()
         thread_=int($3)
         lvl_=$4
         curr_ctx=$5
-
-        # print strftime("%d-%m-%y %H-%M-%S",int_time_);
-        # date_=strftime("%F %T",int_time_);
-
         date_=strftime("%y-%b-%d %T",int_time_);
-        
+
         if (COLOR_ENABLED_ == 1) {
+
             if (thread_color_[thread_] == "") {
                 index_ = (thread_%length(colorlist)) + 1;
                 thread_color_[thread_] = colorlist[index_];
@@ -71,19 +70,34 @@ function parse()
             func_=$6;
             line_=$7;
             msg_=$8;
-            if(COLOR_ENABLED_ == 1) {
-                if(type_ == "{T") {
-                    if(match(msg_, "^-")) { 
+
+            if(type_ == "{T") {
+
+                if(match(msg_, "^+")) {
+                    traces_[thread_][lvl_]=$2
+                } else {
+                    trace_diff_=sprintf("%.9f (s)", $2 - traces_[thread_][lvl_]);
+                    if(COLOR_ENABLED_ == 1) {
                         type_color_ = "\033[46m";
                     }
                 }
+
+            } else {
+
+                if(lvl_ > 0) {
+                    trace_diff_=sprintf("%.9f (s)", $2 - traces_[thread_][lvl_-1]);
+                } else {
+                    trace_diff_=""
+                }
+
             }
-            printf "{%s.%d}%s%s}%s%s{%s}%2d%.*s{%s}{%s %s}%s %s{%s%s\n", 
-                date_, time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, (lvl_), "-----------------------------", 
-                curr_ctx, func_, line_, RESET, 
-                type_text_, msg_, RESET;
-        }
-        else {
+
+            printf "{%s.%d}%s%s}%s%s{%s}%2d%.*s{%s}{%s %s}%s %s{%s%s %s\n",
+                date_, time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, (lvl_), "-----------------------------",
+                curr_ctx, func_, line_, RESET,
+                type_text_, msg_, RESET, trace_diff_;
+
+        } else {
             print "ERROR: "$0;
         }
     }

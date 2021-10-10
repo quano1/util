@@ -45,7 +45,7 @@ extern char *__progname;
 #define TLL_GLOGF(...) TLL_GLOG((tll::log::Severity::kFatal), ##__VA_ARGS__)
 #define TLL_GLOGT(ID) \
     tll::log::Tracer COMBINE(tracer, __LINE__)(ID, \
-    std::bind(&tll::log::Manager::log<Mode::kAsync, Tracer *, const std::string &, double>, &tll::log::Manager::instance(), (tll::log::Severity::kTrace), __FILE__, __FUNCTION__, __LINE__, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4))
+    std::bind(&tll::log::Manager::log<Mode::kAsync, Tracer *, const std::string &>, &tll::log::Manager::instance(), (tll::log::Severity::kTrace), __FILE__, __FUNCTION__, __LINE__, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3))
 
 #define TLL_GLOGTF()   TLL_GLOGT(__FUNCTION__)
 
@@ -90,23 +90,23 @@ namespace context {
 
 struct Tracer
 {
-    typedef std::function <void (const char *format, Tracer *, const std::string &, double)> LogCallback;
+    typedef std::function <void (const char *format, Tracer *, const std::string &)> LogCallback;
 private:
     std::string name_;
     LogCallback doLog_;
 public:
-    util::Counter<> counter;
+    // util::Counter<> counter;
 
     Tracer(const std::string &name, LogCallback &&doLog) : name_(name), doLog_(std::move(doLog))
     {
-        doLog_("+%p:%s", this, name_, 0);
+        doLog_("+%p:%s", this, name_);
         context::level++;
     }
 
     ~Tracer()
     {
         context::level--;
-        doLog_("-%p:%s %.9f(s)", this, name_, counter.elapse().count());
+        doLog_("-%p:%s", this, name_);
     }
 };
 
