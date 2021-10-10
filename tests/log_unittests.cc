@@ -51,14 +51,17 @@ TEST_F(LoggerTest, Log)
         ins.start<false>();
         std::this_thread::sleep_for(std::chrono::nanoseconds(0));
         counter.start();
-        for(log_count=0; log_count<0x1000; log_count++)
+        #pragma omp parallel num_threads ( NUM_CPU )
         {
-            TLL_GLOGTF();
-            TLL_GLOGT("loop");
-            TLL_GLOGD("%.9f", counter.elapse().count());
-            TLL_GLOGI("%.9f", counter.elapse().count());
-            TLL_GLOGW("%.9f", counter.elapse().count());
-            TLL_GLOGF("%.9f", counter.elapse().count());
+            for(log_count=0; log_count<0x1000; log_count++)
+            {
+                TLL_GLOGTF();
+                TLL_GLOGT("loop");
+                TLL_GLOGD("%.9f", counter.elapse().count());
+                TLL_GLOGI("%.9f", counter.elapse().count());
+                TLL_GLOGW("%.9f", counter.elapse().count());
+                TLL_GLOGF("%.9f", counter.elapse().count());
+            }
         }
         finish_log_time = counter.elapse().count();
         ins.stop();
