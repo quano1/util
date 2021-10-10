@@ -11,7 +11,6 @@
 #include <unordered_map>
 
 #include <chrono>
-#include <ctime>
 #include <thread>
 #include <atomic>
 #include <memory>
@@ -286,9 +285,7 @@ public:
             /// send first log to notify time_since_epoch
             auto sys_now = std::chrono::system_clock::now();
             auto std_now = std::chrono::steady_clock::now();
-            auto sys_time = std::chrono::system_clock::to_time_t(sys_now);
-            auto first_log = util::stringFormat("%s{%.9f}{%.9f}\n",
-                std::ctime(&sys_time),
+            auto first_log = util::stringFormat("%.9f %.9f\n",
                 std::chrono::duration_cast< std::chrono::duration<double> >(std_now.time_since_epoch()).count(),
                 std::chrono::duration_cast< std::chrono::duration<double> >(sys_now.time_since_epoch()).count());
             log_<is_raw>(first_log);

@@ -15,8 +15,9 @@ function parse()
 # apt-cache show "$package" | awk '/^Package: /{p=$2} /^Version: /{v=$2} /^Architecture: /{a=$2} /^$/{print "apt-get download "p"="v" -a="a}'
     gawk -F  "}{" '
     BEGIN {
-        color_enabled='"$COLOR_ENABLED"'
-        if (color_enabled == 1) {
+        COLOR_ENABLED_='"$COLOR_ENABLED"'
+        DIFF_='"$1"'
+        if (COLOR_ENABLED_ == 1) {
             RESET="\033[0m"
             split("\033[91m;\033[92m;\033[93m;\033[94m;\033[95m;\033[96m;\033[97m;\033[31m;\033[32m;\033[33m;\033[34m;\033[35m;\033[36m;\033[37m;", colorlist, ";")
         }
@@ -24,12 +25,19 @@ function parse()
     }
     {
         type_=$1
-        time_=$2
+        time_=$2+DIFF_
+        int_time_=int(time_);
+        time_=int((time_ - int_time_) * int(1e9));
         thread_=int($3)
         lvl_=$4
         curr_ctx=$5
 
-        if (color_enabled == 1) {
+        # print strftime("%d-%m-%y %H-%M-%S",int_time_);
+        # date_=strftime("%F %T",int_time_);
+
+        date_=strftime("%y-%b-%d %T",int_time_);
+        
+        if (COLOR_ENABLED_ == 1) {
             if (thread_color_[thread_] == "") {
                 index_ = (thread_%length(colorlist)) + 1;
                 thread_color_[thread_] = colorlist[index_];
@@ -63,15 +71,15 @@ function parse()
             func_=$6;
             line_=$7;
             msg_=$8;
-            if(color_enabled == 1) {
+            if(COLOR_ENABLED_ == 1) {
                 if(type_ == "{T") {
                     if(match(msg_, "^-")) { 
                         type_color_ = "\033[46m";
                     }
                 }
             }
-            printf "{%20.9f}%s%s}%s%s{%s}%2d%.*s{%s}{%s %s}%s %s{%s%s\n", 
-                time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, (lvl_), "-----------------------------", 
+            printf "{%s.%d}%s%s}%s%s{%s}%2d%.*s{%s}{%s %s}%s %s{%s%s\n", 
+                date_, time_, type_color_, type_, RESET, thread_color_[thread_], thread_, lvl_, (lvl_), "-----------------------------", 
                 curr_ctx, func_, line_, RESET, 
                 type_text_, msg_, RESET;
         }
@@ -90,8 +98,10 @@ function parse()
 main() {
 
 # total_size=`ls -l $1 | awk '{print $5}'`;
+DIFF_=`head -n1 $1 | awk '{print $2 - $1;}'`
+# echo $DIFF_;
 
-tail -n +3 $1 | sort -t "}" -k 2,2 -s | parse
+tail -n +2 $1 | sort -t "}" -k 2,2 -s | parse $DIFF_
 }
 
 main $*
