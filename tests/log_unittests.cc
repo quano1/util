@@ -53,7 +53,7 @@ TEST_F(LoggerTest, Log)
         counter.start();
         #pragma omp parallel num_threads ( NUM_CPU )
         {
-            for(log_count=0; log_count<0x1000; log_count++)
+            for(int i=0; i<0x1000; i++)
             {
                 TLL_GLOGTF();
                 TLL_GLOGT("loop");
@@ -66,8 +66,8 @@ TEST_F(LoggerTest, Log)
         finish_log_time = counter.elapse().count();
         ins.stop();
         total_log_time = counter.elapse().count();
-        LOGV(log_count, ins.total_size, finish_log_time, total_log_time);
-        LOGD("Callback: %.3f us", finish_log_time/log_count*1e6);
+        LOGV(log_count*NUM_CPU, ins.total_size, finish_log_time, total_log_time);
+        LOGD("Callback: %.3f us", finish_log_time/log_count*NUM_CPU*1e6);
         LOGD("In/Out speed: %.3f / %.3f MBs", ins.total_size / finish_log_time / 0x100000, ins.total_size / total_log_time / 0x100000);
     }
 }
