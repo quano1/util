@@ -21,7 +21,7 @@ struct LoggerTest : public ::testing::Test
     }
 };
 
-TEST_F(LoggerTest, Log)
+TEST_F(LoggerTest, Small)
 {
     static auto &ins = tll::log::Manager::instance();
     tll::util::Counter<> counter;
@@ -44,7 +44,14 @@ TEST_F(LoggerTest, Log)
         LOGD("Callback: %.3f us", finish_log_time/log_count*1e6);
         LOGD("In/Out speed: %.3f / %.3f MBs", ins.total_size / finish_log_time / 0x100000, ins.total_size / total_log_time / 0x100000);
     }
+}
 
+TEST_F(LoggerTest, Large)
+{
+    static auto &ins = tll::log::Manager::instance();
+    tll::util::Counter<> counter;
+    double finish_log_time, total_log_time;
+    size_t log_count = 0;
     {
         ins.total_size = 0;
         ins.stop();
@@ -53,7 +60,7 @@ TEST_F(LoggerTest, Log)
         counter.start();
         #pragma omp parallel num_threads ( NUM_CPU )
         {
-            for(int i=0; i<0x1000; i++)
+            for(int i=0; i<0x20000; i++)
             {
                 TLL_GLOGTF();
                 TLL_GLOGT("loop");
@@ -63,11 +70,12 @@ TEST_F(LoggerTest, Log)
                 TLL_GLOGF("%.9f", counter.elapse().count());
             }
         }
+        log_count = 0x100000 * NUM_CPU;
         finish_log_time = counter.elapse().count();
         ins.stop();
         total_log_time = counter.elapse().count();
-        LOGV(log_count*NUM_CPU, ins.total_size, finish_log_time, total_log_time);
-        LOGD("Callback: %.3f us", finish_log_time/log_count*NUM_CPU*1e6);
+        LOGV(log_count, ins.total_size, finish_log_time, total_log_time);
+        LOGD("Callback: %.3f us", finish_log_time/log_count*1e6);
         LOGD("In/Out speed: %.3f / %.3f MBs", ins.total_size / finish_log_time / 0x100000, ins.total_size / total_log_time / 0x100000);
     }
 }

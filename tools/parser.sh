@@ -24,6 +24,8 @@ function parse()
         }
 
         total_size = 0;
+        max_diff_=0;
+        max_line_=0;
     }
     {
         type_=$1
@@ -77,7 +79,11 @@ function parse()
                 if(match(msg_, "^+")) {
                     traces_[thread_][lvl_]=$2
                 } else {
-                    trace_diff_=sprintf("%9d (ns)", ($2 - traces_[thread_][lvl_])*1e9);
+                    if(max_diff_ < ($2 - traces_[thread_][lvl_])) {
+                        max_diff_ = ($2 - traces_[thread_][lvl_]);
+                        max_line_ = NR;
+                    }
+                    trace_diff_=sprintf("%.9f (s)", ($2 - traces_[thread_][lvl_]));
                     if(COLOR_ENABLED_ == 1) {
                         type_color_ = "\033[46m";
                     }
@@ -97,7 +103,7 @@ function parse()
             shift_=sprintf("%.*s", (lvl_), "                               ");
             # msg_=sprintf("%s%s%s", type_text_, msg_, RESET);
             printf "%s" \
-                "%s {%20.20s} %20.20s %-20.20s%s " \
+                "%s {%s} %s %s%s " \
                 "%s{%s}%s" \
                 "%s"\
                 "%s{%s}%s "\
@@ -108,12 +114,14 @@ function parse()
                 shift_,
                 thread_color_[thread_], msg_, RESET,
                 trace_diff_;
-
         } else {
             print "ERROR: "$0;
         }
+
     }
-    END {}';
+    END {
+        print "MAX: "max_diff_ " line: " max_line_;
+    }';
 
 }
 
@@ -122,12 +130,10 @@ function parse()
 # cnt_=1024;
 
 main() {
-
-# total_size=`ls -l $1 | awk '{print $5}'`;
-DIFF_=`head -n1 $1 | awk '{print $2 - $1;}'`
-# echo $DIFF_;
-
-tail -n +2 $1 | sort -t "}" -k 2,2 -s | sed -e 's#{\(.*\)}#\1#' | parse $DIFF_
+    # total_size=`ls -l $1 | awk '{print $5}'`;
+    DIFF_=`head -n1 $1 | awk '{print $2 - $1;}'`
+    # echo $DIFF_;
+    tail -n +2 $1 | sort --parallel=`nproc` -S2G -t "}" -k 2,2 | sed -e 's#{\(.*\)}#\1#' | parse $DIFF_
 }
 
 main $*
