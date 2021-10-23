@@ -23,13 +23,13 @@ struct RingBufferTest : public ::testing::Test
     void RWSequence(size_t loop)
     {
         using namespace tll::lf;
-        using elem_t = typename FIFO::elem_t;
+        using Elem_t = typename FIFO::Elem_t;
         FIFO fifo;
-        LOGVB("[%ld] sizeof elem_t: %ld", loop, sizeof(elem_t));
-        elem_t val = -1;
+        LOGVB("[%ld] sizeof Elem_t: %ld", loop, sizeof(Elem_t));
+        Elem_t val = -1;
         size_t ret = -1;
-        Callback<elem_t> do_nothing = [](const elem_t*, size_t){};
-        auto pushCb = [](elem_t *el, size_t sz, elem_t val)
+        Callback<Elem_t> do_nothing = [](const Elem_t*, size_t){};
+        auto pushCb = [](Elem_t *el, size_t sz, Elem_t val)
         {
             for(int i=0; i<sz; i++) *(el+i) = val;
         };
@@ -41,15 +41,15 @@ struct RingBufferTest : public ::testing::Test
         for(size_t i=0; i < fifo.capacity()*loop; i++)
         {
             /// https://stackoverflow.com/questions/610245/where-and-why-do-i-have-to-put-the-template-and-typename-keywords
-            ret = fifo.push( (elem_t)i );
+            ret = fifo.push( (Elem_t)i );
             EXPECT_EQ(ret, 1);
             fifo.pop(val);
-            EXPECT_EQ(val, (elem_t)i);
+            EXPECT_EQ(val, (Elem_t)i);
         }
         LOGVB("%s", fifo.dump().data());
         LOGVB("fill");
         fifo.reset();
-        std::vector<elem_t> buff(fifo.capacity(), 0);
+        std::vector<Elem_t> buff(fifo.capacity(), 0);
         for(size_t i=0; i < fifo.capacity(); i++)
             buff[i] = i;
 
@@ -58,11 +58,11 @@ struct RingBufferTest : public ::testing::Test
         LOGVB("%s", fifo.dump().data());
         LOGVB("overrun");
         EXPECT_FALSE(fifo.empty());
-        ret = fifo.push((elem_t)val);
+        ret = fifo.push((Elem_t)val);
         EXPECT_EQ(ret, 0);
         LOGVB("%s", fifo.dump().data());
         LOGVB("pop all");
-        ret = fifo.pop_cb(do_nothing, -1);
+        ret = fifo.popCb(do_nothing, -1);
         EXPECT_EQ(ret, fifo.capacity());
         LOGVB("%s", fifo.dump().data());
         LOGVB("underrun");
@@ -74,15 +74,15 @@ struct RingBufferTest : public ::testing::Test
         constexpr size_t kPushSize = 3;
         for(size_t i=0; i < fifo.capacity()*loop; i++)
         {
-            // ret = fifo.push_cb(pushCb, kPushSize, (elem_t)i);
-            std::vector<elem_t> outbuff(kPushSize, 0);
+            // ret = fifo.pushCb(pushCb, kPushSize, (Elem_t)i);
+            std::vector<Elem_t> outbuff(kPushSize, 0);
             ret = fifo.push(buff.data(), kPushSize);
             EXPECT_EQ(ret, kPushSize);
 
-            // ret = fifo.pop_cb([&](const elem_t *el, size_t sz){
+            // ret = fifo.popCb([&](const Elem_t *el, size_t sz){
             //     ASSERT_EQ(sz, kPushSize);
-            //     EXPECT_EQ(*(el), (elem_t)i);
-            //     EXPECT_EQ(memcmp(el, el + 1, (sz - 1) * sizeof(elem_t)), 0);
+            //     EXPECT_EQ(*(el), (Elem_t)i);
+            //     EXPECT_EQ(memcmp(el, el + 1, (sz - 1) * sizeof(Elem_t)), 0);
             // }, -1);
             ret = fifo.pop(outbuff.data(), kPushSize);
             EXPECT_EQ(memcmp(outbuff.data(), buff.data(), kPushSize), 0);
@@ -95,31 +95,31 @@ struct RingBufferTest : public ::testing::Test
     void RWContiguously()
     {
         using namespace tll::lf;
-        typedef int8_t elem_t;
+        typedef int8_t Elem_t;
         FIFO fifo{8};
-        Callback<elem_t> do_nothing = [](const elem_t*, size_t){};
+        Callback<Elem_t> do_nothing = [](const Elem_t*, size_t){};
         size_t capa = fifo.capacity();
         size_t ret = -1;
-        elem_t val;
+        Elem_t val;
 
-        fifo.push((elem_t)0);
+        fifo.push((Elem_t)0);
         fifo.pop(val);
         /// Now the fifo is empty.
         /// But should not be able to push capacity size
-        EXPECT_EQ(fifo.push_cb(do_nothing, capa), 0);
+        EXPECT_EQ(fifo.pushCb(do_nothing, capa), 0);
         /// Can only pushing the reset of the buffer.
-        EXPECT_EQ(fifo.push_cb(do_nothing, capa - 1), capa - 1);
+        EXPECT_EQ(fifo.pushCb(do_nothing, capa - 1), capa - 1);
         /// reset everything
         fifo.reset();
-        fifo.push_cb(do_nothing, capa);
-        fifo.pop_cb(do_nothing, capa/2);
+        fifo.pushCb(do_nothing, capa);
+        fifo.popCb(do_nothing, capa/2);
         /// wrapped perfectly
-        fifo.push_cb(do_nothing, capa/2);
+        fifo.pushCb(do_nothing, capa/2);
         /// should having the capacity elems
         EXPECT_EQ(fifo.size(), capa);
         /// Should only be able to pop capa/2 due to wrapped (contiguously)
-        EXPECT_EQ(fifo.pop_cb(do_nothing, -1), capa/2);
-        EXPECT_EQ(fifo.pop_cb(do_nothing, -1), capa/2);
+        EXPECT_EQ(fifo.popCb(do_nothing, -1), capa/2);
+        EXPECT_EQ(fifo.popCb(do_nothing, -1), capa/2);
     }
 }; /// class RingBufferTest
 
@@ -127,50 +127,50 @@ TEST_F(RingBufferTest, RWSequenceSS)
 {
     using namespace tll::lf;
     constexpr size_t kLoop = 0x10;
-    RWSequence<ring_buffer_ss<int8_t>>(kLoop);
-    RWSequence<ring_buffer_ss<int16_t>>(kLoop);
-    RWSequence<ring_buffer_ss<int32_t>>(kLoop);
-    RWSequence<ring_buffer_ss<int64_t>>(kLoop);
+    RWSequence<RingBufferSS<int8_t>>(kLoop);
+    RWSequence<RingBufferSS<int16_t>>(kLoop);
+    RWSequence<RingBufferSS<int32_t>>(kLoop);
+    RWSequence<RingBufferSS<int64_t>>(kLoop);
 }
 
 TEST_F(RingBufferTest, RWSequenceDD)
 {
     using namespace tll::lf;
     constexpr size_t kLoop = 0x10;
-    RWSequence<ring_buffer_dd<int8_t>>(kLoop);
-    RWSequence<ring_buffer_dd<int16_t>>(kLoop);
-    RWSequence<ring_buffer_dd<int32_t>>(kLoop);
-    RWSequence<ring_buffer_dd<int64_t>>(kLoop);
+    RWSequence<RingBufferDD<int8_t>>(kLoop);
+    RWSequence<RingBufferDD<int16_t>>(kLoop);
+    RWSequence<RingBufferDD<int32_t>>(kLoop);
+    RWSequence<RingBufferDD<int64_t>>(kLoop);
 }
 
 TEST_F(RingBufferTest, RWSequenceSD)
 {
     using namespace tll::lf;
     constexpr size_t kLoop = 0x10;
-    RWSequence<ring_buffer_sd<int8_t>>(kLoop);
-    RWSequence<ring_buffer_sd<int16_t>>(kLoop);
-    RWSequence<ring_buffer_sd<int32_t>>(kLoop);
-    RWSequence<ring_buffer_sd<int64_t>>(kLoop);
+    RWSequence<RingBufferSD<int8_t>>(kLoop);
+    RWSequence<RingBufferSD<int16_t>>(kLoop);
+    RWSequence<RingBufferSD<int32_t>>(kLoop);
+    RWSequence<RingBufferSD<int64_t>>(kLoop);
 }
 
 TEST_F(RingBufferTest, RWSequenceDS)
 {
     using namespace tll::lf;
     constexpr size_t kLoop = 0x10;
-    RWSequence<ring_buffer_ds<int8_t>>(kLoop);
-    RWSequence<ring_buffer_ds<int16_t>>(kLoop);
-    RWSequence<ring_buffer_ds<int32_t>>(kLoop);
-    RWSequence<ring_buffer_ds<int64_t>>(kLoop);
+    RWSequence<RingBufferDS<int8_t>>(kLoop);
+    RWSequence<RingBufferDS<int16_t>>(kLoop);
+    RWSequence<RingBufferDS<int32_t>>(kLoop);
+    RWSequence<RingBufferDS<int64_t>>(kLoop);
 }
 
 TEST_F(RingBufferTest, RWContiguously)
 {
     using namespace tll::lf;
 
-    RWContiguously<ring_buffer_ss<int8_t>>();
-    RWContiguously<ring_buffer_dd<int8_t>>();
-    RWContiguously<ring_buffer_ds<int8_t>>();
-    RWContiguously<ring_buffer_sd<int8_t>>();
+    RWContiguously<RingBufferSS<int8_t>>();
+    RWContiguously<RingBufferDD<int8_t>>();
+    RWContiguously<RingBufferDS<int8_t>>();
+    RWContiguously<RingBufferSD<int8_t>>();
 }
 
 ///
@@ -181,12 +181,12 @@ struct RingQueueTest : public ::testing::Test
     void RWSequence(size_t loop)
     {
         using namespace tll::lf;
-        using elem_t = typename FIFO::elem_t;
+        using Elem_t = typename FIFO::Elem_t;
         FIFO fifo;
-        LOGVB("[%ld] sizeof elem_t: %ld", loop, sizeof(elem_t));
-        elem_t val = -1;
+        LOGVB("[%ld] sizeof Elem_t: %ld", loop, sizeof(Elem_t));
+        Elem_t val = -1;
         size_t ret = -1;
-        tll::lf::Callback<elem_t> do_nothing = [&fifo](const elem_t*, size_t){};
+        tll::lf::Callback<Elem_t> do_nothing = [&fifo](const Elem_t*, size_t){};
 
         LOGVB("reserve not power of 2");
         fifo.reserve(7, 0x400);
@@ -196,26 +196,26 @@ struct RingQueueTest : public ::testing::Test
         for(size_t i=0; i < fifo.capacity()*loop; i++)
         {
             /// https://stackoverflow.com/questions/610245/where-and-why-do-i-have-to-put-the-template-and-typename-keywords
-            ret = fifo.push( (elem_t)i );
+            ret = fifo.push( (Elem_t)i );
             EXPECT_EQ(ret, 1);
             fifo.pop(val);
-            EXPECT_EQ(val, (elem_t)i);
+            EXPECT_EQ(val, (Elem_t)i);
         }
         LOGVB("%s", fifo.dump().data());
         LOGVB("fill");
         fifo.reset();
         for(size_t i=0; i < fifo.capacity(); i++)
         {
-            fifo.push((elem_t)i);
+            fifo.push((Elem_t)i);
         }
         LOGVB("%s", fifo.dump().data());
         LOGVB("overrun");
         EXPECT_FALSE(fifo.empty());
-        ret = fifo.push((elem_t)val);
+        ret = fifo.push((Elem_t)val);
         EXPECT_EQ(ret, 0);
         LOGVB("%s", fifo.dump().data());
         LOGVB("pop all");
-        ret = fifo.pop_cb(do_nothing, -1);
+        ret = fifo.popCb(do_nothing, -1);
         EXPECT_EQ(ret, fifo.capacity());
         LOGVB("%s", fifo.dump().data());
         LOGVB("underrun");
@@ -226,17 +226,17 @@ struct RingQueueTest : public ::testing::Test
         LOGVB("push/pop odd size");
         fifo.reset();
         constexpr size_t kPushSize = 3;
-        auto pushCb = [](elem_t *el, size_t el_left, elem_t val)
+        auto pushCb = [](Elem_t *el, size_t el_left, Elem_t val)
         {
             *el = val;
         };
         for(size_t i=0; i < fifo.capacity()*loop; i++)
         {
-            ret = fifo.push_cb(pushCb, kPushSize, (elem_t)i);
+            ret = fifo.pushCb(pushCb, kPushSize, (Elem_t)i);
             EXPECT_EQ(ret, kPushSize);
 
-            ret = fifo.pop_cb([&](const elem_t *el, size_t el_left){
-                EXPECT_EQ(*(el), (elem_t)i);
+            ret = fifo.popCb([&](const Elem_t *el, size_t el_left){
+                EXPECT_EQ(*(el), (Elem_t)i);
             }, -1);
             EXPECT_EQ(ret, kPushSize);
         }
@@ -247,28 +247,28 @@ struct RingQueueTest : public ::testing::Test
     void RWWrapped()
     {
         using namespace tll::lf;
-        typedef int8_t elem_t;
+        typedef int8_t Elem_t;
         FIFO fifo{8};
-        tll::lf::Callback<elem_t> do_nothing = [](const elem_t*, size_t){};
+        tll::lf::Callback<Elem_t> do_nothing = [](const Elem_t*, size_t){};
         size_t capa = fifo.capacity();
         size_t ret = -1;
-        elem_t val;
+        Elem_t val;
 
-        fifo.push((elem_t)0);
+        fifo.push((Elem_t)0);
         fifo.pop(val);
         /// Now the fifo is empty.
         /// Should be able to push capacity size
-        EXPECT_EQ(fifo.push_cb(do_nothing, capa), capa);
+        EXPECT_EQ(fifo.pushCb(do_nothing, capa), capa);
         /// reset everything
         fifo.reset();
-        fifo.push_cb(do_nothing, capa);
-        fifo.pop_cb(do_nothing, capa/2);
+        fifo.pushCb(do_nothing, capa);
+        fifo.popCb(do_nothing, capa/2);
         /// wrapped perfectly
-        fifo.push_cb(do_nothing, capa/2);
+        fifo.pushCb(do_nothing, capa/2);
         /// should having the capacity elems
         EXPECT_EQ(fifo.size(), capa);
         /// Should be able to pop capa even wrapped
-        EXPECT_EQ(fifo.pop_cb(do_nothing, -1), capa);
+        EXPECT_EQ(fifo.popCb(do_nothing, -1), capa);
     }
 }; /// class RingQueueTest
 
@@ -276,50 +276,50 @@ TEST_F(RingQueueTest, RWSequenceSS)
 {
     using namespace tll::lf;
     constexpr size_t kLoop = 0x10;
-    RWSequence<ring_queue_ss<int8_t>>(kLoop);
-    RWSequence<ring_queue_ss<int16_t>>(kLoop);
-    RWSequence<ring_queue_ss<int32_t>>(kLoop);
-    RWSequence<ring_queue_ss<int64_t>>(kLoop);
+    RWSequence<RingQueueSS<int8_t>>(kLoop);
+    RWSequence<RingQueueSS<int16_t>>(kLoop);
+    RWSequence<RingQueueSS<int32_t>>(kLoop);
+    RWSequence<RingQueueSS<int64_t>>(kLoop);
 }
 
 TEST_F(RingQueueTest, RWSequenceDD)
 {
     using namespace tll::lf;
     constexpr size_t kLoop = 0x10;
-    RWSequence<ring_queue_dd<int8_t>>(kLoop);
-    RWSequence<ring_queue_dd<int16_t>>(kLoop);
-    RWSequence<ring_queue_dd<int32_t>>(kLoop);
-    RWSequence<ring_queue_dd<int64_t>>(kLoop);
+    RWSequence<RingQueueDD<int8_t>>(kLoop);
+    RWSequence<RingQueueDD<int16_t>>(kLoop);
+    RWSequence<RingQueueDD<int32_t>>(kLoop);
+    RWSequence<RingQueueDD<int64_t>>(kLoop);
 }
 
 TEST_F(RingQueueTest, RWSequenceSD)
 {
     using namespace tll::lf;
     constexpr size_t kLoop = 0x10;
-    RWSequence<ring_queue_sd<int8_t>>(kLoop);
-    RWSequence<ring_queue_sd<int16_t>>(kLoop);
-    RWSequence<ring_queue_sd<int32_t>>(kLoop);
-    RWSequence<ring_queue_sd<int64_t>>(kLoop);
+    RWSequence<RingQueueSD<int8_t>>(kLoop);
+    RWSequence<RingQueueSD<int16_t>>(kLoop);
+    RWSequence<RingQueueSD<int32_t>>(kLoop);
+    RWSequence<RingQueueSD<int64_t>>(kLoop);
 }
 
 TEST_F(RingQueueTest, RWSequenceDS)
 {
     using namespace tll::lf;
     constexpr size_t kLoop = 0x10;
-    RWSequence<ring_queue_ds<int8_t>>(kLoop);
-    RWSequence<ring_queue_ds<int16_t>>(kLoop);
-    RWSequence<ring_queue_ds<int32_t>>(kLoop);
-    RWSequence<ring_queue_ds<int64_t>>(kLoop);
+    RWSequence<RingQueueDS<int8_t>>(kLoop);
+    RWSequence<RingQueueDS<int16_t>>(kLoop);
+    RWSequence<RingQueueDS<int32_t>>(kLoop);
+    RWSequence<RingQueueDS<int64_t>>(kLoop);
 }
 
 TEST_F(RingQueueTest, RWWrapped)
 {
     using namespace tll::lf;
 
-    RWWrapped<ring_queue_ss<int8_t>>();
-    RWWrapped<ring_queue_dd<int8_t>>();
-    RWWrapped<ring_queue_ds<int8_t>>();
-    RWWrapped<ring_queue_sd<int8_t>>();
+    RWWrapped<RingQueueSS<int8_t>>();
+    RWWrapped<RingQueueDD<int8_t>>();
+    RWWrapped<RingQueueDS<int8_t>>();
+    RWWrapped<RingQueueSD<int8_t>>();
 }
 
 #if (HAVE_OPENMP)
@@ -371,7 +371,7 @@ struct RingBufferConcurrentTest : public ::testing::Test
                     char i=0;
                     for(;total_push_size.load(std::memory_order_relaxed) < (kTotalWriteSize);)
                     {
-                        size_t ret_size = fifo.push_cb([](char *el, size_t size, char val) {
+                        size_t ret_size = fifo.pushCb([](char *el, size_t size, char val) {
                             memset(el, val, size);
                         }, kMaxPkgSize, i);
                         if(ret_size)
@@ -398,7 +398,7 @@ struct RingBufferConcurrentTest : public ::testing::Test
                     for(;prod_completed.load(std::memory_order_relaxed) < index_seq.value /*- (thread_num + 1) / 2*/
                         || total_push_size.load(std::memory_order_relaxed) > total_pop_size.load(std::memory_order_relaxed);)
                     {
-                        size_t ret_size = fifo.pop_cb([&store_buff, &pop_size, &fifo, kTid](const char *el, size_t size) {
+                        size_t ret_size = fifo.popCb([&store_buff, &pop_size, &fifo, kTid](const char *el, size_t size) {
                             // LOGD("%ld\t%s", size, fifo.dump().data());
                             auto dst = store_buff[kTid/2].data() + pop_size;
                             auto src = el;
@@ -459,28 +459,28 @@ struct RingBufferConcurrentTest : public ::testing::Test
 TEST_F(RingBufferConcurrentTest, MPMCRWFixedSizeDD)
 {
     using namespace tll::lf;
-    RWSimulFixedSize<mode::dense, mode::dense, 0u>();
+    RWSimulFixedSize<mode::multi_dense, mode::multi_dense, 0u>();
 }
 
 /// MPMC read write fixed size
 TEST_F(RingBufferConcurrentTest, MPMCRWFixedSizeDS)
 {
     using namespace tll::lf;
-    RWSimulFixedSize<mode::dense, mode::sparse, -1>();
+    RWSimulFixedSize<mode::multi_dense, mode::multi_sparse, -1>();
 }
 
 /// MPMC read write fixed size
 TEST_F(RingBufferConcurrentTest, MPMCRWFixedSizeSD)
 {
     using namespace tll::lf;
-    RWSimulFixedSize<mode::sparse, mode::dense, -1>();
+    RWSimulFixedSize<mode::multi_sparse, mode::multi_dense, -1>();
 }
 
 /// MPMC read write fixed size
 TEST_F(RingBufferConcurrentTest, MPMCRWFixedSizeSS)
 {
     using namespace tll::lf;
-    RWSimulFixedSize<mode::sparse, mode::sparse, -1>();
+    RWSimulFixedSize<mode::multi_sparse, mode::multi_sparse, -1>();
 }
 
 #endif /// #if (HAVE_OPENMP)

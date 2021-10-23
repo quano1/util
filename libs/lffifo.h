@@ -36,26 +36,24 @@ struct Statistic {
         time_comp{0}, time_max_comp{0}, time_min_comp{0};
 };
 
-typedef std::pair<Statistic, Statistic> Statistics;
-
 // template <bool E=false>
 struct Marker
 {
     Marker() = default;
-    inline auto &ref_index_head() {return index_head_;}
-    inline auto &ref_index_tail() {return index_tail_;}
-    inline auto &ref_entry_id_head() {return entry_id_head_;}
-    inline auto &ref_entry_id_tail() {return entry_id_tail_;}
-    inline auto &ref_exit_id() {return exit_id_;}
+    inline auto &refIndexHead() {return index_head_;}
+    inline auto &refIndexTail() {return index_tail_;}
+    inline auto &refEntryIdHead() {return entry_id_head_;}
+    inline auto &refEntryIdTail() {return entry_id_tail_;}
+    inline auto &refExitId() {return exit_id_;}
 
-    inline size_t get_index_head(std::memory_order mo=std::memory_order_relaxed) const {return index_head_.load(mo);}
-    inline size_t get_index_tail(std::memory_order mo=std::memory_order_relaxed) const {return index_tail_.load(mo);}
-    inline size_t get_entry_id_head(std::memory_order mo=std::memory_order_relaxed) const {return entry_id_head_.load(mo);}
-    inline size_t get_entry_id_tail(std::memory_order mo=std::memory_order_relaxed) const {return entry_id_tail_.load(mo);}
-    inline size_t get_exit_id(std::memory_order mo=std::memory_order_relaxed) const {return exit_id_.load(mo);}
+    inline size_t getIndexHead(std::memory_order mo=std::memory_order_relaxed) const {return index_head_.load(mo);}
+    inline size_t getIndexTail(std::memory_order mo=std::memory_order_relaxed) const {return index_tail_.load(mo);}
+    inline size_t getEntryIdHead(std::memory_order mo=std::memory_order_relaxed) const {return entry_id_head_.load(mo);}
+    inline size_t getEntryIdTail(std::memory_order mo=std::memory_order_relaxed) const {return entry_id_tail_.load(mo);}
+    inline size_t getExitId(std::memory_order mo=std::memory_order_relaxed) const {return exit_id_.load(mo);}
 
     // inline auto &exit_id_list(size_t i) {return exit_id_list_[i];}
-    inline auto &ref_next_index_list(size_t i) {return next_index_list_[i];}
+    inline auto &refNextIndexList(size_t i) {return next_index_list_[i];}
     // inline auto &curr_index_list(size_t i) {return curr_index_list_[i];}
     // inline auto &size_list(size_t i) {return size_list_[i];}
 
@@ -146,30 +144,30 @@ struct Marker
 
 enum class Mode
 {
-    kSparse,
-    kDense,
+    kMultiSparse,
+    kMultiDense,
     kMax
 };
 
 namespace mode
 {
-    constexpr Mode sparse = Mode::kSparse;
-    constexpr Mode dense = Mode::kDense;
+    constexpr Mode multi_sparse = Mode::kMultiSparse;
+    constexpr Mode multi_dense = Mode::kMultiDense;
 }
 
 /// Contiguous Circular Index
 // template <size_t num_threads=0x400>
-template <typename T, Mode kProdMode=Mode::kDense, Mode kConsMode=Mode::kSparse, bool kContiguous=true, bool kProfiling=false>
+template <typename T, Mode kProdMode=Mode::kMultiSparse, Mode kConsMode=Mode::kMultiSparse, bool kIsContiguous=true, bool kProfiling=false>
 struct Fifo
 {
 public:
-    using elem_t = T;
+    using Elem_t = T;
 private:
     Marker producer_;
     Marker consumer_;
     std::atomic<size_t> water_mark_{0}, water_mark_head_{0};
     size_t capacity_{0}, num_threads_{0};
-    std::vector<elem_t> buffer_;
+    std::vector<Elem_t> buffer_;
 
     void profTimerReset()
     {
@@ -266,7 +264,7 @@ private:
                 std::atomic_thread_fence(std::memory_order_acquire);
             }
 
-            if constexpr (kContiguous)
+            if constexpr (kIsContiguous)
             {
                 callback(elemAt(next), size, std::forward<Args>(args)...);
             }
@@ -305,26 +303,26 @@ private:
         auto &marker = consumer_;
         size_t cons_next_index;
         size_t entry_id_head;
-        cons_index_head = marker.get_index_head();
+        cons_index_head = marker.getIndexHead();
         size_t next_size = size;
         for(;;profAdd(marker.try_miss_count, 1))
         {
             next_size = size;
-            size_t prod_index = producer_.get_index_tail();
-            if constexpr (kContiguous && kConsMode == mode::dense)
+            size_t prod_index = producer_.getIndexTail();
+            if constexpr (kIsContiguous && kConsMode == mode::multi_dense)
             {
-                entry_id_head = marker.get_entry_id_head();
-                while(entry_id_head != marker.get_entry_id_tail())
-                    entry_id_head = marker.get_entry_id_head();
+                entry_id_head = marker.getEntryIdHead();
+                while(entry_id_head != marker.getEntryIdTail())
+                    entry_id_head = marker.getEntryIdHead();
 
-                cons_index_head = marker.get_index_head();
+                cons_index_head = marker.getIndexHead();
             }
 
             cons_next_index = cons_index_head;
             size_t wmark = water_mark_.load(std::memory_order_relaxed);
             if(cons_next_index < prod_index)
             {
-                if constexpr (kContiguous)
+                if constexpr (kIsContiguous)
                 {
                     if(cons_next_index == wmark)
                     {
@@ -358,7 +356,7 @@ private:
                             next_size = prod_index - cons_next_index;
                         }
                     }
-                } /// if(kContiguous)
+                } /// if(kIsContiguous)
                 else
                 {
                     if(size > prod_index - cons_index_head)
@@ -367,23 +365,23 @@ private:
                     }
                 }
 
-                if constexpr (kContiguous && kConsMode == mode::dense)
+                if constexpr (kIsContiguous && kConsMode == mode::multi_dense)
                 {
-                    if(!marker.ref_entry_id_head().compare_exchange_strong(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+                    if(!marker.refEntryIdHead().compare_exchange_strong(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
                     {
                         continue;
                     }
                     else
                     {
-                        marker.ref_index_head().store(cons_next_index + next_size, std::memory_order_relaxed);
-                        marker.ref_entry_id_tail().store(entry_id_head + 1, std::memory_order_relaxed);
+                        marker.refIndexHead().store(cons_next_index + next_size, std::memory_order_relaxed);
+                        marker.refEntryIdTail().store(entry_id_head + 1, std::memory_order_relaxed);
                         entry_id = entry_id_head;
                         break;
                     }
                 }
                 else
                 {
-                    if(!marker.ref_index_head().compare_exchange_strong(cons_index_head, cons_next_index + next_size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                    if(!marker.refIndexHead().compare_exchange_strong(cons_index_head, cons_next_index + next_size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
                     else
                     {
                         entry_id = cons_index_head;
@@ -409,25 +407,25 @@ private:
         size_t prod_next_index;
         auto &marker = producer_;
         size_t entry_id_head;
-        prod_index_head = marker.get_index_head();
+        prod_index_head = marker.getIndexHead();
 
         for(;;profAdd(marker.try_miss_count, 1))
         {
-            size_t cons_index = consumer_.get_index_tail();
-            if constexpr (kContiguous && kProdMode == mode::dense)
+            size_t cons_index = consumer_.getIndexTail();
+            if constexpr (kIsContiguous && kProdMode == mode::multi_dense)
             {
-                entry_id_head = marker.get_entry_id_head();
-                while(entry_id_head != marker.get_entry_id_tail())
-                    entry_id_head = marker.get_entry_id_head();
+                entry_id_head = marker.getEntryIdHead();
+                while(entry_id_head != marker.getEntryIdTail())
+                    entry_id_head = marker.getEntryIdHead();
 
-                prod_index_head = marker.get_index_head();
+                prod_index_head = marker.getIndexHead();
             }
 
             prod_next_index = prod_index_head;
 
             if(prod_next_index + size <= capacity() + cons_index)
             {
-                if constexpr (kContiguous)
+                if constexpr (kIsContiguous)
                 {
                     /// prod leads
                     if(wrap(prod_next_index) >= wrap(cons_index))
@@ -457,25 +455,25 @@ private:
                             break;
                         }
                     }
-                } /// if(kContiguous)
+                } /// if(kIsContiguous)
 
-                if constexpr (kContiguous && kProdMode == mode::dense)
+                if constexpr (kIsContiguous && kProdMode == mode::multi_dense)
                 {
-                    if(!marker.ref_entry_id_head().compare_exchange_strong(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+                    if(!marker.refEntryIdHead().compare_exchange_strong(entry_id_head, entry_id_head + 1, std::memory_order_relaxed, std::memory_order_relaxed))
                     {
                         continue;
                     }
                     else
                     {
-                        marker.ref_index_head().store(prod_next_index + size, std::memory_order_relaxed);
-                        marker.ref_entry_id_tail().store(entry_id_head + 1, std::memory_order_relaxed);
+                        marker.refIndexHead().store(prod_next_index + size, std::memory_order_relaxed);
+                        marker.refEntryIdTail().store(entry_id_head + 1, std::memory_order_relaxed);
                         entry_id = entry_id_head;
                         break;
                     }
-                } /// kProdMode == mode::dense
+                } /// kProdMode == mode::multi_dense
                 else
                 {
-                    if(!marker.ref_index_head().compare_exchange_strong(prod_index_head, prod_next_index + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
+                    if(!marker.refIndexHead().compare_exchange_strong(prod_index_head, prod_next_index + size, std::memory_order_relaxed, std::memory_order_relaxed)) continue;
                     else
                     {
                         entry_id = prod_index_head;
@@ -498,87 +496,70 @@ private:
     {
         auto &marker = kIsProducer ? producer_ : consumer_;
         constexpr Mode kMode = kIsProducer ? kProdMode : kConsMode;
-        if constexpr (kMode == mode::dense)
+        if constexpr (kMode == mode::multi_dense)
         {
-            while(exit_id >= (marker.get_exit_id() + num_threads_)){};
+            while(exit_id >= (marker.getExitId() + num_threads_)){};
             size_t const kIdx = exit_id;
 
-            // size_t old_exit_id = marker.exit_id_list(wrap(kIdx, num_threads_)).load(std::memory_order_relaxed);
-            // size_t new_exit_id=exit_id + 1;
-
-            // LOGD("%d:%ld\t%ld:%ld", kIsProducer, kIdx, next_index, this->next(curr_index));
-            if constexpr (kContiguous && kIsProducer)
+            if constexpr (kIsContiguous && kIsProducer)
                 if(next_index >= this->next(curr_index))
                     water_mark_head_.store(curr_index, std::memory_order_relaxed);
 
             next_index += size;
-            // LOGD("%ld/%ld %ld/%ld %s", curr_index, next_index, old_exit_id, exit_id, dump().data());
-            size_t old_next_index = marker.ref_next_index_list(wrap(exit_id, num_threads_)).load(std::memory_order_relaxed);
-            // marker.ref_next_index_list(wrap(exit_id, num_threads_)).store(next_index);
+            size_t old_next_index = marker.refNextIndexList(wrap(exit_id, num_threads_)).load(std::memory_order_relaxed);
 
-            size_t new_exit_id = exit_id + (kContiguous? 1 : size);
+            size_t new_exit_id = exit_id + (kIsContiguous? 1 : size);
             for(;;marker.comp_miss_count.fetch_add(1, std::memory_order_relaxed))
             {
-                size_t curr_exit_id = marker.get_exit_id();
+                size_t curr_exit_id = marker.getExitId();
 
-                // LOGD(">%ld:%ld\t%ld:%ld", kIdx, curr_exit_id, exit_id, old_exit_id);
                 if(exit_id == curr_exit_id)
                 {
                     while(true)
                     {
-                        old_next_index = marker.ref_next_index_list(wrap(new_exit_id, num_threads_)).load(std::memory_order_relaxed);
+                        old_next_index = marker.refNextIndexList(wrap(new_exit_id, num_threads_)).load(std::memory_order_relaxed);
 
                         if(old_next_index > next_index)
                         {
-                            if constexpr (kContiguous)
+                            if constexpr (kIsContiguous)
                                 new_exit_id++;
                             else
                                 new_exit_id = old_next_index;
                             next_index = old_next_index;
-                            // new_exit_id = old_exit_id;
                         }
                         else
                             break;
                     }
 
-                    // next_index = marker.ref_next_index_list(wrap(new_exit_id - 1, num_threads_)).load(std::memory_order_relaxed);
-
-                    if constexpr (kContiguous && kIsProducer)
+                    if constexpr (kIsContiguous && kIsProducer)
                     {
                         size_t wmh = water_mark_head_.load(std::memory_order_relaxed);
                         if((water_mark_.load(std::memory_order_relaxed) < wmh)
                            && (next_index > wmh))
                         {
-                            marker.ref_index_tail().store(wmh, std::memory_order_relaxed);
+                            marker.refIndexTail().store(wmh, std::memory_order_relaxed);
                             water_mark_.store(wmh, std::memory_order_relaxed);
                         }
                     }
 
-                    marker.ref_index_tail().store(next_index, std::memory_order_relaxed);
+                    marker.refIndexTail().store(next_index, std::memory_order_relaxed);
                     exit_id = new_exit_id;
-                    marker.ref_exit_id().store(exit_id, std::memory_order_relaxed);
-                    // LOGD(" =%ld:%ld\t%ld:%ld:%ld\t%s", kIdx, curr_exit_id, exit_id, old_exit_id, new_exit_id, dump().data());
+                    marker.refExitId().store(exit_id, std::memory_order_relaxed);
                 }
                 else if(exit_id < curr_exit_id)
                 { break; }
 
-                if(marker.ref_next_index_list(wrap(exit_id, num_threads_)).compare_exchange_strong(old_next_index, next_index, std::memory_order_relaxed, std::memory_order_relaxed)) break;
-                // if(marker.exit_id_list(wrap(exit_id, num_threads_)).compare_exchange_strong(old_exit_id, new_exit_id, std::memory_order_relaxed, std::memory_order_relaxed)) break;
-                // LOGD(" M%ld:%ld:%ld\t%ld:%ld\t%s", kIdx, curr_exit_id, exit_id, old_next_index, next_index, dump().data());
-                // LOGV((ssize_t)kIdx, (ssize_t)curr_exit_id, (ssize_t)exit_id, (ssize_t)old_next_index, (ssize_t)next_index, dump());
+                if(marker.refNextIndexList(wrap(exit_id, num_threads_)).compare_exchange_strong(old_next_index, next_index, std::memory_order_relaxed, std::memory_order_relaxed)) break;
             }
-        } /// if(mode == mode::dense)
+        } /// if(mode == mode::multi_dense)
         else
         {
-            while(marker.get_index_tail() != curr_index){}
-            if constexpr (kContiguous && kIsProducer)
+            while(marker.getIndexTail() != curr_index){}
+            if constexpr (kIsContiguous && kIsProducer)
                 if(next_index >= this->next(curr_index))
                     water_mark_.store(curr_index, std::memory_order_relaxed);
-            marker.ref_index_tail().store(next_index + size, std::memory_order_release);
+            marker.refIndexTail().store(next_index + size, std::memory_order_release);
         }
-        // LOGD(" <(%ld/%ld) {%ld}", kIdx, entry_id, marker.get_exit_id());
-
-        // return true;
     }
 
 public:
@@ -668,17 +649,17 @@ public:
 
     inline auto dump() const
     {
-        size_t ph = producer_.get_index_head();
-        size_t pt = producer_.get_index_tail();
-        size_t peh = producer_.get_entry_id_head();
-        size_t pet = producer_.get_entry_id_tail();
-        size_t pex = producer_.get_exit_id();
+        size_t ph = producer_.getIndexHead();
+        size_t pt = producer_.getIndexTail();
+        size_t peh = producer_.getEntryIdHead();
+        size_t pet = producer_.getEntryIdTail();
+        size_t pex = producer_.getExitId();
 
-        size_t ch = consumer_.get_index_head();
-        size_t ct = consumer_.get_index_tail();
-        size_t ceh = consumer_.get_entry_id_head();
-        size_t cet = consumer_.get_entry_id_tail();
-        size_t cex = consumer_.get_exit_id();
+        size_t ch = consumer_.getIndexHead();
+        size_t ct = consumer_.getIndexTail();
+        size_t ceh = consumer_.getEntryIdHead();
+        size_t cet = consumer_.getEntryIdTail();
+        size_t cex = consumer_.getExitId();
 
         size_t wm = water_mark_.load(std::memory_order_relaxed);
         size_t wmh = water_mark_head_.load(std::memory_order_relaxed);
@@ -699,8 +680,8 @@ public:
     {
         water_mark_.store(0,std::memory_order_relaxed);
         water_mark_head_.store(0,std::memory_order_relaxed);
-        producer_.reset<kProdMode == mode::dense>(capacity_, num_threads_);
-        consumer_.reset<kConsMode == mode::dense>(capacity_, num_threads_);
+        producer_.reset<kProdMode == mode::multi_dense>(capacity_, num_threads_);
+        consumer_.reset<kConsMode == mode::multi_dense>(capacity_, num_threads_);
     }
 
     inline void reserve(size_t size)
@@ -711,7 +692,7 @@ public:
     inline void reserve(size_t size, size_t num_threads)
     {
         capacity_ = util::isPowerOf2(size) ? size : util::nextPowerOf2(size);
-        if constexpr (kProdMode == mode::dense || kConsMode == mode::dense)
+        if constexpr (kProdMode == mode::multi_dense || kConsMode == mode::multi_dense)
         {
             if(num_threads > capacity_)
                 num_threads_ = capacity_;
@@ -724,40 +705,40 @@ public:
         reset();
     }
 
-    inline size_t push(const elem_t *ptr, size_t sz)
+    inline size_t push(const Elem_t *ptr, size_t sz)
     {
-        static auto cb = [](elem_t *el, size_t sz, const elem_t *ptr){ std::memcpy(el, ptr, sz); };
-        return push_cb(cb, sz, ptr);
+        static auto cb = [](Elem_t *el, size_t sz, const Elem_t *ptr){ std::memcpy(el, ptr, sz); };
+        return pushCb(cb, sz, ptr);
     }
 
-    inline size_t pop(elem_t *ptr, size_t sz)
+    inline size_t pop(Elem_t *ptr, size_t sz)
     {
-        static auto cb = [](elem_t *el, size_t sz, elem_t *ptr){ std::memcpy(ptr, el, sz); };
-        return pop_cb(cb, sz, ptr);
+        static auto cb = [](Elem_t *el, size_t sz, Elem_t *ptr){ std::memcpy(ptr, el, sz); };
+        return popCb(cb, sz, ptr);
     }
 
     template<typename U>
     inline size_t push(U &&val)
     {
-        static auto cb = [](elem_t *el, size_t, U &&val){ *el = std::forward<U>(val); };
-        return push_cb(cb, 1, std::forward<U>(val));
+        static auto cb = [](Elem_t *el, size_t, U &&val){ *el = std::forward<U>(val); };
+        return pushCb(cb, 1, std::forward<U>(val));
     }
 
-    inline size_t pop(elem_t &val)
+    inline size_t pop(Elem_t &val)
     {
-        static auto cb = [](elem_t *el, size_t, elem_t &val){ val = std::move(*el); };
-        return pop_cb(cb, 1, val);
+        static auto cb = [](Elem_t *el, size_t, Elem_t &val){ val = std::move(*el); };
+        return popCb(cb, 1, val);
     }
 
 
     template <typename F, typename ...Args>
-    size_t push_cb(const F &callback, size_t size, Args &&...args)
+    size_t pushCb(const F &callback, size_t size, Args &&...args)
     {
         return doFifo<true>(callback, size, std::forward<Args>(args)...);
     }
 
     template <typename F, typename ...Args>
-    size_t pop_cb(const F &callback, size_t size, Args &&...args)
+    size_t popCb(const F &callback, size_t size, Args &&...args)
     {
         return doFifo<false>(callback, size, std::forward<Args>(args)...);
     }
@@ -771,17 +752,17 @@ public:
 
     inline size_t size() const
     {
-        return producer_.get_index_tail() - consumer_.get_index_head();
+        return producer_.getIndexTail() - consumer_.getIndexHead();
     }
 
     inline bool empty() const
     {
-        return producer_.get_index_tail() == consumer_.get_index_head();
+        return producer_.getIndexTail() == consumer_.getIndexHead();
     }
 
-    inline bool real_empty() const
+    inline bool realEmpty() const
     {
-        return producer_.get_index_head() == consumer_.get_index_head();
+        return producer_.getIndexHead() == consumer_.getIndexHead();
     }
 
     inline size_t wrap(size_t index, size_t mask) const
@@ -795,30 +776,30 @@ public:
         return wrap(index, capacity());
     }
 
-    inline Statistics statistics() const
+    inline std::pair<Statistic, Statistic> statistics() const
     {
-        return Statistics {
+        return {
             producer_.statistic(), consumer_.statistic()
         };
     }
 
-    inline size_t ph() const {return producer_.get_index_head();}
-    inline size_t pt() const {return producer_.get_index_tail();}
-    inline size_t ch() const {return consumer_.get_index_head();}
-    inline size_t ct() const {return consumer_.get_index_tail();}
+    inline size_t ph() const {return producer_.getIndexHead();}
+    inline size_t pt() const {return producer_.getIndexTail();}
+    inline size_t ch() const {return consumer_.getIndexHead();}
+    inline size_t ct() const {return consumer_.getIndexTail();}
     inline size_t wm() const {return water_mark_.load(std::memory_order_relaxed);}
 
-    inline elem_t *elemAt(size_t id)
+    inline Elem_t *elemAt(size_t id)
     {
         return &buffer_[wrap(id)];
     }
 
-    inline elem_t &operator[](size_t id)
+    inline Elem_t &operator[](size_t id)
     {
         return buffer_[wrap(id)];
     }
 
-    inline const elem_t &operator[](size_t id) const
+    inline const Elem_t &operator[](size_t id) const
     {
         return buffer_[wrap(id)];
     }
@@ -830,40 +811,40 @@ public:
 }; /// Fifo
 
 template <typename T, bool P=false>
-using ring_buffer_dd = typename tll::lf::Fifo<T, mode::dense, mode::dense, true, P>;
+using RingBufferDD = typename tll::lf::Fifo<T, mode::multi_dense, mode::multi_dense, true, P>;
 template <typename T, bool P=false>
-using ring_buffer_ds = typename tll::lf::Fifo<T, mode::dense, mode::sparse, true, P>;
+using RingBufferDS = typename tll::lf::Fifo<T, mode::multi_dense, mode::multi_sparse, true, P>;
 template <typename T, bool P=false>
-using ring_buffer_ss = typename tll::lf::Fifo<T, mode::sparse, mode::sparse, true, P>;
+using RingBufferSS = typename tll::lf::Fifo<T, mode::multi_sparse, mode::multi_sparse, true, P>;
 template <typename T, bool P=false>
-using ring_buffer_sd = typename tll::lf::Fifo<T, mode::sparse, mode::dense, true, P>;
+using RingBufferSD = typename tll::lf::Fifo<T, mode::multi_sparse, mode::multi_dense, true, P>;
+
+// template <typename T, bool P=false>
+// using ring_buffer_mpmc = typename tll::lf::RingBufferDD<T, P>;
+// template <typename T, bool P=false>
+// using ring_buffer_mpsc = typename tll::lf::RingBufferDS<T, P>;
+// template <typename T, bool P=false>
+// using ring_buffer_spmc = typename tll::lf::RingBufferSD<T, P>;
+// template <typename T, bool P=false>
+// using ring_buffer_spsc = typename tll::lf::RingBufferSS<T, P>;
+
 
 template <typename T, bool P=false>
-using ring_buffer_mpmc = typename tll::lf::ring_buffer_dd<T, P>;
+using RingQueueDD = typename tll::lf::Fifo<T, mode::multi_dense, mode::multi_dense, false, P>;
 template <typename T, bool P=false>
-using ring_buffer_mpsc = typename tll::lf::ring_buffer_ds<T, P>;
+using RingQueueDS = typename tll::lf::Fifo<T, mode::multi_dense, mode::multi_sparse, false, P>;
 template <typename T, bool P=false>
-using ring_buffer_spmc = typename tll::lf::ring_buffer_sd<T, P>;
+using RingQueueSS = typename tll::lf::Fifo<T, mode::multi_sparse, mode::multi_sparse, false, P>;
 template <typename T, bool P=false>
-using ring_buffer_spsc = typename tll::lf::ring_buffer_ss<T, P>;
+using RingQueueSD = typename tll::lf::Fifo<T, mode::multi_sparse, mode::multi_dense, false, P>;
 
-
-template <typename T, bool P=false>
-using ring_queue_dd = typename tll::lf::Fifo<T, mode::dense, mode::dense, false, P>;
-template <typename T, bool P=false>
-using ring_queue_ds = typename tll::lf::Fifo<T, mode::dense, mode::sparse, false, P>;
-template <typename T, bool P=false>
-using ring_queue_ss = typename tll::lf::Fifo<T, mode::sparse, mode::sparse, false, P>;
-template <typename T, bool P=false>
-using ring_queue_sd = typename tll::lf::Fifo<T, mode::sparse, mode::dense, false, P>;
-
-template <typename T, bool P=false>
-using ring_queue_mpmc = typename tll::lf::ring_queue_dd<T, P>;
-template <typename T, bool P=false>
-using ring_queue_mpsc = typename tll::lf::ring_queue_ds<T, P>;
-template <typename T, bool P=false>
-using ring_queue_spmc = typename tll::lf::ring_queue_sd<T, P>;
-template <typename T, bool P=false>
-using ring_queue_spsc = typename tll::lf::ring_queue_ss<T, P>;
+// template <typename T, bool P=false>
+// using ring_queue_mpmc = typename tll::lf::RingQueueDD<T, P>;
+// template <typename T, bool P=false>
+// using ring_queue_mpsc = typename tll::lf::RingQueueDS<T, P>;
+// template <typename T, bool P=false>
+// using ring_queue_spmc = typename tll::lf::RingQueueSD<T, P>;
+// template <typename T, bool P=false>
+// using ring_queue_spsc = typename tll::lf::RingQueueSS<T, P>;
 
 } /// tll::lf

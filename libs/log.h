@@ -125,10 +125,9 @@ public:
     size_t total_size = 0;
 private:
     std::atomic<bool> is_running_{false}, flush_request_{false};
-    // lf::CCFIFO<Message> ccq_{0x1000};
-    lf::ring_queue_ds<std::function<std::string()>> task_queue_{0x1000};
+    lf::RingQueueDS<std::function<std::string()>> task_queue_{0x1000};
     // not supported
-    lf::ring_buffer_ds<char> ring_buffer_{0x400 * 32}; /// 32Kb
+    lf::RingBufferDS<char> ring_buffer_{0x400 * 32}; /// 32Kb
     std::unordered_map<std::string, Entity> raw_ents_;/* = {{"file", Entity{
                 .name = "file",
                 [this](void *handle, bool flush_req, const char *buff, size_t size)
@@ -165,6 +164,7 @@ private:
 
     std::unordered_map<std::string, Entity> pre_ents_ = {{"file", Entity{
                 .name = "file",
+                // onLog
                 [this](void *handle, bool flush_req, const char *buff, size_t size)
                 {
                     if(handle == nullptr)
@@ -178,6 +178,7 @@ private:
                         if(flush_req) ofs->flush();
                     }
                 },
+                // onStart
                 [this]()
                 {
                     auto log_path =std::getenv("TLL_LOG_PATH");
@@ -185,6 +186,7 @@ private:
                     LOGD("%s", file.data());
                     return static_cast<void*>(new std::ofstream(file, std::ios::out | std::ios::binary));
                 },
+                // onStop
                 [this](void *&handle)
                 {
                     if(handle)
@@ -313,14 +315,14 @@ public:
 
                 while(!fifo.empty())
                 {
-                    rs = fifo.pop_cb(do_pop, is_raw ? -1 : 1);
+                    rs = fifo.popCb(do_pop, is_raw ? -1 : 1);
                 }
 
             } /// while(isRunning())
 
             if(!fifo.empty())
             {
-                rs = fifo.pop_cb(do_pop, -1);
+                rs = fifo.popCb(do_pop, -1);
             }
 
         });

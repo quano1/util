@@ -58,7 +58,7 @@ void benchmark_yield()
         }
 
         {
-            tll::lf::ring_buffer_dd<char> fifo{total_write_size * 2, 0x10000};
+            tll::lf::RingBufferDD<char> fifo{total_write_size * 2, 0x10000};
             auto do_push = [&](int, size_t, size_t, size_t, size_t) -> size_t { return fifo.push((char)1);};
             auto do_pop = [&](int, size_t, size_t, size_t, size_t) -> size_t { char val; return fifo.pop(val);};
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -70,7 +70,7 @@ void benchmark_yield()
         }
 
         {
-            tll::lf::ring_queue_dd<char> fifo{total_write_size * 2, 0x10000};
+            tll::lf::RingQueueDD<char> fifo{total_write_size * 2, 0x10000};
             auto do_push = [&](int, size_t, size_t, size_t, size_t) -> size_t { return fifo.push((char)1);};
             auto do_pop = [&](int, size_t, size_t, size_t, size_t) -> size_t { char val; return fifo.pop(val);};
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -140,7 +140,7 @@ void benchmark_no_wait()
         }
 
         {
-            tll::lf::ring_buffer_dd<char> fifo{total_write_size * 2, 0x10000};
+            tll::lf::RingBufferDD<char> fifo{total_write_size * 2, 0x10000};
             auto do_push = [&](int, size_t, size_t, size_t, size_t) -> size_t { return fifo.push((char)1);};
             auto do_pop = [&](int, size_t, size_t, size_t, size_t) -> size_t { char val; return fifo.pop(val);};
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -152,7 +152,7 @@ void benchmark_no_wait()
         }
 
         {
-            tll::lf::ring_queue_dd<char> fifo{total_write_size * 2, 0x10000};
+            tll::lf::RingQueueDD<char> fifo{total_write_size * 2, 0x10000};
             auto do_push = [&](int, size_t, size_t, size_t, size_t) -> size_t { return fifo.push((char)1);};
             auto do_pop = [&](int, size_t, size_t, size_t, size_t) -> size_t { char val; return fifo.pop(val);};
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -164,7 +164,7 @@ void benchmark_no_wait()
         }
 
         {
-            tll::lf::ring_buffer_ss<char> fifo{total_write_size * 2};
+            tll::lf::RingBufferSS<char> fifo{total_write_size * 2};
             auto do_push = [&](int, size_t, size_t, size_t, size_t) -> size_t { return fifo.push((char)1);};
             auto do_pop = [&](int, size_t, size_t, size_t, size_t) -> size_t { char val; return fifo.pop(val);};
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -176,7 +176,7 @@ void benchmark_no_wait()
         }
 
         {
-            tll::lf::ring_queue_ss<char> fifo{total_write_size * 2};
+            tll::lf::RingQueueSS<char> fifo{total_write_size * 2};
             auto do_push = [&](int, size_t, size_t, size_t, size_t) -> size_t { return fifo.push((char)1);};
             auto do_pop = [&](int, size_t, size_t, size_t, size_t) -> size_t { char val; return fifo.pop(val);};
             std::this_thread::sleep_for(std::chrono::milliseconds(100));

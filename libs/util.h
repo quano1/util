@@ -434,17 +434,17 @@ static constexpr uint8_t kIdSize = sizeof(TypeId);
 template <bool check=false>
 struct StreamWrapper {
 
-    StreamWrapper(char *buffer) : buffer_(buffer) {}
+    StreamWrapper(char *buffer) : raw_buffer_(buffer) {}
     StreamWrapper(size_t size)
     {
-        containerBuffer_.reserve(size);
+        cont_buffer_.resize(size);
         size_ = size;
-        buffer_ = containerBuffer_.data();
+        raw_buffer_ = cont_buffer_.data();
     }
 
     inline void reset(char *buffer=nullptr)
     {
-        if(buffer) buffer_ = buffer;
+        if(buffer) raw_buffer_ = buffer;
         size_ = 0;
     }
 
@@ -453,13 +453,13 @@ struct StreamWrapper {
         auto str_len = strlen(val);
         size_t payload_size = internal::kIdSize + 2 + str_len;
         size_ += payload_size;
-        if(check && buffer_ != nullptr)
+        if(check && raw_buffer_ != nullptr)
         {
-            *(TypeId*)buffer_ = internal::getId<const char *>(); /// string id
-            buffer_ += internal::kIdSize;
-            *(uint16_t*)(buffer_+internal::kIdSize) = str_len;
-            memcpy(buffer_+internal::kIdSize+2, val, str_len);
-            buffer_ += payload_size;
+            *(TypeId*)raw_buffer_ = internal::getId<const char *>(); /// string id
+            raw_buffer_ += internal::kIdSize;
+            *(uint16_t*)(raw_buffer_+internal::kIdSize) = str_len;
+            memcpy(raw_buffer_+internal::kIdSize+2, val, str_len);
+            raw_buffer_ += payload_size;
             elem_count_++;
         }
     }
@@ -469,11 +469,11 @@ struct StreamWrapper {
     {
         size_t payload_size = internal::kIdSize + sizeof(T);
         size_ += payload_size;
-        if(check && buffer_ != nullptr)
+        if(check && raw_buffer_ != nullptr)
         {
-            *(TypeId*)buffer_ = internal::getId<T>(); /// primitive id
-            *(T*)(buffer_ + internal::kIdSize) = val;
-            buffer_ += payload_size;
+            *(TypeId*)raw_buffer_ = internal::getId<T>(); /// primitive id
+            *(T*)(raw_buffer_ + internal::kIdSize) = val;
+            raw_buffer_ += payload_size;
             elem_count_++;
 
             if constexpr (sizeof...(Args) > 0)
@@ -494,10 +494,10 @@ struct StreamWrapper {
         return *this;
     }
 
-    std::vector<char> containerBuffer_;
+    std::vector<char> cont_buffer_;
     size_t size_=0;
     size_t elem_count_=0;
-    char *buffer_=nullptr;
+    char *raw_buffer_=nullptr;
 
 };
 

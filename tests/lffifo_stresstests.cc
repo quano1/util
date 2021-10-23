@@ -49,7 +49,7 @@ struct LFFIFOStressTest : public ::testing::Test
         // total_count_lst.clear();
     }
 
-    void plotting(std::vector<Statistics> stat_lst)
+    void plotting(std::vector<std::pair<Statistic, Statistic>> stat_lst)
     {
         std::vector<size_t> data;
         for(auto &stat : stat_lst)
@@ -134,7 +134,7 @@ struct LFFIFOStressTest : public ::testing::Test
             }
 
         auto do_push = [&](int tid, size_t loop_num, size_t lc_tt_size, size_t tt_count, size_t tt_size) -> size_t {
-            size_t ret = fifo.push_cb([verification](char *el, size_t size, int tid, char val, size_t push_size) {
+            size_t ret = fifo.pushCb([verification](char *el, size_t size, int tid, char val, size_t push_size) {
                 if(!verification) return;
                 memset(el, (char)(tid), size);
             }, max_pkg_size, tid, (char)loop_num, lc_tt_size);
@@ -142,7 +142,7 @@ struct LFFIFOStressTest : public ::testing::Test
         };
 
         auto do_pop = [&](int tid, size_t loop_num, size_t lc_tt_size, size_t tt_count, size_t tt_size) -> size_t {
-            size_t ret = fifo.pop_cb([&](const char *el, size_t size, size_t pop_size) {
+            size_t ret = fifo.popCb([&](const char *el, size_t size, size_t pop_size) {
                 if(!verification) return;
                 auto dst = store_buff[tid].data() + pop_size;
                 auto src = el;
@@ -207,14 +207,14 @@ struct LFFIFOStressTest : public ::testing::Test
         }
 
         auto do_push = [&](int tid, size_t loop_num, size_t lc_tt_size, size_t tt_count, size_t tt_size) -> size_t {
-            size_t ret = fifo.push_cb([](char *el, size_t size, int tid, char val, size_t push_size) {
+            size_t ret = fifo.pushCb([](char *el, size_t size, int tid, char val, size_t push_size) {
                 memset(el, (char)(tid), size);
             }, max_pkg_size, tid, (char)loop_num, lc_tt_size);
             return ret;
         };
 
         auto do_pop_while_doing_push = [&](int tid, size_t loop_num, size_t lc_tt_size, size_t tt_count, size_t tt_size) -> size_t {
-            size_t ret = fifo.pop_cb([&](const char *el, size_t size, size_t pop_size) {
+            size_t ret = fifo.popCb([&](const char *el, size_t size, size_t pop_size) {
                 auto dst = store_buff[tid / 2].data() + pop_size;
                 auto src = el;
                 memcpy(dst, src, size);
@@ -281,15 +281,15 @@ std::vector<size_t> LFFIFOStressTest::total_count_lst;
 
 //     constexpr int kExtend = 2;
 //     {
-//         ring_buffer_dd<char, PROFILING> fifo{kCapacity, 0x100};
+//         RingBufferDD<char, PROFILING> fifo{kCapacity, 0x100};
 //         SequenceFixedSize<kExtend>(fifo, 3, resting);
 //     }
 //     {
-//         ring_buffer_dd<char, PROFILING> fifo{kCapacity, 0x400};
+//         RingBufferDD<char, PROFILING> fifo{kCapacity, 0x400};
 //         SequenceFixedSize<kExtend>(fifo, 3, resting);
 //     }
 //     {
-//         ring_buffer_dd<char, PROFILING> fifo{kCapacity, 0x1000};
+//         RingBufferDD<char, PROFILING> fifo{kCapacity, 0x1000};
 //         SequenceFixedSize<kExtend>(fifo, 3, resting);
 //     }
 
@@ -305,15 +305,15 @@ std::vector<size_t> LFFIFOStressTest::total_count_lst;
 
 //     constexpr int kExtend = 2;
 //     {
-//         ring_buffer_dd<char, PROFILING> fifo{kCapacity, 0x100};
+//         RingBufferDD<char, PROFILING> fifo{kCapacity, 0x100};
 //         SequenceFixedSize<kExtend>(fifo, 3, resting);
 //     }
 //     {
-//         ring_buffer_dd<char, PROFILING> fifo{kCapacity, 0x400};
+//         RingBufferDD<char, PROFILING> fifo{kCapacity, 0x400};
 //         SequenceFixedSize<kExtend>(fifo, 3, resting);
 //     }
 //     {
-//         ring_buffer_dd<char, PROFILING> fifo{kCapacity, 0x1000};
+//         RingBufferDD<char, PROFILING> fifo{kCapacity, 0x1000};
 //         SequenceFixedSize<kExtend>(fifo, 3, resting);
 //     }
 
@@ -339,35 +339,35 @@ TEST_F(LFFIFOStressTest, SequenceTrafficJamDD)
         LOGD("=====================================================");
         LOGD("Number of threads: %ld\tpkg_size: %ld:%ld:%ld", index_seq.value, kPkgSize, total_write_size, total_write_size / kPkgSize);
         {
-            ring_buffer_dd<char, PROFILING> fifo{capacity, 0x1000};
+            RingBufferDD<char, PROFILING> fifo{capacity, 0x1000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             // stat_lst.push_back(fifo.statistics());
             LOGD("-----------------------------------------");
         }
 
         {
-            ring_buffer_dd<char, PROFILING> fifo{capacity, 0x2000};
+            RingBufferDD<char, PROFILING> fifo{capacity, 0x2000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             // stat_lst.push_back(fifo.statistics());
             LOGD("-----------------------------------------");
         }
 
         {
-            ring_buffer_dd<char, PROFILING> fifo{capacity, 0x4000};
+            RingBufferDD<char, PROFILING> fifo{capacity, 0x4000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             // stat_lst.push_back(fifo.statistics());
             LOGD("-----------------------------------------");
         }
 
         {
-            ring_buffer_dd<char, PROFILING> fifo{capacity, 0x8000};
+            RingBufferDD<char, PROFILING> fifo{capacity, 0x8000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             // stat_lst.push_back(fifo.statistics());
             LOGD("-----------------------------------------");
         }
 
         {
-            ring_buffer_dd<char, PROFILING> fifo{capacity, 0x10000};
+            RingBufferDD<char, PROFILING> fifo{capacity, 0x10000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             // stat_lst.push_back(fifo.statistics());
             LOGD("-----------------------------------------");
@@ -394,7 +394,7 @@ TEST_F(LFFIFOStressTest, SequenceYieldDD)
     constexpr int kExtend = 3;
     constexpr size_t kPkgSize = 5;
 
-    std::vector<Statistics> stat_lst;
+    std::vector<std::pair<Statistic, Statistic>> stat_lst;
     tll::util::CallFuncInSeq<NUM_CPU, kExtend>( [&](auto index_seq)
     {
         thread_lst.push_back(index_seq.value);
@@ -404,35 +404,35 @@ TEST_F(LFFIFOStressTest, SequenceYieldDD)
         LOGD("Number of threads: %ld\tpkg_size: %ld:%ld:%ld", index_seq.value, kPkgSize, total_write_size, total_write_size / kPkgSize);
 
         {
-            ring_buffer_dd<char, PROFILING> fifo{capacity, 0x1000};
+            RingBufferDD<char, PROFILING> fifo{capacity, 0x1000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             stat_lst.push_back(fifo.statistics());
             LOGD("-----------------------------------------");
         }
 
         {
-            ring_buffer_dd<char, PROFILING> fifo{capacity, 0x2000};
+            RingBufferDD<char, PROFILING> fifo{capacity, 0x2000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             stat_lst.push_back(fifo.statistics());
             LOGD("-----------------------------------------");
         }
 
         {
-            ring_buffer_dd<char, PROFILING> fifo{capacity, 0x4000};
+            RingBufferDD<char, PROFILING> fifo{capacity, 0x4000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             stat_lst.push_back(fifo.statistics());
             LOGD("-----------------------------------------");
         }
 
         {
-            ring_buffer_dd<char, PROFILING> fifo{capacity, 0x8000};
+            RingBufferDD<char, PROFILING> fifo{capacity, 0x8000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             stat_lst.push_back(fifo.statistics());
             LOGD("-----------------------------------------");
         }
 
         {
-            ring_buffer_dd<char, PROFILING> fifo{capacity, 0x10000};
+            RingBufferDD<char, PROFILING> fifo{capacity, 0x10000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting);
             stat_lst.push_back(fifo.statistics());
             LOGD("-----------------------------------------");
@@ -459,7 +459,7 @@ TEST_F(LFFIFOStressTest, SequenceYieldMixed)
     constexpr int kExtend = 3;
     constexpr size_t kPkgSize = 5;
 
-    // std::vector<Statistics> stat_lst;
+    // std::vector<std::pair<Statistic, Statistic>> stat_lst;
     tll::util::CallFuncInSeq<NUM_CPU, kExtend>( [&](auto index_seq)
     {
         thread_lst.push_back(index_seq.value);
@@ -468,28 +468,28 @@ TEST_F(LFFIFOStressTest, SequenceYieldMixed)
         LOGD("=====================================================");
         LOGD("Number of threads: %ld\tpkg_size: %ld:%ld:%ld", index_seq.value, kPkgSize, total_write_size, total_write_size / kPkgSize);
         // {
-        //     ring_buffer_ss<char, PROFILING> fifo{capacity};
+        //     RingBufferSS<char, PROFILING> fifo{capacity};
         //     SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting, false);
         //     // stat_lst.push_back(fifo.statistics());
         // }
         // LOGD("-----------------------------------------");
 
         {
-            ring_buffer_dd<char, PROFILING> fifo{capacity, 0x10000};
+            RingBufferDD<char, PROFILING> fifo{capacity, 0x10000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting, false);
             // stat_lst.push_back(fifo.statistics());
             LOGD("-----------------------------------------");
         }
 
         // {
-        //     ring_queue_ss<char, PROFILING> fifo{capacity};
+        //     RingQueueSS<char, PROFILING> fifo{capacity};
         //     SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting, false);
         //     // stat_lst.push_back(fifo.statistics());
         // }
         // LOGD("-----------------------------------------");
 
         {
-            ring_queue_dd<char, PROFILING> fifo{capacity, 0x10000};
+            RingQueueDD<char, PROFILING> fifo{capacity, 0x10000};
             SequenceFixedSize<index_seq.value>(fifo, kPkgSize, total_write_size, resting, false);
             // stat_lst.push_back(fifo.statistics());
             LOGD("-----------------------------------------");
@@ -514,7 +514,7 @@ TEST_F(LFFIFOStressTest, RushSequence)
     // size_t write_count = kWriteCount;
     // constexpr size_t kCapacity = kPkgSize * kWriteCount;
 
-    // std::vector<Statistics> stat_lst;
+    // std::vector<std::pair<Statistic, Statistic>> stat_lst;
     tll::util::CallFuncInSeq<NUM_CPU, kExtend>( [&](auto index_seq)
     {
         thread_lst.push_back(index_seq.value*2);
@@ -526,13 +526,13 @@ TEST_F(LFFIFOStressTest, RushSequence)
             size_t pkg_size = 0x400 * i;
             LOGD("\tpkg_size: %ld/%d", pkg_size, i);
             {
-                ring_buffer_ss<char, PROFILING> fifo{total_write_size + pkg_size};
+                RingBufferSS<char, PROFILING> fifo{total_write_size + pkg_size};
                 SequenceFixedSize<index_seq.value>(fifo, pkg_size, total_write_size, resting, true);
                 // stat_lst.push_back(fifo.statistics());
                 LOGD("-----------------------------------------");
             }
             {
-                ring_buffer_dd<char, PROFILING> fifo{total_write_size + pkg_size};
+                RingBufferDD<char, PROFILING> fifo{total_write_size + pkg_size};
                 SequenceFixedSize<index_seq.value>(fifo, pkg_size, total_write_size, resting, true);
                 // stat_lst.push_back(fifo.statistics());
                 LOGD("-----------------------------------------");
